@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            www.powershellgallery.com:443
+            cdn.powershellgallery.com:443
+            psg-prod-eastus.azureedge.net:443
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $paths   = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
+          $results = $paths | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          }
+
+          if ($results) {
+            $results | Sort-Object Severity, ScriptName, Line |
+              Format-Table -AutoSize -Property Severity, RuleName, ScriptName, Line, Message
+            $errorFindings = $results | Where-Object Severity -eq 'Error'
+            Write-Host "PSScriptAnalyzer: $($results.Count) finding(s) — $($errorFindings.Count) error(s)"
+            if ($errorFindings) { exit 1 }
+          } else {
+            Write-Host 'PSScriptAnalyzer: no issues found.'
+          }
+
+  test:
+    name: Pester Tests + Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            www.powershellgallery.com:443
+            cdn.powershellgallery.com:443
+            psg-prod-eastus.azureedge.net:443
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Pester
+        shell: pwsh
+        run: Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser
+
+      - name: Run unit tests with coverage
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests/Unit'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'TestResults-Unit.xml'
+          $config.TestResult.OutputFormat = 'JUnitXml'
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = @('./Public/*.ps1', './Private/*.ps1', './Checks/**/*.ps1')
+          $config.CodeCoverage.OutputPath = 'coverage.xml'
+          $config.CodeCoverage.OutputFormat = 'JaCoCo'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.Result -ne 'Passed') { exit 1 }
+
+      - name: Enforce coverage threshold (70 %)
+        shell: pwsh
+        run: |
+          [xml]$cov = Get-Content coverage.xml
+          $report        = $cov.report
+          $methodCounter = $report.counter | Where-Object { $_.type -eq 'METHOD' }
+          $missed        = [int]$methodCounter.missed
+          $covered       = [int]$methodCounter.covered
+          # Fall back to line coverage if method counters absent
+          if ($null -eq $methodCounter) {
+            $lineCounter = $report.counter | Where-Object { $_.type -eq 'LINE' }
+            $missed  = [int]$lineCounter.missed
+            $covered = [int]$lineCounter.covered
+          }
+          $pct = if (($covered + $missed) -gt 0) { [math]::Round(100 * $covered / ($covered + $missed), 1) } else { 0 }
+          Write-Host "Coverage: $pct %"
+          if ($pct -lt 70) {
+            Write-Error "Coverage $pct % is below the 70 % threshold."
+            exit 1
+          }
+
+      - name: Run integration tests (mocked — no live tenant required)
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests/Integration'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'TestResults-Integration.xml'
+          $config.TestResult.OutputFormat = 'JUnitXml'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.Result -ne 'Passed') { exit 1 }
+
+      - name: Publish unit test results
+        uses: dorny/test-reporter@c40d89d5e987cd80f3a32b3c233556e22bdca958 # v1.9.0
+        if: always()
+        with:
+          name: Pester Unit Tests
+          path: TestResults-Unit.xml
+          reporter: java-junit
+
+      - name: Publish integration test results
+        uses: dorny/test-reporter@c40d89d5e987cd80f3a32b3c233556e22bdca958 # v1.9.0
+        if: always()
+        with:
+          name: Pester Integration Tests
+          path: TestResults-Integration.xml
+          reporter: java-junit
+
+  credential-scan:
+    name: Credential Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            trufflehog.org:443
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab # v3.95.3
+        with:
+          path: ./
+          extra_args: --results=verified,unknown

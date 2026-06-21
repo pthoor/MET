@@ -1,0 +1,122 @@
+name: Publish to PowerShell Gallery
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Gate — Lint + Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            www.powershellgallery.com:443
+            cdn.powershellgallery.com:443
+            psg-prod-eastus.azureedge.net:443
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install PSScriptAnalyzer + Pester
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser
+          Install-Module -Name Pester            -MinimumVersion 5.0.0  -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $paths       = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
+          $results     = $paths | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          }
+          $errorFindings = $results | Where-Object Severity -eq 'Error'
+          if ($errorFindings) {
+            $errorFindings | Format-Table -AutoSize
+            Write-Error "PSScriptAnalyzer found $($errorFindings.Count) error(s). Aborting publish."
+            exit 1
+          }
+
+      - name: Pester unit tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests/Unit'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.Result -ne 'Passed') { exit 1 }
+
+      - name: Pester integration tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests/Integration'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.Result -ne 'Passed') { exit 1 }
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: test
+    environment: psgallery          # Requires a GitHub Environment with required reviewers
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            www.powershellgallery.com:443
+            cdn.powershellgallery.com:443
+            psg-prod-eastus.azureedge.net:443
+            nuget.org:443
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify tag matches manifest version
+        shell: pwsh
+        run: |
+          $tag             = $env:GITHUB_REF_NAME -replace '^v', ''
+          $manifestVersion = (Import-PowerShellDataFile -Path './MET.psd1').ModuleVersion
+          if ($tag -ne $manifestVersion) {
+            Write-Error "Tag version ($tag) does not match manifest ModuleVersion ($manifestVersion). Update MET.psd1 before tagging."
+            exit 1
+          }
+          Write-Host "Version check passed: $manifestVersion"
+
+      - name: Stage module files
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE') -Destination $dest
+          Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $dest -Recurse
+          Write-Host "Staged to: $dest"
+          Get-ChildItem -Recurse $dest | Select-Object -ExpandProperty FullName
+
+      - name: Publish to PSGallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
+          Publish-Module -Path $stagingPath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose

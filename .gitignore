@@ -1,0 +1,18 @@
+assessments/
+output/
+staging/
+
+# Pester and coverage output
+TestResults*.xml
+coverage.xml
+
+# NuGet packages from local Publish-Module testing
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.log
