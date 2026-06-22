@@ -34,7 +34,8 @@ function Measure-SpfLookups {
         if (-not $txt) { return 0 }
 
         $record = $txt.Strings -join ''
-        $count += ([regex]::Matches($record, '\b(include|a|mx|ptr|exists):') | Measure-Object).Count
+        $count += ([regex]::Matches($record, '\b(include|a|mx|ptr|exists)(?::|\b)') | Measure-Object).Count
+        $count += ([regex]::Matches($record, '\bredirect=') | Measure-Object).Count
 
         foreach ($include in [regex]::Matches($record, 'include:([^\s]+)')) {
             $count += Measure-SpfLookups -DomainName $include.Groups[1].Value -Depth ($Depth + 1) -Visited $Visited
