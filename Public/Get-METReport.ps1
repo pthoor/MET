@@ -38,7 +38,7 @@
           }
         }
         catch {
-          # Best-effort discovery only; continue with additional fallbacks.
+          Write-Verbose "Unable to discover default accepted domain: $($_.Exception.Message)"
         }
       }
 

@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.4.0'
+    ModuleVersion        = '0.4.2'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -27,7 +27,7 @@
             Tags         = @('MDO', 'Microsoft365', 'Defender', 'ExchangeOnline', 'Teams', 'Security', 'Posture', 'Assessment')
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
-            ReleaseNotes = 'v0.4.0 — Complete check set: MDO001-012, EXO001-009, Teams001-005. Promotions folder baseline docs. MDO010 rewritten (Get-EmailTenantSettings + Get-User -IsVIP, no Graph dependency). MDO011 returns Info with portal link. Get-METReport -Format All now requires -OutputPath (terminating error if omitted). Cross-platform DNS (Resolve-METDnsName). PSScriptAnalyzer CI gate. Invoke-METTriage -PassThru and -ListChecks. Code coverage in CI.'
+            ReleaseNotes = 'v0.4.2 — Removed stale MAST rename artifacts (legacy report script and duplicate check doc) and kept strict release linting fixes for report catch handling.'
         }
     }
 }
