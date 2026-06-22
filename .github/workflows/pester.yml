@@ -104,15 +104,11 @@ jobs:
         run: |
           [xml]$cov = Get-Content coverage.xml
           $report        = $cov.report
-          $methodCounter = $report.counter | Where-Object { $_.type -eq 'METHOD' }
-          $missed        = [int]$methodCounter.missed
-          $covered       = [int]$methodCounter.covered
-          # Fall back to line coverage if method counters absent
-          if ($null -eq $methodCounter) {
-            $lineCounter = $report.counter | Where-Object { $_.type -eq 'LINE' }
-            $missed  = [int]$lineCounter.missed
-            $covered = [int]$lineCounter.covered
-          }
+          $methodCounter = $report.counter | Where-Object { $_.type -eq 'METHOD' } | Select-Object -First 1
+          $lineCounter   = $report.counter | Where-Object { $_.type -eq 'LINE' }   | Select-Object -First 1
+          $counter = if ($methodCounter) { $methodCounter } else { $lineCounter }
+          $missed  = [int]$counter.missed
+          $covered = [int]$counter.covered
           $pct = if (($covered + $missed) -gt 0) { [math]::Round(100 * $covered / ($covered + $missed), 1) } else { 0 }
           Write-Host "Coverage: $pct %"
           if ($pct -lt 70) {
