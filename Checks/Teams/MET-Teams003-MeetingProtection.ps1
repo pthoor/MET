@@ -11,7 +11,7 @@ try {
     }
 }
 catch {
-    Write-Verbose "Could not retrieve tenant federation configuration: $_"
+    $issues.Add("Unable to retrieve tenant federation configuration: $($_.Exception.Message)")
 }
 
 # Check Teams meeting policy for anonymous join and lobby settings
