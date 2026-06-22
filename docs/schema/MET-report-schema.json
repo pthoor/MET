@@ -1,0 +1,124 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/pthoor/MET/docs/schema/MET-report-schema.json",
+  "title": "MET Report",
+  "description": "JSON output schema for the MET Security Posture Scanner for MDO, EXO and Teams report",
+  "type": "object",
+  "required": ["tenant", "runTimestamp", "METVersion", "postureScore", "categoryScores", "summary", "checks"],
+  "properties": {
+    "tenant": {
+      "type": "string",
+      "description": "Tenant domain name (e.g. contoso.onmicrosoft.com)"
+    },
+    "runTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp when the assessment was run (ISO 8601)"
+    },
+    "METVersion": {
+      "type": "string",
+      "description": "Version of the MET module that produced this report"
+    },
+    "postureScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall weighted posture score (0=worst, 100=best)"
+    },
+    "categoryScores": {
+      "type": "object",
+      "description": "Per-category posture scores",
+      "properties": {
+        "MDO":   { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "EXO":   { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "Teams": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "description": "Count of results by outcome",
+      "required": ["Pass", "Fail", "Warning", "Info", "NotApplicable", "Error"],
+      "properties": {
+        "Pass":          { "type": "integer", "minimum": 0 },
+        "Fail":          { "type": "integer", "minimum": 0 },
+        "Warning":       { "type": "integer", "minimum": 0 },
+        "Info":          { "type": "integer", "minimum": 0 },
+        "NotApplicable": { "type": "integer", "minimum": 0 },
+        "Error":         { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "array",
+      "description": "Individual check results",
+      "items": { "$ref": "#/definitions/checkResult" }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "checkResult": {
+      "type": "object",
+      "required": ["checkId", "category", "name", "result", "severity", "affectedObject", "finding", "timestamp"],
+      "properties": {
+        "checkId": {
+          "type": "string",
+          "pattern": "^MET-(MDO|EXO|Teams)\\d{3}$",
+          "description": "Unique check identifier (e.g. MET-MDO001)"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["MDO", "EXO", "Teams"],
+          "description": "Check category"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable check name"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["Pass", "Fail", "Warning", "Info", "NotApplicable"],
+          "description": "Check outcome"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["Critical", "High", "Medium", "Low", "Informational"],
+          "description": "Severity of the check if it fails"
+        },
+        "score": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Contribution to posture score (100=Pass, 50=Warning, 0=Fail, null=NotApplicable/Info)"
+        },
+        "affectedObject": {
+          "type": "string",
+          "description": "Name of the policy, domain, or object that was assessed"
+        },
+        "finding": {
+          "type": "string",
+          "description": "Description of what was found"
+        },
+        "recommendation": {
+          "type": "string",
+          "description": "Actionable remediation guidance"
+        },
+        "referenceUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Link to Microsoft documentation"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp when this specific check ran"
+        },
+        "error": {
+          "type": ["string", "null"],
+          "description": "Error message if the check script failed to execute"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
