@@ -34,11 +34,30 @@ function Measure-SpfLookups {
         if (-not $txt) { return 0 }
 
         $record = $txt.Strings -join ''
-        $count += ([regex]::Matches($record, '\b(include|a|mx|ptr|exists)(?::|\b)') | Measure-Object).Count
-        $count += ([regex]::Matches($record, '\bredirect=') | Measure-Object).Count
+        $terms = $record -split '\s+' | Where-Object { $_ }
 
-        foreach ($include in [regex]::Matches($record, 'include:([^\s]+)')) {
-            $count += Measure-SpfLookups -DomainName $include.Groups[1].Value -Depth ($Depth + 1) -Visited $Visited
+        foreach ($term in $terms) {
+            if ($term -eq 'v=spf1') {
+                continue
+            }
+
+            $normalized = $term -replace '^[\+\-\~\?]', ''
+
+            if ($normalized -match '^include:([^\s]+)$') {
+                $count += 1
+                $count += Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                continue
+            }
+
+            if ($normalized -match '^redirect=([^\s]+)$') {
+                $count += 1
+                $count += Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                continue
+            }
+
+            if ($normalized -match '^(a|mx|ptr)([:/].*)?$' -or $normalized -match '^exists:([^\s]+)$') {
+                $count += 1
+            }
         }
     }
     catch { Write-Verbose "DNS lookup failed for '$DomainName' during SPF lookup count: $_" }

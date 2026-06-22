@@ -123,6 +123,45 @@ Describe 'MET-EXO002 DKIM' {
     }
 }
 
+Describe 'MET-EXO003 SPF' {
+    BeforeEach {
+        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO003-SPF.ps1'
+    }
+
+    Context 'SPF lookup counting includes bare mechanisms and redirect' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                switch ($Name) {
+                    'contoso.com' {
+                        return [PSCustomObject]@{
+                            Strings = @('v=spf1 a mx include:_spf1.contoso.com include:_spf2.contoso.com include:_spf3.contoso.com include:_spf4.contoso.com include:_spf5.contoso.com redirect=_spf6.contoso.com -all')
+                        }
+                    }
+                    { $_ -match '^_spf[1-6]\.contoso\.com$' } {
+                        return [PSCustomObject]@{ Strings = @('v=spf1 a mx -all') }
+                    }
+                    default {
+                        return @()
+                    }
+                }
+            }
+        }
+
+        It 'Returns Warning for more than 10 lookups' {
+            $results = & $checkFile
+            $result = $results | Select-Object -First 1
+            $result.Result | Should -Be 'Warning'
+            $result.Finding | Should -Match 'exceeds 10 DNS lookups'
+        }
+    }
+}
+
 Describe 'MET-EXO004 Quarantine Policies' {
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO004-QuarantinePolicy.ps1'

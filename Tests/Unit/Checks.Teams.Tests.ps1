@@ -182,4 +182,22 @@ Describe 'MET-Teams003 Meeting Protection' {
             $results[0].Finding | Should -Match 'Everyone'
         }
     }
+
+    Context 'Meeting policy retrieval fails' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy { throw 'Teams meeting policy unavailable' }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+
+        It 'Returns Warning instead of false Pass' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Could not retrieve Teams meeting policies'
+        }
+    }
 }

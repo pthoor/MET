@@ -11,7 +11,8 @@ try {
     }
 }
 catch {
-    $issues.Add("Unable to retrieve tenant federation configuration: $($_.Exception.Message)")
+    $issues.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
+    Write-Verbose "Could not retrieve tenant federation configuration: $_"
 }
 
 # Check Teams meeting policy for anonymous join and lobby settings
@@ -32,7 +33,8 @@ try {
     }
 }
 catch {
-    $issues.Add("Unable to retrieve Teams meeting policies: $($_.Exception.Message)")
+    $issues.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
+    Write-Verbose "Could not retrieve Teams meeting policies: $_"
 }
 
 # Check Teams channel meeting policy
@@ -44,7 +46,8 @@ try {
     }
 }
 catch {
-    $issues.Add("Unable to retrieve Teams channel policy: $($_.Exception.Message)")
+    $issues.Add("Could not retrieve Teams channel policy: $($_.Exception.Message)")
+    Write-Verbose "Could not retrieve Teams channel policy: $_"
 }
 
 if ($issues.Count -gt 0) {
