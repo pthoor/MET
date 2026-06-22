@@ -32,7 +32,7 @@ try {
     }
 }
 catch {
-    Write-Verbose "Could not retrieve Teams meeting policies: $_"
+    $issues.Add("Unable to retrieve Teams meeting policies: $($_.Exception.Message)")
 }
 
 # Check Teams channel meeting policy
