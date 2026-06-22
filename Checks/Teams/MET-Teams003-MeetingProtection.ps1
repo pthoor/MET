@@ -44,7 +44,7 @@ try {
     }
 }
 catch {
-    Write-Verbose "Could not retrieve Teams channel policy: $_"
+    $issues.Add("Unable to retrieve Teams channel policy: $($_.Exception.Message)")
 }
 
 if ($issues.Count -gt 0) {
