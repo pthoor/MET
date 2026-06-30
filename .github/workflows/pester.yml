@@ -32,7 +32,7 @@ jobs:
             cdn.powershellgallery.com:443
             psg-prod-eastus.azureedge.net:443
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -78,7 +78,7 @@ jobs:
             cdn.powershellgallery.com:443
             psg-prod-eastus.azureedge.net:443
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Pester
         shell: pwsh
@@ -139,7 +139,7 @@ jobs:
           if ($result.Result -ne 'Passed') { exit 1 }
 
       - name: Publish unit test results
-        uses: dorny/test-reporter@c40d89d5e987cd80f3a32b3c233556e22bdca958 # v1.9.0
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         if: always()
         with:
           name: Pester Unit Tests
@@ -147,7 +147,7 @@ jobs:
           reporter: java-junit
 
       - name: Publish integration test results
-        uses: dorny/test-reporter@c40d89d5e987cd80f3a32b3c233556e22bdca958 # v1.9.0
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         if: always()
         with:
           name: Pester Integration Tests
@@ -174,12 +174,12 @@ jobs:
             pkg-containers.githubusercontent.com:443
             trufflehog.org:443
 
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       - name: TruffleHog secret scan
-        uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab # v3.95.3
+        uses: trufflesecurity/trufflehog@f446421baf832d6356c42c1743d99abff52ff334 # v3.95.7
         with:
           path: ./
           extra_args: --results=verified,unknown
