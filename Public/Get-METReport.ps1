@@ -298,7 +298,6 @@
             # Escape </script> so embedded JSON cannot break the script block
             $tenantIdJson  = $tenantIdJson  -replace '</script>', '<\/script>'
             $checksJson    = $checksJson    -replace '</script>', '<\/script>'
-            $catScoresJson = ($categoryScores | ConvertTo-Json -Compress) -replace '</script>', '<\/script>'
 
             $html = @"
 <!DOCTYPE html>
@@ -352,9 +351,11 @@ a:hover{text-decoration:underline}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
 
 /* ── Header ──────────────────────────────────────────────────────── */
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px 16px 20px;box-shadow:var(--shadow);border-left:4px solid var(--accent-mdo)}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px 16px 20px;box-shadow:var(--shadow);border-left:4px solid var(--accent-mdo);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .header-title{font-size:20px;font-weight:600;margin-bottom:3px;letter-spacing:-.01em}
 .header-meta{font-size:12px;color:var(--text2)}
+.print-btn{font-size:12px;font-weight:600;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;background:var(--surface2);white-space:nowrap;flex-shrink:0}
+.print-btn:hover{background:var(--border);color:var(--text)}
 
 /* ── Score banner ────────────────────────────────────────────────── */
 .score-banner{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px 16px 20px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;border-left:4px solid var(--border);transition:border-left-color .3s}
@@ -362,15 +363,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .score-banner[data-band="fair"]{border-left-color:var(--sev-medium)}
 .score-banner[data-band="poor"]{border-left-color:var(--sev-high)}
 .score-banner[data-band="critical"]{border-left-color:var(--result-fail)}
-.score-main{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.score-main{display:flex;flex-direction:row;align-items:center;gap:14px}
+.score-donut{flex-shrink:0}
+.score-main-meta{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
 .score-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text2)}
 .score-row{display:flex;align-items:baseline;gap:8px}
-.score-number{font-size:52px;font-weight:700;line-height:1;letter-spacing:-2px}
 .score-delta{font-size:16px;font-weight:700;line-height:1}
 .delta-up{color:var(--result-pass)}
 .delta-down{color:var(--result-fail)}
-.score-progress-track{width:180px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px}
-.score-progress-bar{height:100%;border-radius:3px;transition:width .4s ease,background .3s}
 .bar-excellent,.bar-good{background:var(--result-pass)}
 .bar-fair{background:var(--sev-medium)}
 .bar-poor{background:var(--sev-high)}
@@ -390,11 +390,18 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .bdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .brange{font-family:monospace;font-size:11px;min-width:54px;color:var(--text3)}
 .btr.cur .brange{color:var(--text2)}
-.score-cats{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .cat-badge{padding:4px 12px;border-radius:10px;font-size:13px;font-weight:600;color:#fff}
 .cat-mdo{background:var(--accent-mdo)}
 .cat-exo{background:var(--accent-exo)}
 .cat-teams{background:var(--accent-teams)}
+.cat-meters{display:flex;flex-direction:column;gap:8px;min-width:220px;max-width:320px}
+.cat-meter-row{display:grid;grid-template-columns:56px 1fr 28px;align-items:center;gap:8px;font-size:12px}
+.cat-meter-name{font-weight:600;color:var(--text2);display:flex;align-items:center;gap:6px}
+.cat-meter-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.cat-meter-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.cat-meter-bar{height:100%;border-radius:3px;transition:width .4s ease,background .3s}
+.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
+.cat-meter-val{text-align:right;font-weight:700;color:var(--text2)}
 .score-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;padding-left:16px;border-left:1px solid var(--border)}
 .summary-item{display:flex;flex-direction:column;align-items:center;gap:2px}
 .summary-count{font-size:22px;font-weight:700}
@@ -406,7 +413,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .s-err{color:var(--sev-critical)}
 
 /* ── Toolbar ─────────────────────────────────────────────────────── */
-.toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.toolbar{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;flex-wrap:wrap}
 .tabs{display:flex;gap:0}
 .tab{padding:12px 16px;font-size:14px;font-weight:500;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
 .tab:hover{color:var(--text)}
@@ -458,6 +465,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .card[data-sev="Informational"]{border-left-color:var(--sev-info)}
 .card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
 .card-header:hover{background:var(--surface2)}
+.card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
 .sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
 .sev-critical{background:var(--sev-critical)}
 .sev-high{background:var(--sev-high)}
@@ -532,33 +540,51 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .ctrl-id{font-family:monospace;font-size:12px;white-space:nowrap;color:var(--text2)}
 .ctrl-name{font-weight:500;white-space:nowrap}
 .ctrl-desc{color:var(--text2)}
+
+/* ── Print ───────────────────────────────────────────────────────── */
+@media print {
+  body{background:#fff}
+  .toolbar,.print-btn,.modal-overlay,.band-info-icon,.card-chevron,.fix-chevron,.btn-accept,.btn-undo,.btn-collapse{display:none !important}
+  .card{display:block !important;box-shadow:none;break-inside:avoid}
+  .card-body{display:flex !important}
+  .fix-content{display:block !important}
+  #top5-section,.top5-body{display:block !important}
+  #ctrl-ref,#no-results{display:none !important}
+  .score-banner{break-inside:avoid}
+}
 </style>
 </head>
 <body>
 <div class="header">
-  <div class="header-title">MET — Security Posture Scanner for MDO, EXO and Teams</div>
-  <div class="header-meta" id="header-meta">
-    $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
+  <div>
+    <div class="header-title">MET — Security Posture Scanner for MDO, EXO and Teams</div>
+    <div class="header-meta" id="header-meta">
+      $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
+    </div>
   </div>
+  <button class="print-btn" type="button" onclick="window.print()">&#x1F5A8; Print / Export PDF</button>
 </div>
 
 <div class="score-banner" data-band="$(($band).ToLower())" id="score-banner">
   <div class="score-main">
-    <div class="score-label">Posture Index</div>
-    <div class="score-row">
-      <div class="score-number" id="score-number">$overallScore</div>
-      <div class="score-delta" id="score-delta"></div>
-    </div>
-    <div class="score-progress-track">
-      <div class="score-progress-bar bar-$(($band).ToLower())" id="score-progress-bar" style="width:$overallScore%"></div>
-    </div>
-    <div class="score-band-wrap">
-      <div class="score-band band-$(($band).ToLower())" id="score-band">$band</div>
-      <div class="band-info-icon" tabindex="0" aria-label="Band scale guide">&#x24D8;</div>
-      <div class="band-tooltip" id="band-tooltip" role="tooltip"></div>
+    <svg class="score-donut" width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
+      <circle cx="44" cy="44" r="36" fill="none" stroke="var(--surface2)" stroke-width="9"></circle>
+      <g id="donut-segments" transform="rotate(-90 44 44)"></g>
+      <text x="44" y="50" text-anchor="middle" font-size="21" font-weight="700" fill="var(--text)" id="donut-score-text">$overallScore</text>
+    </svg>
+    <div class="score-main-meta">
+      <div class="score-label">Posture Index</div>
+      <div class="score-row">
+        <div class="score-delta" id="score-delta"></div>
+      </div>
+      <div class="score-band-wrap">
+        <div class="score-band band-$(($band).ToLower())" id="score-band">$band</div>
+        <div class="band-info-icon" tabindex="0" aria-label="Band scale guide">&#x24D8;</div>
+        <div class="band-tooltip" id="band-tooltip" role="tooltip"></div>
+      </div>
     </div>
   </div>
-  <div class="score-cats" id="score-cats"></div>
+  <div class="cat-meters" id="cat-meters"></div>
   <div class="score-summary">
     <div class="summary-item"><span class="summary-count s-fail" id="sum-fail">$($summary.Fail)</span><span class="summary-label">Fail</span></div>
     <div class="summary-item"><span class="summary-count s-warn" id="sum-warn">$($summary.Warning)</span><span class="summary-label">Warning</span></div>
@@ -575,6 +601,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="tab" data-tab="MDO">MDO <span class="tab-count" id="tc-mdo">0</span></div>
     <div class="tab" data-tab="EXO">EXO <span class="tab-count" id="tc-exo">0</span></div>
     <div class="tab" data-tab="Teams">Teams <span class="tab-count" id="tc-teams">0</span></div>
+    <div class="tab" data-tab="Accepted">Accepted <span class="tab-count" id="tc-accepted">0</span></div>
     <div class="tab" data-tab="Controls">All Controls <span class="tab-count" id="tc-controls">0</span></div>
   </div>
   <div class="filters">
@@ -622,10 +649,12 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 'use strict';
 
 const CHECKS = $checksJson;
-const CAT_SCORES = $catScoresJson;
 const TENANT_ID = $tenantIdJson;
 const INITIAL_SCORE = $overallScore;
 const SEV_WEIGHT = {Critical:40,High:20,Medium:10,Low:5,Informational:0};
+const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(--accent-teams)'};
+
+function sevOf(s){ return s || 'Informational'; }
 
 const CONTROLS_META = {
   'MET-MDO001': 'Safe Links enabled for email and Office apps; verifies TrackClicks, EnableForInternalSenders, and real-time scanning are configured.',
@@ -669,9 +698,12 @@ function setAccepted(checkId, justification){ localStorage.setItem(lsKey(checkId
 function clearAccepted(checkId){ localStorage.removeItem(lsKey(checkId)); }
 
 // ── Score calculation ────────────────────────────────────────────
-function recalcScore() {
+function bandOf(score) {
+  return score >= 95 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : score >= 40 ? 'Poor' : 'Critical';
+}
+function weightedScore(checks) {
   let wSum = 0, wTotal = 0;
-  CHECKS.forEach(function(c) {
+  checks.forEach(function(c) {
     if (!['Pass','Fail','Warning'].includes(c.result)) return;
     if (c.score === null || c.score === undefined) return;
     if (isAccepted(c.checkId)) return;
@@ -679,17 +711,20 @@ function recalcScore() {
     wSum  += c.score * w;
     wTotal += w * 100;
   });
-  const score = wTotal > 0 ? Math.round((wSum / wTotal) * 100) : 0;
-  const band = score >= 95 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : score >= 40 ? 'Poor' : 'Critical';
-  document.getElementById('score-number').textContent = score;
+  return wTotal > 0 ? Math.round((wSum / wTotal) * 100) : null;
+}
+function recalcScore() {
+  const score = weightedScore(CHECKS) ?? 0;
+  const band = bandOf(score);
+  document.getElementById('donut-score-text').textContent = score;
   const bandEl = document.getElementById('score-band');
   bandEl.textContent = band;
   bandEl.className = 'score-band band-' + band.toLowerCase();
   const banner = document.getElementById('score-banner');
   if (banner) banner.dataset.band = band.toLowerCase();
-  const bar = document.getElementById('score-progress-bar');
-  if (bar) { bar.style.width = score + '%'; bar.className = 'score-progress-bar bar-' + band.toLowerCase(); }
   renderBandTooltip(band);
+  renderCatMeters();
+  renderDonut();
 }
 
 const BAND_SCALE = [
@@ -712,18 +747,53 @@ function renderBandTooltip(currentBand) {
   }).join('');
 }
 
-// ── Category score badges ────────────────────────────────────────
-function renderCatScores() {
-  const el = document.getElementById('score-cats');
-  el.innerHTML = '';
-  [['MDO','cat-mdo'],['EXO','cat-exo'],['Teams','cat-teams']].forEach(function(pair) {
-    const cat = pair[0], cls = pair[1];
-    const val = CAT_SCORES[cat];
-    if (val === null || val === undefined) return;
-    const badge = document.createElement('div');
-    badge.className = 'cat-badge ' + cls;
-    badge.textContent = cat + ': ' + val;
-    el.appendChild(badge);
+// ── Category score meters ──────────────────────────────────────────
+// Bar color reports how healthy the category is (same 5 bands as the score banner);
+// the dot next to the label is what says which category it is.
+function renderCatMeters() {
+  const el = document.getElementById('cat-meters');
+  if (!el) return;
+  el.innerHTML = ['MDO','EXO','Teams'].map(function(cat) {
+    const score = weightedScore(CHECKS.filter(function(c) { return c.category === cat; }));
+    if (score === null) return '';
+    return '<div class="cat-meter-row">' +
+      '<span class="cat-meter-name"><span class="cat-meter-dot" style="background:' + CAT_ACCENT[cat] + '"></span>' + cat + '</span>' +
+      '<div class="cat-meter-track"><div class="cat-meter-bar bar-' + bandOf(score).toLowerCase() + '" style="width:' + score + '%"></div></div>' +
+      '<span class="cat-meter-val">' + score + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+// ── Result distribution donut ──────────────────────────────────────
+function renderDonut() {
+  const g = document.getElementById('donut-segments');
+  if (!g) return;
+  g.innerHTML = '';
+  const fail = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId); }).length;
+  const warn = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId); }).length;
+  const pass = CHECKS.filter(function(c) { return c.result === 'Pass'; }).length;
+  const na   = CHECKS.filter(function(c) { return c.result === 'NotApplicable'; }).length;
+  const total = fail + warn + pass + na;
+  document.getElementById('sum-fail').textContent = fail;
+  document.getElementById('sum-warn').textContent = warn;
+  if (!total) return;
+  const segs = [
+    { v: fail, color: 'var(--result-fail)' },
+    { v: warn, color: 'var(--result-warn)' },
+    { v: pass, color: 'var(--result-pass)' },
+    { v: na,   color: 'var(--result-na)'   }
+  ].filter(function(s) { return s.v > 0; });
+  const r = 36, circ = 2 * Math.PI * r;
+  let offset = 0;
+  segs.forEach(function(s) {
+    const len = (s.v / total) * circ;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', 44); c.setAttribute('cy', 44); c.setAttribute('r', r);
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', s.color); c.setAttribute('stroke-width', 9);
+    c.setAttribute('stroke-dasharray', len + ' ' + (circ - len));
+    c.setAttribute('stroke-dashoffset', -offset);
+    g.appendChild(c);
+    offset += len;
   });
 }
 
@@ -836,7 +906,8 @@ function createCard(check) {
 
   card.innerHTML =
     '<div class="card-header" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
-      '<span class="sev-pill sev-' + check.severity.toLowerCase() + '">' + esc(check.severity.toUpperCase()) + '</span>' +
+      '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+      '<span class="card-cat-chip cat-' + check.category.toLowerCase() + '">' + esc(check.category) + '</span>' +
       '<span class="card-id">' + esc(check.checkId) + '</span>' +
       '<span class="card-name">' + esc(check.name) + '</span>' +
       '<span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span>' +
@@ -850,7 +921,8 @@ function createCard(check) {
     '</div>';
 
   // Toggle card body; auto-open fix section on first expand of Fail/Warning
-  card.querySelector('.card-header').addEventListener('click', function() {
+  const cardHeader = card.querySelector('.card-header');
+  cardHeader.addEventListener('click', function() {
     const body    = card.querySelector('.card-body');
     const chevron = card.querySelector('.card-chevron');
     const isOpen  = body.classList.toggle('open');
@@ -865,6 +937,9 @@ function createCard(check) {
         if (fixChev) fixChev.classList.add('open');
       }
     }
+  });
+  cardHeader.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cardHeader.click(); }
   });
 
   // Toggle fix section
@@ -937,7 +1012,7 @@ function renderTop5() {
       '<div class="top5-finding">' + fmtFinding(check.finding) + '</div>' +
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
         '<span class="result-badge ' + rbClass + '">' + esc(check.result.toUpperCase()) + '</span>' +
-        '<span class="sev-pill sev-' + check.severity.toLowerCase() + '">' + esc(check.severity.toUpperCase()) + '</span>' +
+        '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '</div>';
     row.addEventListener('click', function() {
       const card = cardMap[check.checkId];
@@ -995,7 +1070,7 @@ function renderControlsRef() {
       html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
-      html += '<td><span class="sev-pill sev-' + c.severity.toLowerCase() + '">' + esc(c.severity.toUpperCase()) + '</span></td>';
+      html += '<td><span class="sev-pill sev-' + sevOf(c.severity).toLowerCase() + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
       html += '<td class="ctrl-desc">' + esc(desc) + '</td>';
       html += '<td><span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span></td>';
       html += '<td>' + (c.referenceUrl ? '<a href="' + safeHref(c.referenceUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">&#x1F4D6;</a>' : '') + '</td>';
@@ -1061,18 +1136,27 @@ function applyFilters() {
     return;
   }
 
-  let visible = 0;
+  let visible = 0, inScopeTotal = 0;
   allCards.forEach(function(card) {
-    const cat    = card.dataset.category;
-    const result = card.dataset.result;
-    const sev    = card.dataset.sev;
-    const sText  = card.dataset.search || '';
+    const cat      = card.dataset.category;
+    const result   = card.dataset.result;
+    const sev      = card.dataset.sev;
+    const sText    = card.dataset.search || '';
+    const isAcc    = card.dataset.accepted === '1';
 
-    let show = true;
-    if (activeTab === 'MDO')        show = cat === 'MDO';
-    else if (activeTab === 'EXO')   show = cat === 'EXO';
-    else if (activeTab === 'Teams') show = cat === 'Teams';
+    // Accepted cards move out of All/MDO/EXO/Teams and into the Accepted tab.
+    let inScope;
+    if (activeTab === 'Accepted') {
+      inScope = isAcc;
+    } else {
+      inScope = !isAcc;
+      if (inScope && activeTab === 'MDO')        inScope = cat === 'MDO';
+      else if (inScope && activeTab === 'EXO')   inScope = cat === 'EXO';
+      else if (inScope && activeTab === 'Teams') inScope = cat === 'Teams';
+    }
+    if (inScope) inScopeTotal++;
 
+    let show = inScope;
     if (show && sevFilter) show = sev === sevFilter;
     if (show && resFilter) show = result === resFilter;
     if (show && search)    show = sText.includes(search);
@@ -1082,17 +1166,19 @@ function applyFilters() {
   });
 
   document.getElementById('no-results').style.display = visible === 0 ? '' : 'none';
-  document.getElementById('result-count').textContent = 'Showing ' + visible + ' of ' + allCards.length + ' checks';
+  document.getElementById('result-count').textContent = 'Showing ' + visible + ' of ' + inScopeTotal + ' checks';
   updateTabCounts();
 }
 
 function updateTabCounts() {
-  const counts = {All:0, MDO:0, EXO:0, Teams:0};
+  const counts = {All:0, MDO:0, EXO:0, Teams:0, Accepted:0};
   allCards.forEach(function(card) {
+    if (card.dataset.accepted === '1') { counts.Accepted++; return; }
     counts.All++;
     counts[card.dataset.category] = (counts[card.dataset.category] || 0) + 1;
   });
   document.getElementById('tc-all').textContent      = counts.All;
+  document.getElementById('tc-accepted').textContent = counts.Accepted || 0;
   document.getElementById('tc-mdo').textContent      = counts.MDO || 0;
   document.getElementById('tc-exo').textContent      = counts.EXO || 0;
   document.getElementById('tc-teams').textContent    = counts.Teams || 0;
@@ -1199,6 +1285,8 @@ function rebuildCard(checkId) {
   const newCard = createCard(check);
   oldCard.parentNode.replaceChild(newCard, oldCard);
   cardMap[checkId] = newCard;
+  const idx = allCards.indexOf(oldCard);
+  if (idx !== -1) allCards[idx] = newCard;
 }
 
 // ── Init ─────────────────────────────────────────────────────────
@@ -1217,7 +1305,6 @@ function rebuildCard(checkId) {
   }
   localStorage.setItem(LS_SCORE_KEY, INITIAL_SCORE);
 })();
-renderCatScores();
 renderTop5();
 renderControlsRef();
 applyFilters();
