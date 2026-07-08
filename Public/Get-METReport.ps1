@@ -450,6 +450,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .finding-list-indent{padding-left:20px}
 .code-block{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;margin-top:6px;word-break:break-all;display:block;color:var(--text)}
 .finding-code{margin-left:12px}
+.inline-code{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;color:var(--text);word-break:break-word}
 
 /* ── Cards grid ──────────────────────────────────────────────────── */
 .cards{display:flex;flex-direction:column;gap:8px}
@@ -862,12 +863,31 @@ function safeHref(url) {
   catch { return '#'; }
 }
 
+// ── Inline-code formatting for recommendation text ────────────────
+// 'quoted' technical values (setting names, DNS records) and the command
+// portion of a "Run: <cmdlet>" instruction are rendered as inline code.
+function codifyQuotes(s) {
+  const parts = s.split(/'([^']+)'/);
+  return parts.map(function(part, i) {
+    return i % 2 === 1 ? '<code class="inline-code">' + esc(part) + '</code>' : esc(part);
+  }).join('');
+}
+function codifyRecText(s) {
+  const runMatch = s.match(/^Run:\s+(.+?)(\.\s+|\.$|$)/);
+  if (runMatch) {
+    const cmd  = runMatch[1];
+    const rest = s.slice(runMatch[0].length);
+    return 'Run: <code class="inline-code">' + esc(cmd) + '</code>' + esc(runMatch[2]) + codifyQuotes(rest);
+  }
+  return codifyQuotes(s);
+}
+
 // ── Build recommendation as list if multi-line ───────────────────
 function buildRecommendation(rec) {
   if (!rec) return '';
   const lines = rec.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
-  if (lines.length <= 1) return '<p>' + esc(rec) + '</p>';
-  return '<ol>' + lines.map(function(l){ return '<li>' + esc(l.replace(/^\d+\.\s*/, '')) + '</li>'; }).join('') + '</ol>';
+  if (lines.length <= 1) return '<p>' + codifyRecText(rec) + '</p>';
+  return '<ol>' + lines.map(function(l){ return '<li>' + codifyRecText(l.replace(/^\d+\.\s*/, '')) + '</li>'; }).join('') + '</ol>';
 }
 
 // ── Render a single card ─────────────────────────────────────────
