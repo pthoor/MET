@@ -691,11 +691,24 @@ const CONTROLS_CATEGORIES = [
 ];
 
 // ── localStorage helpers ─────────────────────────────────────────
+// Some browsers (notably Safari) throw a SecurityError accessing localStorage
+// on file:// pages. Fall back to an in-memory store so the report still
+// renders and works for the current session instead of crashing outright.
+const memStore = {};
+function lsGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return Object.prototype.hasOwnProperty.call(memStore, key) ? memStore[key] : null; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, val); } catch (e) { memStore[key] = val; }
+}
+function lsRemove(key) {
+  try { localStorage.removeItem(key); } catch (e) { delete memStore[key]; }
+}
 function lsKey(checkId){ return 'MET_accepted_' + TENANT_ID + '_' + checkId; }
-function isAccepted(checkId){ return !!localStorage.getItem(lsKey(checkId)); }
-function getJustification(checkId){ return localStorage.getItem(lsKey(checkId)); }
-function setAccepted(checkId, justification){ localStorage.setItem(lsKey(checkId), justification || 'Accepted'); }
-function clearAccepted(checkId){ localStorage.removeItem(lsKey(checkId)); }
+function isAccepted(checkId){ return !!lsGet(lsKey(checkId)); }
+function getJustification(checkId){ return lsGet(lsKey(checkId)); }
+function setAccepted(checkId, justification){ lsSet(lsKey(checkId), justification || 'Accepted'); }
+function clearAccepted(checkId){ lsRemove(lsKey(checkId)); }
 
 // ── Score calculation ────────────────────────────────────────────
 function bandOf(score) {
@@ -1292,7 +1305,7 @@ function rebuildCard(checkId) {
 // ── Init ─────────────────────────────────────────────────────────
 (function() {
   const LS_SCORE_KEY = 'MET_score_' + TENANT_ID;
-  const prev = localStorage.getItem(LS_SCORE_KEY);
+  const prev = lsGet(LS_SCORE_KEY);
   if (prev !== null) {
     const delta = INITIAL_SCORE - parseInt(prev, 10);
     if (delta !== 0) {
@@ -1303,7 +1316,7 @@ function rebuildCard(checkId) {
       }
     }
   }
-  localStorage.setItem(LS_SCORE_KEY, INITIAL_SCORE);
+  lsSet(LS_SCORE_KEY, INITIAL_SCORE);
 })();
 renderTop5();
 renderControlsRef();
