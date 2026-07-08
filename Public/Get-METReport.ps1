@@ -864,13 +864,23 @@ function safeHref(url) {
 }
 
 // ── Inline-code formatting for recommendation text ────────────────
-// 'quoted' technical values (setting names, DNS records) and the command
-// portion of a "Run: <cmdlet>" instruction are rendered as inline code.
+// 'quoted' technical values (setting names, DNS records), bare SPF
+// qualifier tokens (+all, -all, ~all, ?mx, ...), and the command portion
+// of a "Run: <cmdlet>" instruction are rendered as inline code.
 function codifyQuotes(s) {
-  const parts = s.split(/'([^']+)'/);
-  return parts.map(function(part, i) {
-    return i % 2 === 1 ? '<code class="inline-code">' + esc(part) + '</code>' : esc(part);
-  }).join('');
+  const re = /'([^']+)'|(^|[\s(])([+\-~?](?:all|mx|a|ip4|ip6|include|exists|ptr|redirect))\b/g;
+  let out = '', lastIndex = 0, m;
+  while ((m = re.exec(s)) !== null) {
+    out += esc(s.slice(lastIndex, m.index));
+    if (m[1] !== undefined) {
+      out += '<code class="inline-code">' + esc(m[1]) + '</code>';
+    } else {
+      out += esc(m[2]) + '<code class="inline-code">' + esc(m[3]) + '</code>';
+    }
+    lastIndex = re.lastIndex;
+  }
+  out += esc(s.slice(lastIndex));
+  return out;
 }
 function codifyRecText(s) {
   const runMatch = s.match(/^Run:\s+(.+?)(\.\s+|\.$|$)/);
