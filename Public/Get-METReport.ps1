@@ -562,7 +562,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
     </div>
   </div>
-  <button class="print-btn" type="button" onclick="window.print()">&#x1F5A8; Print / Export PDF</button>
+  <button class="print-btn" type="button" id="print-btn">&#x1F5A8; Print / Export PDF</button>
 </div>
 
 <div class="score-banner" data-band="$(($band).ToLower())" id="score-banner">
@@ -1086,13 +1086,17 @@ function renderControlsRef() {
       html += '<td><span class="sev-pill sev-' + sevOf(c.severity).toLowerCase() + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
       html += '<td class="ctrl-desc">' + esc(desc) + '</td>';
       html += '<td><span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span></td>';
-      html += '<td>' + (c.referenceUrl ? '<a href="' + safeHref(c.referenceUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">&#x1F4D6;</a>' : '') + '</td>';
+      html += '<td>' + (c.referenceUrl ? '<a class="ctrl-doc-link" href="' + safeHref(c.referenceUrl) + '" target="_blank" rel="noopener">&#x1F4D6;</a>' : '') + '</td>';
       html += '</tr>';
     });
     html += '</tbody></table></div>';
   });
 
   el.innerHTML = html || '<p style="padding:24px;color:var(--text2)">No check data available.</p>';
+
+  el.querySelectorAll('.ctrl-doc-link').forEach(function(link) {
+    link.addEventListener('click', function(e) { e.stopPropagation(); });
+  });
 
   el.querySelectorAll('.ctrl-row').forEach(function(row) {
     row.addEventListener('click', function() {
@@ -1209,6 +1213,7 @@ document.querySelectorAll('.tab').forEach(function(tab) {
 document.getElementById('search').addEventListener('input', applyFilters);
 document.getElementById('sev-filter').addEventListener('change', applyFilters);
 document.getElementById('result-filter').addEventListener('change', applyFilters);
+document.getElementById('print-btn').addEventListener('click', function() { window.print(); });
 
 // ── Collapse / Expand all ────────────────────────────────────────
 let allExpanded = false;
