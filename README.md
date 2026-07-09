@@ -1,6 +1,11 @@
-﻿# MET — Security Posture Scanner for MDO, EXO and Teams
+﻿<p align="center">
+  <img src="assets/met-icon-light.svg#gh-light-mode-only" width="72" height="72" alt="MET logo">
+  <img src="assets/met-icon-dark.svg#gh-dark-mode-only" width="72" height="72" alt="MET logo">
+</p>
 
-Open-source PowerShell module for assessing the security posture of a Microsoft 365 tenant across Microsoft Defender for Office 365 (MDO), Exchange Online Protection (EOP), and Microsoft Teams threat protection.
+<h1 align="center">MET — Security Posture Scanner for MDO, EXO and Teams</h1>
+
+<p align="center">Open-source PowerShell module for assessing the security posture of a Microsoft 365 tenant across Microsoft Defender for Office 365 (MDO), Exchange Online Protection (EOP), and Microsoft Teams threat protection.</p>
 
 ---
 
