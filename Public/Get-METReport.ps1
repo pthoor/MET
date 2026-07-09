@@ -836,8 +836,8 @@ function fmtFinding(s) {
     var parts = splitPipe(normalized);
     var text = parts[0], code = parts[1];
     var issues = text.split(/;\s*/).filter(function(i){ return i.trim(); });
-    var issuesHtml = issues.length <= 1 ? esc(text) :
-      '<ul class="finding-list">' + issues.map(function(i){ return '<li>' + esc(i.trim()) + '</li>'; }).join('') + '</ul>';
+    var issuesHtml = issues.length <= 1 ? codifyQuotes(text) :
+      '<ul class="finding-list">' + issues.map(function(i){ return '<li>' + codifyQuotes(i.trim()) + '</li>'; }).join('') + '</ul>';
     return issuesHtml + codeBlockHtml(code);
   }
 
@@ -851,7 +851,7 @@ function fmtFinding(s) {
     return '<div class="finding-policy">' +
       '<div class="finding-policy-name">&#x2022;&nbsp;' + esc(policyName) + '</div>' +
       (issues.length ? '<ul class="finding-list finding-list-indent">' +
-        issues.map(function(i){ return '<li>' + esc(i.trim()) + '</li>'; }).join('') +
+        issues.map(function(i){ return '<li>' + codifyQuotes(i.trim()) + '</li>'; }).join('') +
         '</ul>' : '') +
       codeBlockHtml(code) +
       '</div>';
@@ -863,12 +863,13 @@ function safeHref(url) {
   catch { return '#'; }
 }
 
-// ── Inline-code formatting for recommendation text ────────────────
+// ── Inline-code formatting for finding/recommendation text ────────
 // 'quoted' technical values (setting names, DNS records), bare SPF
-// qualifier tokens (+all, -all, ~all, ?mx, ...), and the command portion
-// of a "Run: <cmdlet>" instruction are rendered as inline code.
+// qualifier tokens (+all, -all, ~all, ?mx, ...), bare key=value tokens
+// (p=none, p=quarantine, rua=mailto:...), and the command portion of a
+// "Run: <cmdlet>" instruction are all rendered as inline code.
 function codifyQuotes(s) {
-  const re = /'([^']+)'|(^|[\s(])([+\-~?](?:all|mx|a|ip4|ip6|include|exists|ptr|redirect))\b/g;
+  const re = /'([^']+)'|(^|[\s(])([+\-~?](?:all|mx|a|ip4|ip6|include|exists|ptr|redirect)\b|[a-zA-Z][\w-]*=[^\s,;()]*[^\s,;().])/g;
   let out = '', lastIndex = 0, m;
   while ((m = re.exec(s)) !== null) {
     out += esc(s.slice(lastIndex, m.index));
