@@ -923,7 +923,7 @@ function createCard(check) {
   card.dataset.checkId  = check.checkId;
   card.dataset.category = check.category;
   card.dataset.result   = check.result;
-  card.dataset.sev      = check.severity;
+  card.dataset.sev      = sevOf(check.severity);
   card.dataset.accepted = accepted ? '1' : '0';
   card.dataset.search   = [check.checkId, check.name, check.affectedObject, check.finding].join(' ').toLowerCase();
 
