@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.4.2'
+    ModuleVersion        = '0.5.0'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -27,7 +27,7 @@
             Tags         = @('MDO', 'Microsoft365', 'Defender', 'ExchangeOnline', 'Teams', 'Security', 'Posture', 'Assessment')
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
-            ReleaseNotes = 'v0.4.2 — Removed stale MAST rename artifacts (legacy report script and duplicate check doc) and kept strict release linting fixes for report catch handling.'
+            ReleaseNotes = 'v0.5.0 — HTML report: Accepted tab (accepted risks now move to their own tab, closing a spec gap), score donut and score-banded MDO/EXO/Teams meters, inline code formatting for DNS/config values and PowerShell one-liners in findings and recommendations, sticky toolbar, print/export stylesheet, keyboard-accessible cards, and a localStorage fallback so the report renders even where a browser blocks it on file:// pages. Added the MET brand logo to the HTML report header/favicon and the README.'
         }
     }
 }
