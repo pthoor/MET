@@ -306,6 +306,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MET Report — $([System.Security.SecurityElement]::Escape($tenantId))</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI2YyZjFlZSI+PC9jaXJjbGU+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc0LjA0IDc0LjA0IiBmaWxsPSJub25lIiBzdHJva2U9IiNkOGQ1Y2QiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc5LjI3IDMyLjY5IiBmaWxsPSJub25lIiBzdHJva2U9Im9rbGNoKDAuNSAwLjExIDIwNSkiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPGxpbmUgeDE9IjUwIiB5MT0iNTAiIHgyPSI3NC40IiB5Mj0iMzUuOCIgc3Ryb2tlPSIjMWMxYTE3IiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9saW5lPgogIDxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjcuNSIgZmlsbD0iIzFjMWExNyI+PC9jaXJjbGU+Cjwvc3ZnPg==">
+<link rel="icon" type="image/svg+xml" media="(prefers-color-scheme: dark)" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iIzEyMTUxYSI+PC9jaXJjbGU+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc0LjA0IDc0LjA0IiBmaWxsPSJub25lIiBzdHJva2U9IiMyYjMyM2MiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc5LjI3IDMyLjY5IiBmaWxsPSJub25lIiBzdHJva2U9Im9rbGNoKDAuNjUgMC4xMyAyMDUpIiBzdHJva2Utd2lkdGg9IjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPgogIDxsaW5lIHgxPSI1MCIgeTE9IjUwIiB4Mj0iNzQuNCIgeTI9IjM1LjgiIHN0cm9rZT0iI2YyZjFlZSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiPjwvbGluZT4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI3LjUiIGZpbGw9IiNmMmYxZWUiPjwvY2lyY2xlPgo8L3N2Zz4=">
 <style>
 :root {
   --bg: #f3f2f1;
@@ -354,6 +356,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px 16px 20px;box-shadow:var(--shadow);border-left:4px solid var(--accent-mdo);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .header-title{font-size:20px;font-weight:600;margin-bottom:3px;letter-spacing:-.01em}
 .header-meta{font-size:12px;color:var(--text2)}
+.header-brand{display:flex;align-items:center;gap:12px}
+.header-icon{width:30px;height:30px;flex-shrink:0;color:var(--accent-mdo)}
 .print-btn{font-size:12px;font-weight:600;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;background:var(--surface2);white-space:nowrap;flex-shrink:0}
 .print-btn:hover{background:var(--border);color:var(--text)}
 
@@ -557,10 +561,19 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 </head>
 <body>
 <div class="header">
-  <div>
-    <div class="header-title">MET — Security Posture Scanner for MDO, EXO and Teams</div>
-    <div class="header-meta" id="header-meta">
-      $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
+  <div class="header-brand">
+    <svg class="header-icon" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="4"></circle>
+      <path d="M 25.96 74.04 A 34 34 0 1 1 74.04 74.04" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" opacity="0.35"></path>
+      <path d="M 25.96 74.04 A 34 34 0 1 1 79.27 32.69" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"></path>
+      <line x1="50" y1="50" x2="74.4" y2="35.8" stroke="currentColor" stroke-width="5" stroke-linecap="round"></line>
+      <circle cx="50" cy="50" r="7.5" fill="currentColor"></circle>
+    </svg>
+    <div>
+      <div class="header-title">MET — Security Posture Scanner for MDO, EXO and Teams</div>
+      <div class="header-meta" id="header-meta">
+        $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
+      </div>
     </div>
   </div>
   <button class="print-btn" type="button" id="print-btn">&#x1F5A8; Print / Export PDF</button>
