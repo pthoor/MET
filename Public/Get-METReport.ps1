@@ -827,6 +827,13 @@ function splitPipe(s) {
 function codeBlockHtml(val) {
   return val ? '<code class="code-block finding-code">' + esc(val) + '</code>' : '';
 }
+// Findings are often authored as one sentence joined with '; ' (e.g. "X is
+// disabled; users lose Y"), then split into separate bullets — capitalize
+// each bullet so it reads as its own sentence instead of a sentence
+// fragment. Leaves already-capitalized or symbol/digit-led text alone.
+function capFirst(s) {
+  return /^[a-z]/.test(s) ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
 function fmtFinding(s) {
   if (!s) return '';
   var normalized = s.replace(/·|–|—|―/g, '-');
@@ -837,7 +844,7 @@ function fmtFinding(s) {
     var text = parts[0], code = parts[1];
     var issues = text.split(/;\s*/).filter(function(i){ return i.trim(); });
     var issuesHtml = issues.length <= 1 ? codifyQuotes(text) :
-      '<ul class="finding-list">' + issues.map(function(i){ return '<li>' + codifyQuotes(i.trim()) + '</li>'; }).join('') + '</ul>';
+      '<ul class="finding-list">' + issues.map(function(i){ return '<li>' + codifyQuotes(capFirst(i.trim())) + '</li>'; }).join('') + '</ul>';
     return issuesHtml + codeBlockHtml(code);
   }
 
@@ -851,7 +858,7 @@ function fmtFinding(s) {
     return '<div class="finding-policy">' +
       '<div class="finding-policy-name">&#x2022;&nbsp;' + esc(policyName) + '</div>' +
       (issues.length ? '<ul class="finding-list finding-list-indent">' +
-        issues.map(function(i){ return '<li>' + codifyQuotes(i.trim()) + '</li>'; }).join('') +
+        issues.map(function(i){ return '<li>' + codifyQuotes(capFirst(i.trim())) + '</li>'; }).join('') +
         '</ul>' : '') +
       codeBlockHtml(code) +
       '</div>';
