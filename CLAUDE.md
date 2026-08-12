@@ -1,4 +1,8 @@
-﻿# MET — Security Posture Scanner for MDO, EXO and Teams
+﻿# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# MET — Security Posture Scanner for MDO, EXO and Teams
 
 > Open-source PowerShell module for assessing Microsoft Defender for Office 365 (MDO), Exchange Online (EOP), and Microsoft Teams protection posture.
 
@@ -23,7 +27,8 @@ MET/
 ├── Public/
 │   ├── Invoke-METTriage.ps1         # Main entry point — runs all or selected checks
 │   ├── Get-METReport.ps1            # Formats and exports results (console / JSON / HTML)
-│   └── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
+│   ├── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
+│   └── Test-METPrerequisites.ps1    # Verifies required module versions before triage
 ├── Private/
 │   ├── New-METCheckResult.ps1       # Factory for the standard check result object
 │   ├── Get-METCheckWeight.ps1       # Returns severity weight for scoring
@@ -91,13 +96,45 @@ MET/
 
 | Requirement | Detail |
 |---|---|
-| PowerShell | 7.4+ |
-| ExchangeOnlineManagement | 3.x (modern auth, REST-based) |
-| MicrosoftTeams | 6.x |
-| Microsoft.Graph | Scoped — Identity and Policy modules only |
+| PowerShell | 7.4+ (tested on 7.4, 7.6) |
+| ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) — required |
+| Microsoft.Graph.Identity.SignIns / .Groups | 2.x — required |
+| MicrosoftTeams | 6.x+ (latest 7.x) — optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
 
-No Python. No ARM. No Terraform. No legacy Basic Auth.
+No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only — on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there.
+
+`RequiredModules` is deliberately empty in `MET.psd1` — declaring them there causes a hard import failure when a dependency is missing, which would prevent `Test-METPrerequisites` from running and guiding the user. Dependencies are checked at runtime instead.
+
+---
+
+## Development Commands
+
+```powershell
+# Import the module locally (no build step — this is a pure PowerShell script module)
+Import-Module ./MET.psd1 -Force
+
+# Lint (matches CI's lint job exactly — must be zero errors)
+Install-Module PSScriptAnalyzer -MinimumVersion 1.21.0 -Scope CurrentUser
+Invoke-ScriptAnalyzer -Path Public,Private,Checks -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+
+# Unit tests (no tenant connection required — all EXO/Graph/Teams cmdlets are mocked)
+$config = New-PesterConfiguration
+$config.Run.Path = './Tests/Unit'
+$config.Output.Verbosity = 'Detailed'
+Invoke-Pester -Configuration $config
+
+# Run a single test file
+Invoke-Pester -Path ./Tests/Unit/Checks.MDO.Tests.ps1 -Output Detailed
+
+# Run a single test by name
+Invoke-Pester -Path ./Tests/Unit -FullNameFilter '*MET-EXO001*' -Output Detailed
+
+# Integration tests (also mocked — no live tenant required)
+Invoke-Pester -Path ./Tests/Integration -Output Detailed
+```
+
+CI (`pester.yml`) runs three jobs in order: `lint` (PSScriptAnalyzer, zero errors required) → `test` (unit tests with a 30% JaCoCo coverage gate, then integration tests) → `credential-scan` (TruffleHog). Lint failures block the test job.
 
 ---
 
@@ -106,11 +143,12 @@ No Python. No ARM. No Terraform. No legacy Basic Auth.
 - **Approved verbs only** — `Invoke-`, `Get-`, `Test-`, `Connect-`, `New-`, `Resolve-`
 - **No inline comments** unless a section is genuinely non-obvious (e.g., a workaround for a known API quirk)
 - **Output shape** — always `PSCustomObject` via `New-METCheckResult`, never raw strings
-- **Error handling** — `try/catch` on all EXO/Graph/Teams calls; non-terminating errors surfaced in the `Error` field of the result object, not thrown
-- **No `Write-Host`** — use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues
+- **Error handling** — `try/catch` on all EXO/Graph/Teams calls; non-terminating errors surfaced in the `Error` field of the result object, not thrown. Populate it via `New-METCheckResult`'s `-ErrorMessage` parameter, never `-Error` — `$Error` is a PowerShell automatic variable and using it as a param name trips `PSAvoidAssignmentToAutomaticVariable`.
+- **No `Write-Host` in checks or library code** — use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues. `Get-METReport` and `Test-METPrerequisites` are the sole exceptions (coloured console display output); `PSAvoidUsingWriteHost` is disabled repo-wide in `PSScriptAnalyzerSettings.psd1` for that reason.
 - **Secure by default** — no credential params, no plain-text secrets; all auth via `Connect-METSession` using modern auth / service principal / managed identity
 - **Param blocks** — all public functions use `[CmdletBinding()]` and typed parameters
 - **No positional parameters** on public functions
+- Check scripts are standalone `.ps1` files, not functions — see [Check Execution Model](#check-execution-model) below.
 
 ---
 
@@ -154,9 +192,30 @@ Invoke-METTriage -DelegatedOrganization contoso.onmicrosoft.com
 
 # Exclude checks
 Invoke-METTriage -ExcludeCheckId MET-EXO007
+
+# Dry-run: list what would run without connecting or executing anything
+Invoke-METTriage -ListChecks
+
+# Stream results as each check completes, instead of buffering
+Invoke-METTriage -PassThru
+
+# Full per-object detail (skip the multi-item aggregation described below)
+Invoke-METTriage -Detailed
 ```
 
 Returns `[PSCustomObject[]]` — the full collection of check results. `Get-METReport` handles formatting.
+
+> `-DelegatedOrganization` is declared on the param block but not yet wired into the check-execution path — it's a placeholder for future MSSP support (hence its exclusion from `PSReviewUnusedParameter` in `PSScriptAnalyzerSettings.psd1`). Don't assume it changes behavior today.
+
+### Check Execution Model
+
+`Invoke-METTriage` does not dot-source `Checks/` at module load time (unlike `Public/` and `Private/`, which `MET.psm1` loads on import). Instead, each call to `Invoke-METTriage`:
+
+1. Discovers check scripts fresh via `Get-ChildItem -Path Checks -Recurse -Filter 'MET-*.ps1'` — dropping a new file into `Checks/<Category>/` is enough to register it; no manifest or export list to update.
+2. Pre-fetches shared context once (currently `AcceptedDomains` via `Get-AcceptedDomain`) into a `$METContext` hashtable, so every check that needs it doesn't repeat the same round-trip.
+3. Runs each check inside a wrapper scriptblock — `& { param($METContext) . $checkPath } $METContext` — rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METTriage` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
+4. Catches any terminating error per-check and converts it into a synthetic `Fail`/`High` result with the exception text in `Error`, so one broken check never aborts the run.
+5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object — see `Get-METAggregationNoun` in `Invoke-METTriage.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
 
 ---
 
@@ -319,7 +378,8 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 - Interactive (device code / browser)
 - Service principal with certificate (`-CertificateThumbprint`, `-AppId`, `-TenantId`)
 - Managed Identity (`-ManagedIdentity`)
-- Delegated org (`-DelegatedOrganization`)
+- Delegated org (`-DelegatedOrganization`) — for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name
+- `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` — opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
 
 ---
 
@@ -377,14 +437,14 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 
 ---
 
-## Current State (v0.2.0)
+## Current State (v0.5.0)
 
-All 26 checks are implemented across MDO (12), EXO (9), and Teams (5). The module is published to PSGallery.
+All 26 checks are implemented across MDO (12), EXO (9), and Teams (5), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `PrivateData.PSData.ReleaseNotes` in `MET.psd1` for the latest release's changes.
 
-Remaining work:
-- HTML report (`Get-METReport -Format HTML`) — v0.3
-- SARIF output for GitHub Code Scanning integration — backlog
-- Azure Automation / GitHub Actions wrapper examples — backlog
+Backlog (not yet started):
+- SARIF output for GitHub Code Scanning integration
+- Azure Automation / GitHub Actions wrapper examples
+- Signed module release for PSGallery publication
 
 ---
 
