@@ -52,7 +52,8 @@ MET/
 │   │   ├── MET-MDO009-ZAP.ps1
 │   │   ├── MET-MDO010-PriorityAccounts.ps1
 │   │   ├── MET-MDO011-UserTags.ps1
-│   │   └── MET-MDO012-SafeDocuments.ps1
+│   │   ├── MET-MDO012-SafeDocuments.ps1
+│   │   └── MET-MDO013-PolicyPrecedenceConflicts.ps1
 │   ├── EXO/
 │   │   ├── MET-EXO001-DMARC.ps1
 │   │   ├── MET-EXO002-DKIM.ps1
@@ -62,20 +63,31 @@ MET/
 │   │   ├── MET-EXO006-SubmissionPolicy.ps1
 │   │   ├── MET-EXO007-TransportRuleAudit.ps1
 │   │   ├── MET-EXO008-QuarantineRetention.ps1
-│   │   └── MET-EXO009-QuarantinePolicyVerdictAlignment.ps1
+│   │   ├── MET-EXO009-QuarantinePolicyVerdictAlignment.ps1
+│   │   ├── MET-EXO010-DirectSend.ps1
+│   │   ├── MET-EXO011-ConnectorHygiene.ps1
+│   │   ├── MET-EXO012-MailboxForwarding.ps1
+│   │   ├── MET-EXO013-SpoofIntelligenceAllowList.ps1
+│   │   ├── MET-EXO014-AdvancedDeliveryPolicy.ps1
+│   │   ├── MET-EXO015-ExternalSenderTag.ps1
+│   │   └── MET-EXO016-ArcTrustedSealers.ps1
 │   └── Teams/
 │       ├── MET-Teams001-SafeLinks.ps1
 │       ├── MET-Teams002-SafeAttachments.ps1
 │       ├── MET-Teams003-MeetingProtection.ps1
 │       ├── MET-Teams004-ZAPForTeams.ps1
-│       └── MET-Teams005-TeamsUserReporting.ps1
+│       ├── MET-Teams005-TeamsUserReporting.ps1
+│       ├── MET-Teams006-ExternalAccess.ps1
+│       ├── MET-Teams007-GuestConfiguration.ps1
+│       └── MET-Teams008-AppPermissionPolicy.ps1
 ├── Tests/
 │   ├── Unit/
 │   │   ├── New-METCheckResult.Tests.ps1
 │   │   ├── Resolve-METCoverageMatrix.Tests.ps1
-│   │   ├── Checks.MDO.Tests.ps1
-│   │   ├── Checks.EXO.Tests.ps1
-│   │   └── Checks.Teams.Tests.ps1
+│   │   ├── Checks.MDO.Tests.ps1          # MDO001-MDO012 (MDO013 has its own file below)
+│   │   ├── Checks.EXO.Tests.ps1          # EXO001-EXO009 (EXO010+ each have their own file below)
+│   │   ├── Checks.Teams.Tests.ps1        # Teams001-Teams005 (Teams006+ each have their own file below)
+│   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check from MDO013/EXO010+/Teams006+ onward — each check's tests now get a dedicated file (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file.
 │   └── Integration/
 │       └── Invoke-METTriage.Tests.ps1
 ├── docs/
@@ -401,6 +413,7 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-MDO010 | Priority Accounts | Priority account tag applied; differentiated protection policy active |
 | MET-MDO011 | User Tags | Tags in use; alert policies referencing tags exist |
 | MET-MDO012 | Safe Documents | `EnableSafeDocs` enabled; `AllowSafeDocsOpen` disabled (via `Get-AtpPolicyForO365`) |
+| MET-MDO013 | Policy Precedence Conflicts | Reuses `Resolve-METCoverageMatrix`/`Expand-METRuleRecipients` from MDO008 to find custom EOP/Safe Links/Anti-Phish rules whose targeted recipients are also covered by a Standard/Strict preset — since presets always win, the custom rule is silently inert for the overlap even though it looks active |
 
 ### EXO Checks
 
@@ -415,6 +428,13 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-EXO007 | Transport Rule Audit | Rules that bypass spam filtering (`SCLJunk=-1`) or disable safe links; informational listing |
 | MET-EXO008 | Quarantine Retention | `QuarantineRetentionPeriod` ≥ 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30) |
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Cross-references every filter policy (anti-spam, anti-malware, anti-phish, Safe Attachments) with its assigned quarantine tag; verifies `PermissionToRelease = $false` for high-risk verdicts (Malware, High-Confidence Phish, impersonation) and warns for medium-risk (Phish, Spoof, Mailbox Intelligence) — catches custom quarantine policies that are too permissive for the verdict they protect |
+| MET-EXO010 | Direct Send | `Get-OrganizationConfig` → `RejectDirectSend` — unauthenticated senders can otherwise relay mail through the tenant's own domain without SMTP auth, a path actively abused to spoof internal senders |
+| MET-EXO011 | Mail Flow Connector Hygiene | `Get-InboundConnector` — flags enabled connectors with `RequireTls` off or no `SenderIPAddresses`/`SenderDomains` restriction; outbound connectors out of scope |
+| MET-EXO012 | Mailbox Forwarding | `Get-EXOMailbox` `ForwardingSmtpAddress`/`ForwardingAddress`/`DeliverToMailboxAndForward` — surfaces mailboxes with forwarding configured, flagging "silent" forwarding (no local copy) as the higher-risk BEC persistence pattern; inbox-rule-based forwarding is out of scope (does not scale to `Get-InboxRule` per mailbox) |
+| MET-EXO013 | Spoof Intelligence Allow-List | `Get-TenantAllowBlockListSpoofItems -Action Allow` — reviews standing spoof-intelligence exceptions, distinguishing Internal vs. External spoof type |
+| MET-EXO014 | Advanced Delivery Policy | `Get-ExoPhishSimOverrideRule` — surfaces enabled phishing-simulation/SecOps override rules for periodic review (Info-only, no correct value) |
+| MET-EXO015 | External Sender Warning Tag | `Get-ExternalInOutlook` — the native Outlook "External" banner, a user-facing (not filter-level) signal against lookalike-domain/BEC senders |
+| MET-EXO016 | ARC Trusted Sealers | `Get-ArcConfig` → `ArcTrustedSealers` — Info-only listing of domains trusted to vouch for message authentication results via Authenticated Received Chain |
 
 ### Teams Checks
 
@@ -425,6 +445,9 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-Teams003 | Meeting Protection | External access settings; anonymous join policy; lobby bypass settings from a security perspective |
 | MET-Teams004 | ZAP for Teams | `TeamsProtectionPolicy.ZapEnabled`; malware and high-confidence phish quarantine tags set to `AdminOnlyAccessPolicy` |
 | MET-Teams005 | Teams User Reporting | `ReportTeamsMsgEnabled` in report submission policy; `AllowSecurityEndUserReporting` in Teams messaging policy |
+| MET-Teams006 | External Access / Federation Allow-List | `Get-CsTenantFederationConfiguration` — flags open federation (`AllowAllKnownDomains`) and `AllowTeamsConsumer`; distinct control plane from Teams003's meeting-level anonymous join |
+| MET-Teams007 | Guest Messaging/Calling Configuration | `Get-CsTeamsGuestMessagingConfiguration`/`Get-CsTeamsGuestCallingConfiguration` — flags guest-initiated 1:1 chat and private calling; distinct from federation (Teams006) and meeting join (Teams003) |
+| MET-Teams008 | App Permission Policy Exposure | `Get-CsTeamsAppPermissionPolicy` (read-only) — flags any `*CatalogAppsType` not restricted to an explicit `AllowedAppList`/`BlockedAppList`, detected by exclusion since Microsoft requires policy changes via the admin center, not PowerShell `Set-`/`New-` |
 
 ---
 
@@ -437,14 +460,15 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 
 ---
 
-## Current State (v0.5.0)
+## Current State (v0.6.0)
 
-All 26 checks are implemented across MDO (12), EXO (9), and Teams (5), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `PrivateData.PSData.ReleaseNotes` in `MET.psd1` for the latest release's changes.
+All 37 checks are implemented across MDO (13), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0.
 
 Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration
 - Azure Automation / GitHub Actions wrapper examples
 - Signed module release for PSGallery publication
+- Attack Simulation Training coverage and Secure Score correlation — see ROADMAP.md "Under Investigation" (each needs a new Graph scope/module dependency decision before becoming a committed check)
 
 ---
 
