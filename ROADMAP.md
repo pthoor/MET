@@ -97,11 +97,47 @@ Status legend: ✅ Done · 🔄 In Progress · 🗓 Planned · ❓ Under Investi
 
 ---
 
-## v0.5.0 — Planned 🗓
+## v0.5.0 — HTML report polish + security fix ✅
 
 | Item | Status | Notes |
 |---|---|---|
-| Signed module release | 🗓 | Code-signing certificate for PSGallery publication |
+| HTML — Accepted tab (accepted risks move to their own tab) | ✅ | Closed a spec gap from v0.2.0 |
+| HTML — Score donut + score-banded MDO/EXO/Teams meters | ✅ | |
+| HTML — Inline code formatting for DNS/config values and PowerShell one-liners | ✅ | Applies to findings and recommendations |
+| HTML — Sticky toolbar, print/export stylesheet, keyboard-accessible cards | ✅ | |
+| HTML — localStorage fallback so the report renders on file:// pages where browsers block it | ✅ | |
+| MET brand logo in HTML report header/favicon and README | ✅ | |
+| Fix stored XSS in HTML report script-tag escaping | ✅ | #13 — untrusted check data (Finding/Recommendation/AffectedObject) could break out of the inline `<script>` JSON payload |
+
+---
+
+## v0.6.0 — Planned 🗓
+
+Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for full research notes) found 11 concrete, checkable settings across the MDO/EOP mail-flow stack and Teams that the current 26 checks don't cover, plus 2 items needing further investigation before committing to a check ID. Grouped and prioritized below; see the phased implementation plan after this table.
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| EXO010 Direct Send / Anonymous Relay Exposure | 🗓 | Critical | `Get-OrganizationConfig` → `RejectDirectSend`. Unauthenticated senders (and attackers, per Microsoft's 2025 advisory) can relay mail through the tenant's own MX and land as internal-looking spoofed mail, bypassing MDO004's anti-spoof checks entirely since the message never authenticates as external |
+| EXO012 Mailbox Forwarding & Inbox Rule Exfiltration | 🗓 | Critical | `Get-EXOMailbox -Properties ForwardingSmtpAddress,DeliverToMailboxAndForward` (+ `Get-InboxRule` forwarding actions, scoping TBD — see implementation plan). Classic post-compromise BEC persistence; MDO007 only checks the tenant-wide auto-forward toggle, not per-mailbox forwarding |
+| EXO011 Mail Flow Connector Hygiene | 🗓 | High | `Get-InboundConnector` / `Get-OutboundConnector`. Inbound connectors with `RequireTls=$false` or no sender restriction accept anonymous/opportunistic-TLS mail that can be treated as internal; nothing today inspects connectors at all |
+| EXO013 Spoof Intelligence Allow-List Hygiene | 🗓 | High | `Get-TenantAllowBlockListSpoofItems -Action Allow`. MDO004 checks the `EnableSpoofIntelligence` toggle but not the accumulated allow-list content — a stale/broad allowed spoof pair is a standing phishing exception |
+| MDO013 Preset vs. Custom Policy Precedence Conflicts | 🗓 | High | Extends MDO008's cmdlets (`Get-AntiPhishPolicy`, `Get-HostedContentFilterPolicy`, rule priorities) to detect recipients shadowed by a weaker custom policy losing precedence to (or silently overridden by) a preset policy — a distinct failure mode from MDO008's coverage-gap check |
+| Teams006 External Access / Federation Allow-List | 🗓 | High | `Get-CsTenantFederationConfiguration` (`AllowFederatedUsers`, `AllowedDomains`, `AllowTeamsConsumer`). Open federation lets any external Teams/Skype user chat with staff — a common Teams phishing/vishing vector, and a separate control plane from Teams003's meeting-level external/anonymous join |
+| EXO014 Advanced Delivery Policy Scope | 🗓 | Medium | `Get-PhishSimOverridePolicy` / `Get-ExoPhishSimOverrideRule`. Legitimate for phishing-sim platforms and SecOps mailboxes, but a stale or overly broad entry (wildcard domain, huge IP range) is an unfiltered inbound channel that bypasses MDO entirely |
+| EXO015 External Sender Warning Tag | 🗓 | Medium | `Get-ExternalInOutlook`. The native Outlook "External" banner is disabled by default; cheap, high-value, user-facing signal that's orthogonal to the message-level anti-phish/anti-spoof checks already in place |
+| Teams007 Guest Messaging/Calling Configuration | 🗓 | Medium | `Get-CsTeamsGuestMessagingConfiguration` / `Get-CsTeamsGuestCallingConfiguration`. Persistent guest membership with unrestricted messaging/calling widens social-engineering surface; distinct from federation (external tenants) and meeting anonymous join |
+| Teams008 App Permission Policy Exposure | 🗓 | Medium | `Get-CsTeamsAppPermissionPolicy` (read-only; Microsoft restricts Set/New to admin center). Flags a default "allow all apps" assignment — third-party Teams apps with delegated Graph permissions are a growing OAuth-consent-phishing vector |
+| EXO016 ARC Trusted Sealers Review | 🗓 | Low (Info) | `Get-ArcConfig` → `ArcTrustedSealers`. Legitimate for mail-modifying gateways, but any listed domain is trusted to vouch for auth results, bypassing normal DMARC/DKIM checks for anything it seals. Informational — flags non-empty list for manual review, no "correct" value to assert |
+| Enhancement: EXO001 DMARC alignment mode | 🗓 | — | Not a new check — extend EXO001 to also flag relaxed `aspf`/`adkim` alignment as a lower-strictness finding alongside the existing policy=quarantine/reject check |
+
+---
+
+## Under Investigation ❓
+
+| Item | Status | Notes |
+|---|---|---|
+| Attack Simulation Training coverage | ❓ | Graph beta `securityReportsRoot/getAttackSimulationTrainingUserCoverage` (permission `AttackSimulation.Read.All`). Real gap — MDO's technical controls don't compensate for an untrained user base — but requires an additive Graph scope beyond MET's current `Identity.SignIns`/`Groups`, and the beta endpoint isn't GA. Needs a decision on whether to expand `Connect-METSession`'s Graph scope set before this becomes a committed check |
+| Secure Score correlation | ❓ | `Get-MgSecuritySecureScore` (Microsoft.Graph.Security — not currently a MET dependency). Informational cross-reference only, not a pass/fail check; lowest priority, would add a new module dependency for a "nice to have" dashboard signal |
 
 ---
 
