@@ -295,9 +295,12 @@
                 }
             }) | ConvertTo-Json -Depth 5 -Compress
 
-            # Escape </script> so embedded JSON cannot break the script block
-            $tenantIdJson  = $tenantIdJson  -replace '</script>', '<\/script>'
-            $checksJson    = $checksJson    -replace '</script>', '<\/script>'
+            # Escape every '<' so embedded JSON cannot break out of the <script> block.
+            # A blacklist for the literal '</script>' string is insufficient: HTML also
+            # treats '</script >' / '</SCRIPT\t>' etc. as a closing tag, so any variant
+            # with whitespace before '>' would bypass a literal-string replace.
+            $tenantIdJson  = $tenantIdJson  -replace '<', '\u003C'
+            $checksJson    = $checksJson    -replace '<', '\u003C'
 
             $html = @"
 <!DOCTYPE html>
