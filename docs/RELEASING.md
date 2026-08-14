@@ -1,6 +1,6 @@
 # Releasing MET
 
-MET releases are published by `.github/workflows/publish.yml`. The workflow runs only when a version tag is pushed and publishes the module to PowerShell Gallery before creating the matching GitHub release.
+MET releases are published by `.github/workflows/publish.yml`. The workflow runs when a version tag is pushed (or when manually dispatched for an existing tag) and publishes the module to PowerShell Gallery before creating the matching GitHub release.
 
 ## One-time repository setup
 
