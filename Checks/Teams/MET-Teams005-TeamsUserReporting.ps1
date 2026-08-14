@@ -16,11 +16,11 @@ catch {
 
 if ($submissionPolicy) {
     if (-not $submissionPolicy.ReportChatMessageEnabled) {
-        $issues.Add('"Monitor reported items in Microsoft Teams" is disabled in the Defender portal — Teams user reports are not monitored by the security team')
+        $issues.Add('"Monitor reported items in Microsoft Teams" is disabled in the Defender portal - Teams user reports are not monitored by the security team')
     }
 
     if ($submissionPolicy.ReportChatMessageEnabled -and -not $submissionPolicy.ReportChatMessageToCustomizedAddressEnabled) {
-        $issues.Add('Teams reported messages are not copied to the SecOps mailbox — security team has no direct inbox visibility into Teams user reports')
+        $issues.Add('Teams reported messages are not copied to the SecOps mailbox - security team has no direct inbox visibility into Teams user reports')
     }
 }
 
@@ -38,7 +38,7 @@ try {
     )
     if ($disabledPolicies.Count -gt 0) {
         $names = ($disabledPolicies | Select-Object -ExpandProperty Identity) -join ', '
-        $issues.Add("`"Report a security concern`" is disabled in the following Teams messaging policy/policies: $names — users assigned to these policies cannot flag suspicious messages")
+        $issues.Add("`"Report a security concern`" is disabled in the following Teams messaging policy/policies: $names - users assigned to these policies cannot flag suspicious messages")
     }
 }
 catch {

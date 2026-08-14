@@ -1,4 +1,4 @@
-﻿# MET-MDO008 — Preset Policy Coverage
+﻿# MET-MDO008 - Preset Policy Coverage
 
 **Category:** MDO | **Severity:** Medium
 
@@ -23,7 +23,7 @@ Custom policies require ongoing maintenance and can drift from best-practice bas
 
 ## Notes
 
-This check cannot assess whether custom policies for uncovered mailboxes provide equivalent protection — it only reports coverage gaps for human review.
+This check cannot assess whether custom policies for uncovered mailboxes provide equivalent protection - it only reports coverage gaps for human review.
 
 ## Reference
 

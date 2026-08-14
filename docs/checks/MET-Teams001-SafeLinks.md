@@ -1,4 +1,4 @@
-﻿# MET-Teams001 — Safe Links for Teams
+﻿# MET-Teams001 - Safe Links for Teams
 
 **Category:** Teams | **Severity:** High
 
@@ -8,7 +8,7 @@ Verifies that at least one Safe Links policy has `EnableSafeLinksForTeams` set t
 
 ## Why it matters
 
-Teams is increasingly used as a phishing vector — malicious URLs are posted in chats and channels, often by compromised accounts. Without Safe Links for Teams, URLs shared in Teams are not scanned at click-time and bypass the protections applied to email.
+Teams is increasingly used as a phishing vector - malicious URLs are posted in chats and channels, often by compromised accounts. Without Safe Links for Teams, URLs shared in Teams are not scanned at click-time and bypass the protections applied to email.
 
 ## Pass / Fail / Warning
 

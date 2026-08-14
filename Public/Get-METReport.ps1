@@ -185,7 +185,7 @@
         if ($Format -in 'Console','All') {
             Write-Host ''
             Write-Host '══════════════════════════════════════════════════════' -ForegroundColor Cyan
-            Write-Host '  MET — Security Posture Scanner for MDO, EXO and Teams' -ForegroundColor Cyan
+            Write-Host '  MET - Security Posture Scanner for MDO, EXO and Teams' -ForegroundColor Cyan
             if ($effectiveTenantName) { Write-Host "  Tenant: $effectiveTenantName" -ForegroundColor Gray }
             Write-Host "  Run:    $($runTimestampUtc.ToString('yyyy-MM-dd HH:mm')) UTC" -ForegroundColor Gray
             Write-Host '══════════════════════════════════════════════════════' -ForegroundColor Cyan
@@ -251,6 +251,7 @@
                         referenceUrl   = $_.ReferenceUrl
                         timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
                         error          = $_.Error
+                        metadata       = $_.Metadata
                     }
                 }
             }
@@ -292,6 +293,7 @@
                     referenceUrl   = $_.ReferenceUrl
                     timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
                     error          = $_.Error
+                    metadata       = $_.Metadata
                 }
             }) | ConvertTo-Json -Depth 5 -Compress
 
@@ -308,7 +310,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MET Report — $([System.Security.SecurityElement]::Escape($tenantId))</title>
+<title>MET Report - $([System.Security.SecurityElement]::Escape($tenantId))</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI2YyZjFlZSI+PC9jaXJjbGU+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc0LjA0IDc0LjA0IiBmaWxsPSJub25lIiBzdHJva2U9IiNkOGQ1Y2QiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc5LjI3IDMyLjY5IiBmaWxsPSJub25lIiBzdHJva2U9Im9rbGNoKDAuNSAwLjExIDIwNSkiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPGxpbmUgeDE9IjUwIiB5MT0iNTAiIHgyPSI3NC40IiB5Mj0iMzUuOCIgc3Ryb2tlPSIjMWMxYTE3IiBzdHJva2Utd2lkdGg9IjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9saW5lPgogIDxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjcuNSIgZmlsbD0iIzFjMWExNyI+PC9jaXJjbGU+Cjwvc3ZnPg==">
 <link rel="icon" type="image/svg+xml" media="(prefers-color-scheme: dark)" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iIzEyMTUxYSI+PC9jaXJjbGU+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc0LjA0IDc0LjA0IiBmaWxsPSJub25lIiBzdHJva2U9IiMyYjMyM2MiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc5LjI3IDMyLjY5IiBmaWxsPSJub25lIiBzdHJva2U9Im9rbGNoKDAuNjUgMC4xMyAyMDUpIiBzdHJva2Utd2lkdGg9IjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPgogIDxsaW5lIHgxPSI1MCIgeTE9IjUwIiB4Mj0iNzQuNCIgeTI9IjM1LjgiIHN0cm9rZT0iI2YyZjFlZSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiPjwvbGluZT4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI3LjUiIGZpbGw9IiNmMmYxZWUiPjwvY2lyY2xlPgo8L3N2Zz4=">
 <style>
@@ -458,6 +460,13 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .code-block{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;margin-top:6px;word-break:break-all;display:block;color:var(--text)}
 .finding-code{margin-left:12px}
 .inline-code{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;color:var(--text);word-break:break-word}
+.coverage-wrap{margin-top:8px;overflow-x:auto}
+.coverage-summary{font-size:12px;color:var(--text2);margin-bottom:8px}
+.coverage-table{width:100%;border-collapse:collapse;font-size:12px}
+.coverage-table th{text-align:left;padding:6px 8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);white-space:nowrap}
+.coverage-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:top}
+.coverage-table .coverage-policy{font-weight:600;white-space:nowrap}
+.coverage-table .coverage-zero{color:var(--text2)}
 
 /* ── Cards grid ──────────────────────────────────────────────────── */
 .cards{display:flex;flex-direction:column;gap:8px}
@@ -573,7 +582,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       <circle cx="50" cy="50" r="7.5" fill="currentColor"></circle>
     </svg>
     <div>
-      <div class="header-title">MET — Security Posture Scanner for MDO, EXO and Teams</div>
+      <div class="header-title">MET - Security Posture Scanner for MDO, EXO and Teams</div>
       <div class="header-meta" id="header-meta">
         $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
       </div>
@@ -675,7 +684,7 @@ function sevOf(s){ return s || 'Informational'; }
 
 const CONTROLS_META = {
   'MET-MDO001': 'Safe Links enabled for email and Office apps; verifies TrackClicks, EnableForInternalSenders, and real-time scanning are configured.',
-  'MET-MDO002': 'Safe Attachments enabled with Block or DynamicDelivery action — flags any policy set to Allow.',
+  'MET-MDO002': 'Safe Attachments enabled with Block or DynamicDelivery action - flags any policy set to Allow.',
   'MET-MDO003': 'Impersonation protection, mailbox intelligence, first-contact safety tips, and action on impersonation detection.',
   'MET-MDO004': 'AuthenticationFailAction setting, DMARC honor policy, and unauthenticated sender visual indicators.',
   'MET-MDO005': 'ZAP enabled, file filter enabled, admin notifications configured, and common attachment filter active.',
@@ -692,7 +701,7 @@ const CONTROLS_META = {
   'MET-EXO004': 'Default quarantine policies reviewed; user notification enabled; no AdminOnlyAccessPolicy on high-confidence phish quarantine.',
   'MET-EXO005': 'Stale allow entries older than 90 days; overly broad wildcard allows; ratio of allows to blocks.',
   'MET-EXO006': 'User submission mailbox configured and reporting to Microsoft enabled.',
-  'MET-EXO007': 'Transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links — informational audit.',
+  'MET-EXO007': 'Transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links - informational audit.',
   'MET-EXO008': 'QuarantineRetentionPeriod is at least 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30).',
   'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
   'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
@@ -844,7 +853,7 @@ function codeBlockHtml(val) {
   return val ? '<code class="code-block finding-code">' + esc(val) + '</code>' : '';
 }
 // Findings are often authored as one sentence joined with '; ' (e.g. "X is
-// disabled; users lose Y"), then split into separate bullets — capitalize
+// disabled; users lose Y"), then split into separate bullets - capitalize
 // each bullet so it reads as its own sentence instead of a sentence
 // fragment. Leaves already-capitalized or symbol/digit-led text alone.
 function capFirst(s) {
@@ -852,7 +861,7 @@ function capFirst(s) {
 }
 function fmtFinding(s) {
   if (!s) return '';
-  var normalized = s.replace(/·|–|—|―/g, '-');
+  var normalized = s.replace(/·|–|-|―/g, '-');
   var lines = normalized.split('\n').filter(function(l){ return l.trim(); });
 
   if (lines.length <= 1) {
@@ -879,6 +888,40 @@ function fmtFinding(s) {
       codeBlockHtml(code) +
       '</div>';
   }).join('');
+}
+function fmtEffectivePolicyCoverage(check) {
+  const metadata = check.metadata;
+  if (!metadata || metadata.DetailType !== 'EffectivePolicyCoverage') return '';
+  const policies = Array.isArray(metadata.Policies) ? metadata.Policies : [];
+  const rows = policies.map(function(policy) {
+    const count = Number(policy.EffectiveRecipientCount || 0);
+    const priority = policy.Priority === null || policy.Priority === undefined ? 'N/A' : policy.Priority;
+    const issues = Array.isArray(policy.Issues) && policy.Issues.length ? policy.Issues.join('; ') : 'None';
+    const observations = Array.isArray(policy.OrderingObservations) && policy.OrderingObservations.length ? policy.OrderingObservations.join('; ') : 'None';
+    return '<tr class="' + (count === 0 ? 'coverage-zero' : '') + '">' +
+      '<td class="coverage-policy">' + esc(policy.PolicyName) + '</td>' +
+      '<td>' + esc(policy.PolicyType) + '</td>' +
+      '<td>' + esc(policy.State) + '</td>' +
+      '<td>' + esc(priority) + '</td>' +
+      '<td>' + esc(policy.Scope) + '</td>' +
+      '<td>' + count + ' of ' + Number(metadata.TotalRecipients || 0) + '</td>' +
+      '<td>' + esc(policy.ConfigurationStatus) + '</td>' +
+      '<td>' + esc(policy.CurrentImpact) + '</td>' +
+      '<td>' + esc(observations) + '</td>' +
+      '<td>' + esc(issues) + '</td>' +
+    '</tr>';
+  }).join('');
+  const protectionType = metadata.ProtectionType || 'Threat protection';
+  const recommendations = Array.isArray(metadata.CoverageRecommendations) ? metadata.CoverageRecommendations : [];
+  const recommendationHtml = recommendations.length ? '<div class="coverage-summary"><strong>Coverage recommendations:</strong><ul>' + recommendations.map(function(item) { return '<li>' + esc(item) + '</li>'; }).join('') + '</ul></div>' : '';
+  return '<div class="coverage-wrap">' +
+    '<div class="coverage-summary">Effective ' + esc(protectionType) + ' policy coverage: ' +
+      Number(metadata.CompliantRecipients || 0) + ' of ' + Number(metadata.TotalRecipients || 0) +
+      ' recipients meet the configured baseline.</div>' +
+    recommendationHtml + '<table class="coverage-table"><thead><tr>' +
+      '<th>Policy</th><th>Type</th><th>State</th><th>Priority</th><th>Scope</th>' +
+      '<th>Effective recipients</th><th>Configuration</th><th>Current impact</th><th>Ordering observations</th><th>Issues</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 function safeHref(url) {
   if (!url) return '#';
@@ -961,6 +1004,7 @@ function createCard(check) {
   const errorHtml = check.error
     ? '<div class="card-error">Check failed: ' + esc(check.error) + '</div>'
     : '';
+  const coverageHtml = fmtEffectivePolicyCoverage(check);
 
   const fixHtml = (check.recommendation || errorHtml) ? (
     '<div class="card-fix">' +
@@ -983,6 +1027,7 @@ function createCard(check) {
     '<div class="card-body' + bodyOpen + '">' +
       '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value">' + esc(check.affectedObject) + '</span></div>' +
       '<div class="card-field"><span class="field-label">Finding</span><span class="field-value">' + fmtFinding(check.finding) + '</span></div>' +
+      (coverageHtml ? '<div class="card-field"><span class="field-label">Effective Policy Coverage</span><span class="field-value">' + coverageHtml + '</span></div>' : '') +
       fixHtml +
       '<div class="card-actions">' + actionsHtml + '</div>' +
     '</div>';

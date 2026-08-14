@@ -13,7 +13,8 @@ function Resolve-METCoverageMatrix {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]]  $AllMailboxes,
-        [Parameter(Mandatory)] [hashtable] $GroupCache
+        [Parameter(Mandatory)] [hashtable] $GroupCache,
+        [System.Collections.Generic.List[string]] $RetrievalErrors
     )
 
     $eopRank = @{ Default = 0; Custom = 1; Standard = 2; Strict = 3 }
@@ -31,12 +32,24 @@ function Resolve-METCoverageMatrix {
         $atpPolicy[$mbx] = 'Built-In Protection Policy'
     }
 
+    try { $eopPresetRules = @(Get-EOPProtectionPolicyRule -ErrorAction Stop) }
+    catch {
+        $eopPresetRules = @()
+        if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to retrieve EOP preset policy rules. $($_.ToString())") }
+    }
+
+    try { $atpPresetRules = @(Get-ATPProtectionPolicyRule -ErrorAction Stop) }
+    catch {
+        $atpPresetRules = @()
+        if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to retrieve MDO preset policy rules. $($_.ToString())") }
+    }
+
     # ── EOP presets (Strict first so it wins over Standard on overlap) ────────
     foreach ($tier in @('Strict', 'Standard')) {
-        $meta = Resolve-METPresetPolicy -Tier $tier -Stack EOP
+        $meta = Resolve-METPresetPolicy -Tier $tier -Stack EOP -Rules $eopPresetRules
         if (-not $meta.Enabled -or -not $meta.Rule) { continue }
         try {
-            $covered = @(Expand-METRuleRecipients -Rule $meta.Rule -AllMailboxes $AllMailboxes -GroupCache $GroupCache)
+            $covered = @(Expand-METRuleRecipients -Rule $meta.Rule -AllMailboxes $AllMailboxes -GroupCache $GroupCache -RetrievalErrors $RetrievalErrors)
             foreach ($addr in $covered) {
                 if ($eopTier.ContainsKey($addr) -and $eopRank[$tier] -gt $eopRank[$eopTier[$addr]]) {
                     $eopTier[$addr]   = $tier
@@ -44,15 +57,18 @@ function Resolve-METCoverageMatrix {
                 }
             }
         }
-        catch { Write-Verbose "EOP preset '$tier' recipient expansion failed: $_" }
+        catch {
+            Write-Verbose "EOP preset '$tier' recipient expansion failed: $_"
+            if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to expand EOP preset '$tier' recipients. $($_.ToString())") }
+        }
     }
 
-    # ── ATP presets (resolved independently — conditions may differ from EOP) ─
+    # ── ATP presets (resolved independently - conditions may differ from EOP) ─
     foreach ($tier in @('Strict', 'Standard')) {
-        $meta = Resolve-METPresetPolicy -Tier $tier -Stack ATP
+        $meta = Resolve-METPresetPolicy -Tier $tier -Stack ATP -Rules $atpPresetRules
         if (-not $meta.Enabled -or -not $meta.Rule) { continue }
         try {
-            $covered = @(Expand-METRuleRecipients -Rule $meta.Rule -AllMailboxes $AllMailboxes -GroupCache $GroupCache)
+            $covered = @(Expand-METRuleRecipients -Rule $meta.Rule -AllMailboxes $AllMailboxes -GroupCache $GroupCache -RetrievalErrors $RetrievalErrors)
             foreach ($addr in $covered) {
                 if ($atpTier.ContainsKey($addr) -and $atpRank[$tier] -gt $atpRank[$atpTier[$addr]]) {
                     $atpTier[$addr]   = $tier
@@ -60,10 +76,13 @@ function Resolve-METCoverageMatrix {
                 }
             }
         }
-        catch { Write-Verbose "ATP preset '$tier' recipient expansion failed: $_" }
+        catch {
+            Write-Verbose "ATP preset '$tier' recipient expansion failed: $_"
+            if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to expand MDO preset '$tier' recipients. $($_.ToString())") }
+        }
     }
 
-    # ── Custom EOP policies — only evaluate addresses still at Default ────────
+    # ── Custom EOP policies - only evaluate addresses still at Default ────────
     $eopNeedsCustom = @($AllMailboxes | Where-Object { $eopTier[$_] -eq 'Default' })
     if ($eopNeedsCustom.Count -gt 0) {
         try {
@@ -73,7 +92,7 @@ function Resolve-METCoverageMatrix {
                 Sort-Object Priority
             )
             foreach ($rule in $rules) {
-                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $eopNeedsCustom -GroupCache $GroupCache)
+                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $eopNeedsCustom -GroupCache $GroupCache -RetrievalErrors $RetrievalErrors)
                 foreach ($addr in $covered) {
                     if ($eopTier.ContainsKey($addr) -and $eopTier[$addr] -eq 'Default') {
                         $eopTier[$addr]   = 'Custom'
@@ -82,10 +101,13 @@ function Resolve-METCoverageMatrix {
                 }
             }
         }
-        catch { Write-Verbose "Custom EOP (anti-spam) rule expansion failed: $_" }
+        catch {
+            Write-Verbose "Custom EOP (anti-spam) rule expansion failed: $_"
+            if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to retrieve or expand custom EOP anti-spam rules. $($_.ToString())") }
+        }
     }
 
-    # ── Custom ATP policies — Safe Links as primary signal ───────────────────
+    # ── Custom ATP policies - Safe Links as primary signal ───────────────────
     $atpNeedsCustom = @($AllMailboxes | Where-Object { $atpTier[$_] -eq 'BuiltIn' })
     if ($atpNeedsCustom.Count -gt 0) {
         try {
@@ -95,16 +117,19 @@ function Resolve-METCoverageMatrix {
                 Sort-Object Priority
             )
             foreach ($rule in $rules) {
-                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $atpNeedsCustom -GroupCache $GroupCache)
+                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $atpNeedsCustom -GroupCache $GroupCache -RetrievalErrors $RetrievalErrors)
                 foreach ($addr in $covered) {
                     if ($atpTier.ContainsKey($addr) -and $atpTier[$addr] -eq 'BuiltIn') {
                         $atpTier[$addr]   = 'Custom'
-                        $atpPolicy[$addr] = $rule.Name
+                        $atpPolicy[$addr] = if ($rule.SafeLinksPolicy) { $rule.SafeLinksPolicy } else { $rule.Name }
                     }
                 }
             }
         }
-        catch { Write-Verbose "Custom Safe Links rule expansion failed: $_" }
+        catch {
+            Write-Verbose "Custom Safe Links rule expansion failed: $_"
+            if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to retrieve or expand custom Safe Links rules. $($_.ToString())") }
+        }
     }
 
     # ── Anti-Phish as fallback ATP signal for addresses still at BuiltIn ─────
@@ -117,7 +142,7 @@ function Resolve-METCoverageMatrix {
                 Sort-Object Priority
             )
             foreach ($rule in $rules) {
-                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $atpNeedsCustom -GroupCache $GroupCache)
+                $covered = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $atpNeedsCustom -GroupCache $GroupCache -RetrievalErrors $RetrievalErrors)
                 foreach ($addr in $covered) {
                     if ($atpTier.ContainsKey($addr) -and $atpTier[$addr] -eq 'BuiltIn') {
                         $atpTier[$addr]   = 'Custom'
@@ -126,7 +151,10 @@ function Resolve-METCoverageMatrix {
                 }
             }
         }
-        catch { Write-Verbose "Custom Anti-Phish rule expansion failed: $_" }
+        catch {
+            Write-Verbose "Custom Anti-Phish rule expansion failed: $_"
+            if ($null -ne $RetrievalErrors) { $RetrievalErrors.Add("Unable to retrieve or expand custom Anti-Phish rules. $($_.ToString())") }
+        }
     }
 
     # ── Combine into a single result hashtable ────────────────────────────────

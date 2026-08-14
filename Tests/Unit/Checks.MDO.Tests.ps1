@@ -3,10 +3,19 @@
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
     . "$root/Private/Get-METRuleScope.ps1"
+    . "$root/Private/Get-METAssessableMailboxes.ps1"
+    . "$root/Private/Expand-METGroupMembership.ps1"
+    . "$root/Private/Expand-METRuleRecipients.ps1"
+    . "$root/Private/Resolve-METSafeLinksEffectivePolicy.ps1"
+    . "$root/Private/Resolve-METEffectivePolicy.ps1"
+    . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
+    . "$root/Private/Get-METPolicyOrderingObservations.ps1"
 
     # Stub EXO cmdlets so Pester's Mock can override them
     function Get-SafeLinksPolicy               { [CmdletBinding()] param() }
     function Get-SafeLinksRule                 { [CmdletBinding()] param() }
+    function Get-ATPProtectionPolicyRule       { [CmdletBinding()] param() }
+    function Get-EXOMailbox                    { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
     function Get-SafeAttachmentPolicy          { [CmdletBinding()] param() }
     function Get-SafeAttachmentRule            { [CmdletBinding()] param() }
     function Get-AtpPolicyForO365              { [CmdletBinding()] param() }
@@ -21,6 +30,8 @@ Describe 'MET-MDO001 Safe Links' {
 
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO001-SafeLinks.ps1'
+        Mock Get-EXOMailbox { [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com' } }
+        Mock Get-ATPProtectionPolicyRule { @() }
     }
 
     Context 'When all Safe Links settings are correctly configured' {
@@ -65,7 +76,7 @@ Describe 'MET-MDO001 Safe Links' {
             }
         }
 
-        It 'Returns a Fail result' {
+        It 'Returns a Fail because the effective policy is below baseline' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
         }
@@ -81,9 +92,9 @@ Describe 'MET-MDO001 Safe Links' {
             Mock Get-SafeLinksPolicy { @() }
         }
 
-        It 'Returns a Fail result' {
+        It 'Returns a Warning because effective coverage cannot be resolved' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
+            $results[0].Result | Should -Be 'Warning'
         }
     }
 
@@ -92,9 +103,9 @@ Describe 'MET-MDO001 Safe Links' {
             Mock Get-SafeLinksPolicy { throw 'Unauthorized' }
         }
 
-        It 'Returns a Fail result with Error populated' {
+        It 'Returns a Warning result with Error populated' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
@@ -157,6 +168,9 @@ Describe 'MET-MDO009 ZAP' {
 
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO009-ZAP.ps1'
+        $script:METContext = $null
+        Mock Get-EXOMailbox { [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' } }
+        Mock Get-ATPProtectionPolicyRule { @() }
     }
 
     Context 'ZAP fully enabled' {
@@ -178,7 +192,7 @@ Describe 'MET-MDO009 ZAP' {
         }
     }
 
-    Context 'ZAP globally disabled' {
+    Context 'Legacy aggregate ZAP flag disabled' {
         BeforeAll {
             Mock Get-HostedContentFilterRule   { @() }
             Mock Get-HostedContentFilterPolicy {
@@ -191,9 +205,9 @@ Describe 'MET-MDO009 ZAP' {
                 }
             }
         }
-        It 'Returns Fail' {
+        It 'Returns Pass when the documented spam and phish ZAP settings are enabled' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
+            $results[0].Result | Should -Be 'Pass'
         }
     }
 

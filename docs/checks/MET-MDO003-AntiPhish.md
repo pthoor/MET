@@ -1,17 +1,27 @@
-﻿# MET-MDO003 — Anti-Phishing
+﻿# MET-MDO003 - Anti-Phishing
 
 **Category:** MDO | **Severity:** High
 
 ## What it checks
 
-Verifies anti-phishing policy configuration:
+Resolves the effective anti-phishing policy for every assessable mailbox using
+Strict preset, Standard preset, enabled custom-policy priority, and the default
+anti-phishing policy. It evaluates only policies that currently affect
+recipients. Shadowed and inactive policies remain visible. A custom catch-all
+that precedes and shadows a specialized custom policy produces a Warning; preset
+overlap and expected overlap with a specialized policy remain informational.
 
-- `EnableMailboxIntelligence` — learns from user email patterns to detect impersonation
-- `EnableMailboxIntelligenceProtection` — acts on mailbox intelligence signals
-- `EnableFirstContactSafetyTips` — warns users when they receive mail from new senders
-- `EnableSimilarUsersSafetyTips` / `EnableSimilarDomainsSafetyTips` — visual warnings for lookalike senders
-- `EnableTargetedUserProtection` with `TargetedUsersToProtect` — explicit impersonation protection for named users
-- `TargetedUserProtectionAction` — action taken on impersonation detection (must not be `NoAction`)
+For each effective policy it verifies:
+
+- `EnableMailboxIntelligence` - learns from user email patterns to detect impersonation
+- `EnableMailboxIntelligenceProtection` - acts on mailbox intelligence signals
+- `EnableFirstContactSafetyTips` - warns users when they receive mail from new senders
+- `EnableSimilarUsersSafetyTips` / `EnableSimilarDomainsSafetyTips` - visual warnings for lookalike senders
+- `EnableTargetedUserProtection` with `TargetedUsersToProtect` - explicit impersonation protection for named users
+- `TargetedUserProtectionAction` - action taken when enabled targeted-user impersonation detection matches
+- `EnableOrganizationDomainsProtection` and `TargetedDomainProtectionAction` - protection for owned-domain impersonation
+- `MailboxIntelligenceProtectionAction` - action taken for mailbox-intelligence impersonation
+- `PhishThresholdLevel` - phishing threshold meets the Standard baseline of 3
 
 ## Why it matters
 
@@ -21,12 +31,19 @@ Business email compromise (BEC) attacks rely on impersonation. These settings co
 
 | Result | Condition |
 |---|---|
-| Pass | All protections enabled, action is not `NoAction` |
-| Fail | One or more settings are not configured |
+| Pass | Every assessed mailbox receives an effective policy that meets the baseline |
+| Fail | One or more mailboxes receive an effective policy below baseline |
+| Warning | Mailbox, rule, policy, group, or precedence retrieval is incomplete |
+| NotApplicable | No assessable mailboxes were found |
+
+`TargetedUserProtectionAction = NoAction` is only reported when targeted-user
+protection is enabled and has protected users. If targeted-user protection is
+disabled or the protected-user list is empty, the report identifies that root
+configuration gap without also reporting the inactive action property.
 
 ## Recommendation
 
-Apply the **Standard** or **Strict** preset, or manually enable all impersonation and safety-tip settings. Set the action to `Quarantine` rather than `MoveToJmf` for higher-confidence phishing scenarios.
+Apply the **Standard** or **Strict** preset, or manually enable all impersonation and safety-tip settings. Set the action to `Quarantine` rather than `MoveToJmf` for higher-confidence phishing scenarios. If custom policies leave recipients on a weak default, place a compliant catch-all after specialized custom policies.
 
 ## Reference
 

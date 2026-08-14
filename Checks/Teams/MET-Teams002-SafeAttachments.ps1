@@ -3,7 +3,7 @@
     if (-not $atpGlobal.EnableATPForSPOTeamsODB) {
         New-METCheckResult -CheckId 'MET-Teams002' -Category Teams -Name 'Safe Attachments for Teams' `
             -Result Fail -Severity High -AffectedObject 'Global Safe Attachments Settings' `
-            -Finding 'The global Safe Attachments toggle for SharePoint, OneDrive, and Microsoft Teams is disabled (EnableATPForSPOTeamsODB = $false) — per-policy settings have no effect' `
+            -Finding 'The global Safe Attachments toggle for SharePoint, OneDrive, and Microsoft Teams is disabled (EnableATPForSPOTeamsODB = $false) - per-policy settings have no effect' `
             -Recommendation 'Run: Set-AtpPolicyForO365 -EnableATPForSPOTeamsODB $true. This is a prerequisite for Safe Attachments to protect Teams file sharing regardless of per-policy configuration.' `
             -ReferenceUrl 'https://aka.ms/mdo-safeattachments-teams'
         return
@@ -39,7 +39,7 @@ $teamsEnabled = $policies | Where-Object { $_.EnableSafeAttachmentsForTeams -eq 
 if (-not $teamsEnabled) {
     New-METCheckResult -CheckId 'MET-Teams002' -Category Teams -Name 'Safe Attachments for Teams' `
         -Result Fail -Severity High -AffectedObject 'Safe Attachment Policies' `
-        -Finding 'No Safe Attachment policy has EnableSafeAttachmentsForTeams enabled — Teams file sharing is not scanned' `
+        -Finding 'No Safe Attachment policy has EnableSafeAttachmentsForTeams enabled - Teams file sharing is not scanned' `
         -Recommendation 'Enable EnableSafeAttachmentsForTeams in at least one Safe Attachments policy covering Teams users. This protects against malicious files shared via Teams channels and chats.' `
         -ReferenceUrl 'https://aka.ms/mdo-safeattachments-teams'
     return

@@ -1,6 +1,7 @@
 assessments/
 output/
 staging/
+.claude/
 
 # Pester and coverage output
 TestResults*.xml

@@ -4,10 +4,22 @@
         [Parameter(Mandatory)] [ValidateSet('Standard','Strict')] [string] $Tier,
         # EOP covers anti-spam and anti-malware rules; ATP covers Safe Links, Safe Attachments, and Anti-Phish.
         # The two preset rules can have different recipient conditions even for the same tier.
-        [ValidateSet('EOP','ATP')] [string] $Stack = 'EOP'
+        [ValidateSet('EOP','ATP')] [string] $Stack = 'EOP',
+        [AllowEmptyCollection()] [object[]] $Rules
     )
 
     $policyName = if ($Tier -eq 'Standard') { 'Standard Preset Security Policy' } else { 'Strict Preset Security Policy' }
+
+    if ($PSBoundParameters.ContainsKey('Rules')) {
+        $rule = $Rules | Where-Object { $_.Name -eq $policyName } | Select-Object -First 1
+        return [PSCustomObject]@{
+            Tier       = $Tier
+            Stack      = $Stack
+            PolicyName = $policyName
+            Enabled    = ($null -ne $rule -and $rule.State -eq 'Enabled')
+            Rule       = $rule
+        }
+    }
 
     try {
         $rule = if ($Stack -eq 'ATP') {

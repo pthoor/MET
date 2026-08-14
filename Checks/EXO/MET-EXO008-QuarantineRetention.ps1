@@ -21,7 +21,7 @@ foreach ($policy in $spamPolicies) {
     if (-not $isDefault -and (-not $rule -or $rule.State -ne 'Enabled')) { continue }
 
     $scope = if ($isDefault) {
-        'catch-all (default — applies to all uncovered recipients)'
+        'catch-all (default - applies to all uncovered recipients)'
     } else {
         Get-METRuleScope -Rule $rule
     }
@@ -31,7 +31,7 @@ foreach ($policy in $spamPolicies) {
     if ($null -ne $retention -and $retention -lt 30) {
         New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
             -Result Fail -Severity Low -AffectedObject $label `
-            -Finding "Quarantine retention period is $retention days — Microsoft recommends 30 days for Standard and Strict profiles" `
+            -Finding "Quarantine retention period is $retention days - Microsoft recommends 30 days for Standard and Strict profiles" `
             -Recommendation "Run: Set-HostedContentFilterPolicy -Identity '$($policy.Name)' -QuarantineRetentionPeriod 30. A 30-day retention window gives end users and admins adequate time to review and release false positives before messages are purged." `
             -ReferenceUrl 'https://aka.ms/mdo-quarantine-retention'
     }

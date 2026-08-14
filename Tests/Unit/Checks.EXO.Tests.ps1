@@ -42,10 +42,11 @@ Describe 'MET-EXO001 DMARC' {
             Mock Resolve-METDnsName { throw 'DNS name not found' }
         }
 
-        It 'Returns Fail with admin center recommendation' {
+        It 'Returns Warning with the lookup error instead of a false Fail' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-            $results[0].Recommendation | Should -Match 'admin center'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'DNS lookup failed'
+            $results[0].Error | Should -Match 'DNS name not found'
         }
     }
 }
@@ -158,6 +159,22 @@ Describe 'MET-EXO003 SPF' {
             $result = $results | Select-Object -First 1
             $result.Result | Should -Be 'Warning'
             $result.Finding | Should -Match 'exceeds 10 DNS lookups'
+        }
+    }
+
+    Context 'DNS lookup fails' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName { throw 'resolver unavailable' }
+        }
+
+        It 'Returns Warning with the lookup error instead of a false Fail' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'DNS lookup failed'
+            $results[0].Error | Should -Match 'resolver unavailable'
         }
     }
 }

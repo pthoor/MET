@@ -13,7 +13,7 @@ catch {
 $issues = [System.Collections.Generic.List[string]]::new()
 
 if (-not $atpGlobal.EnableSafeDocs) {
-    $issues.Add('Safe Documents is disabled — Office files opened in Protected View are not scanned before allowing edit mode')
+    $issues.Add('Safe Documents is disabled - Office files opened in Protected View are not scanned before allowing edit mode')
 }
 
 if ($atpGlobal.AllowSafeDocsOpen) {

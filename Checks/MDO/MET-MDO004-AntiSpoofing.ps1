@@ -21,7 +21,7 @@ foreach ($policy in $antiPhishPolicies) {
     if (-not $isDefault -and (-not $rule -or $rule.State -ne 'Enabled')) { continue }
 
     $scope = if ($isDefault) {
-        'catch-all (default — applies to all uncovered recipients)'
+        'catch-all (default - applies to all uncovered recipients)'
     } else {
         Get-METRuleScope -Rule $rule
     }
@@ -34,10 +34,10 @@ foreach ($policy in $antiPhishPolicies) {
     }
 
     if ($policy.AuthenticationFailAction -eq 'MoveToJmf') {
-        $issues.Add("Authentication failure action is 'MoveToJmf' — consider 'Quarantine' for stronger enforcement")
+        $issues.Add("Authentication failure action is 'MoveToJmf' - consider 'Quarantine' for stronger enforcement")
     }
     elseif ($policy.AuthenticationFailAction -notin 'MoveToJmf','Quarantine') {
-        $issues.Add("Authentication failure action is '$($policy.AuthenticationFailAction)' — should be 'Quarantine' or at minimum 'MoveToJmf'")
+        $issues.Add("Authentication failure action is '$($policy.AuthenticationFailAction)' - should be 'Quarantine' or at minimum 'MoveToJmf'")
     }
 
     if (-not $policy.EnableUnauthenticatedSender) {

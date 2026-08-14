@@ -1,14 +1,15 @@
-﻿# MET-MDO009 — Zero-Hour Auto Purge (ZAP)
+﻿# MET-MDO009 - Zero-Hour Auto Purge (ZAP)
 
 **Category:** MDO | **Severity:** High
 
 ## What it checks
 
-Verifies that ZAP is enabled in all inbound anti-spam policies:
+Resolves the effective inbound anti-spam policy for every assessable mailbox, then verifies:
 
-- `ZapEnabled` — global ZAP toggle
-- `SpamZapEnabled` — ZAP for spam
-- `PhishZapEnabled` — ZAP for phishing
+- `SpamZapEnabled` - ZAP for spam
+- `PhishZapEnabled` - ZAP for phishing
+
+Ordering observations use the same inbound anti-spam policy resolution as MET-MDO006, including warnings for a catch-all that precedes and shadows specialized custom policies.
 
 ## Why it matters
 
@@ -18,12 +19,14 @@ ZAP retroactively removes messages from delivered inboxes when a verdict changes
 
 | Result | Condition |
 |---|---|
-| Pass | All three ZAP settings enabled |
-| Fail | Any ZAP setting disabled |
+| Pass | Spam and phishing ZAP are enabled for every mailbox's effective policy |
+| Fail | Spam or phishing ZAP is disabled for one or more effectively covered mailboxes |
+| Warning | Effective coverage is incomplete because data could not be retrieved |
+| NotApplicable | No assessable mailboxes were found |
 
 ## Recommendation
 
-Ensure ZAP is enabled globally and for both spam and phishing in every active anti-spam policy.
+Enable ZAP for spam and phishing in the effective inbound anti-spam policy for every affected recipient. Unused and shadowed policies do not change the tenant result.
 
 ## Reference
 

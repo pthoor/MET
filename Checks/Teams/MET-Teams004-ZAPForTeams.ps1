@@ -23,7 +23,7 @@ function Test-QuarantineTagPermission {
     param([string]$TagName, [string]$Label)
 
     if (-not $TagName) {
-        return "No quarantine policy is assigned for $Label — the tenant default may allow users to self-release"
+        return "No quarantine policy is assigned for $Label - the tenant default may allow users to self-release"
     }
 
     if ($TagName -eq 'AdminOnlyAccessPolicy') {
@@ -34,11 +34,11 @@ function Test-QuarantineTagPermission {
         $policy = Get-QuarantinePolicy -Identity $TagName -ErrorAction Stop
     }
     catch {
-        return "Unable to retrieve quarantine policy '$TagName' for $Label — cannot verify user release permissions"
+        return "Unable to retrieve quarantine policy '$TagName' for $Label - cannot verify user release permissions"
     }
 
     if ($policy.EndUserQuarantinePermissions.PermissionToRelease) {
-        return "$Label quarantine policy '$TagName' allows users to self-release quarantined messages — set PermissionToRelease to false or use AdminOnlyAccessPolicy"
+        return "$Label quarantine policy '$TagName' allows users to self-release quarantined messages - set PermissionToRelease to false or use AdminOnlyAccessPolicy"
     }
 
     return $null
@@ -47,7 +47,7 @@ function Test-QuarantineTagPermission {
 $issues = [System.Collections.Generic.List[string]]::new()
 
 if (-not $teamsPolicy.ZapEnabled) {
-    $issues.Add('Zero-hour auto purge (ZAP) for Teams is disabled — malicious messages already delivered to Teams chats are not retroactively removed')
+    $issues.Add('Zero-hour auto purge (ZAP) for Teams is disabled - malicious messages already delivered to Teams chats are not retroactively removed')
 }
 
 $malwareIssue = Test-QuarantineTagPermission -TagName $teamsPolicy.MalwareQuarantineTag -Label 'Malware'

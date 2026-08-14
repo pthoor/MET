@@ -68,7 +68,7 @@
         AllMailboxes    = $null  # populated lazily by MDO008; reused by any future coverage check
     }
 
-    Write-Progress -Activity 'MET Triage' -Status 'Initializing — fetching accepted domains...' `
+    Write-Progress -Activity 'MET Triage' -Status 'Initializing - fetching accepted domains...' `
         -PercentComplete 0 -Id 1
 
     try {
@@ -87,7 +87,7 @@
     foreach ($file in $checkFiles) {
         $currentIndex++
         $checkIdDisplay = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
-        Write-Progress -Activity 'MET Triage' -Status "$checkIdDisplay — $($file.BaseName)" `
+        Write-Progress -Activity 'MET Triage' -Status "$checkIdDisplay - $($file.BaseName)" `
             -PercentComplete ([int]($currentIndex / $totalChecks * 100)) `
             -CurrentOperation "Check $currentIndex of $totalChecks" -Id 1
         Write-Verbose "Running check: $($file.BaseName)"
@@ -159,7 +159,7 @@
         $errorItems = @($items | Where-Object { $_.Error })
 
         if ($failItems.Count -eq 0 -and $warnItems.Count -eq 0 -and $errorItems.Count -eq 0) {
-            # All pass / info / N/A — emit a single tidy pass result
+            # All pass / info / N/A - emit a single tidy pass result
             $first   = $items[0]
             $passItems = @($items | Where-Object Result -eq 'Pass')
             $passCount = $passItems.Count
@@ -187,6 +187,7 @@
         $noun        = Get-METAggregationNoun -CheckId $first.CheckId
 
         $findingLines = $badItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
+        $errorMessage = @($errorItems | ForEach-Object Error | Where-Object { $_ }) -join "`n"
 
         $aggregated.Add((New-METCheckResult `
             -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
@@ -194,7 +195,8 @@
             -AffectedObject "$($badItems.Count) of $($items.Count) $noun" `
             -Finding ($findingLines -join "`n") `
             -Recommendation $first.Recommendation `
-            -ReferenceUrl $first.ReferenceUrl))
+            -ReferenceUrl $first.ReferenceUrl `
+            -ErrorMessage $errorMessage))
     }
 
     return $aggregated.ToArray()

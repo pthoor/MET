@@ -10,9 +10,9 @@ Thank you for contributing to MET. This guide explains how to add a new check, r
 
 Check IDs follow the pattern `MET-<CATEGORY><NNN>`:
 
-- `MET-MDO001` — first MDO check
-- `MET-EXO007` — seventh EXO check
-- `MET-Teams003` — third Teams check
+- `MET-MDO001` - first MDO check
+- `MET-EXO007` - seventh EXO check
+- `MET-Teams003` - third Teams check
 
 Look at the existing check inventory in `README.md` and pick the next available ID in the appropriate category.
 
@@ -23,7 +23,7 @@ Create `Checks/<Category>/MET-<ID>-<ShortName>.ps1`.
 Each check script is a standalone `.ps1` file (not a function). It is dot-sourced and executed by `Invoke-METTriage`. The script:
 
 - Has access to all `Private/` helpers (`New-METCheckResult`, `Get-METCheckWeight`)
-- Must **not** throw — wrap all EXO/Graph/Teams calls in `try/catch`
+- Must **not** throw - wrap all EXO/Graph/Teams calls in `try/catch`
 - Surfaces errors via the `Error` field of the result object, not as terminating exceptions
 - Must output one or more `PSCustomObject` results via `New-METCheckResult`
 
@@ -58,7 +58,7 @@ New-METCheckResult -CheckId 'MET-XXX999' -Category MDO -Name 'My Check' `
 | `Category` | `MDO`, `EXO`, or `Teams` |
 | `Result` | `Pass`, `Fail`, `Warning`, `Info`, `NotApplicable` |
 | `Severity` | `Critical`, `High`, `Medium`, `Low`, `Informational` |
-| `Finding` | Plain English, present tense, factual — no "you should" |
+| `Finding` | Plain English, present tense, factual - no "you should" |
 | `Recommendation` | Actionable steps, imperative mood |
 | `ReferenceUrl` | `https://aka.ms/...` where possible |
 
@@ -66,11 +66,11 @@ New-METCheckResult -CheckId 'MET-XXX999' -Category MDO -Name 'My Check' `
 
 Add tests to the appropriate file in `Tests/Unit/`:
 
-- `Checks.MDO.Tests.ps1` — MDO checks
-- `Checks.EXO.Tests.ps1` — EXO checks
-- `Checks.Teams.Tests.ps1` — Teams checks
+- `Checks.MDO.Tests.ps1` - MDO checks
+- `Checks.EXO.Tests.ps1` - EXO checks
+- `Checks.Teams.Tests.ps1` - Teams checks
 
-Tests must use `Mock` to simulate EXO/Graph/Teams cmdlets — never connect to a real tenant in unit tests. Define stubs in `BeforeAll` if the cmdlet is not already stubbed.
+Tests must use `Mock` to simulate EXO/Graph/Teams cmdlets - never connect to a real tenant in unit tests. Define stubs in `BeforeAll` if the cmdlet is not already stubbed.
 
 Minimum test cases per check:
 
@@ -83,7 +83,7 @@ Minimum test cases per check:
 Create `docs/checks/MET-<ID>-<ShortName>.md` using the structure:
 
 ```markdown
-# MET-XXXNNN — Name
+# MET-XXXNNN - Name
 
 **Category:** MDO/EXO/Teams | **Severity:** High
 
@@ -118,13 +118,13 @@ Invoke-Pester -Configuration $config
 
 ## Code conventions
 
-- **Approved verbs only** — `Invoke-`, `Get-`, `Test-`, `New-`, `Resolve-`
+- **Approved verbs only** - `Invoke-`, `Get-`, `Test-`, `New-`, `Resolve-`
 - **No inline comments** unless explaining a non-obvious workaround
-- **No `Write-Host`** — use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues
+- **No `Write-Host`** - use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues
 - **No positional parameters** on public functions
-- **Error handling** — `try/catch` on all remote calls; surface in `Error` field, never throw
-- **No plain-text secrets** — all auth through `Connect-METSession`
-- **No external HTTP calls inside check scripts** — DNS lookups via `Resolve-DnsName` are allowed for email auth checks
+- **Error handling** - `try/catch` on all remote calls; surface in `Error` field, never throw
+- **No plain-text secrets** - all auth through `Connect-METSession`
+- **No external HTTP calls inside check scripts** - DNS lookups via `Resolve-DnsName` are allowed for email auth checks
 
 ---
 

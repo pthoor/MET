@@ -3,8 +3,9 @@
 
     # Stub all external EXO cmdlets at session scope so check scripts can run
     # without a live tenant. Returning $null causes checks to emit Fail/Warning
-    # results via their own error handling — that is intentional here.
+    # results via their own error handling - that is intentional here.
     function Get-SafeLinksPolicy                  { [CmdletBinding()] param([string]$Identity) }
+    function Get-SafeLinksRule                    { [CmdletBinding()] param([string]$Identity) }
     function Get-SafeAttachmentPolicy             { [CmdletBinding()] param([string]$Identity) }
     function Get-AntiPhishPolicy                  { [CmdletBinding()] param([string]$Identity) }
     function Get-AntiPhishRule                    { [CmdletBinding()] param([string]$Identity) }
@@ -13,6 +14,7 @@
     function Get-HostedContentFilterRule          { [CmdletBinding()] param([string]$Identity) }
     function Get-HostedOutboundSpamFilterPolicy   { [CmdletBinding()] param([string]$Identity) }
     function Get-EOPProtectionPolicyRule          { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule          { [CmdletBinding()] param([string]$Identity) }
     function Get-EXOMailbox                       { [CmdletBinding()] param([string]$Identity) }
     function Get-DistributionGroupMember          { [CmdletBinding()] param([string]$Identity) }
     function Get-User                             { [CmdletBinding()] param([string]$Filter) }
@@ -71,9 +73,9 @@ Describe 'Invoke-METTriage' {
             $filtered.Count | Should -Be ($all.Count - 1)
         }
 
-        It 'Covers all 26 checks across MDO, EXO, and Teams' {
+        It 'Covers all 37 checks across MDO, EXO, and Teams' {
             $list = Invoke-METTriage -ListChecks
-            $list.Count | Should -Be 26
+            $list.Count | Should -Be 37
         }
     }
 
@@ -147,7 +149,7 @@ Describe 'Invoke-METTriage' {
                 $props = $_.PSObject.Properties.Name
                 foreach ($field in @('CheckId','Category','Name','Result','Severity',
                                      'Score','AffectedObject','Finding','Recommendation',
-                                     'ReferenceUrl','Timestamp','Error')) {
+                                     'ReferenceUrl','Timestamp','Error','Metadata')) {
                     $props | Should -Contain $field
                 }
             }

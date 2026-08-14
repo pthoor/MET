@@ -1,4 +1,4 @@
-﻿# MET-MDO010 — Priority Accounts
+﻿# MET-MDO010 - Priority Accounts
 
 **Category:** MDO | **Severity:** Medium
 
@@ -9,7 +9,7 @@
 
 ## Why it matters
 
-Microsoft 365 Priority Accounts receive enhanced threat protection and differentiated security signals in the Defender portal. High-value targets — executives, board members, finance leads, IT admins — are disproportionately targeted in BEC and spear-phishing attacks. Tagging them as priority accounts ensures they appear in dedicated threat reports and can be targeted by stricter policies.
+Microsoft 365 Priority Accounts receive enhanced threat protection and differentiated security signals in the Defender portal. High-value targets - executives, board members, finance leads, IT admins - are disproportionately targeted in BEC and spear-phishing attacks. Tagging them as priority accounts ensures they appear in dedicated threat reports and can be targeted by stricter policies.
 
 ## Pass / Fail / Warning
 

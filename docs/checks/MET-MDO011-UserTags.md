@@ -1,4 +1,4 @@
-﻿# MET-MDO011 — User Tags
+﻿# MET-MDO011 - User Tags
 
 **Category:** MDO | **Severity:** Low
 

@@ -24,7 +24,7 @@ $teamsEnabled = $policies | Where-Object { $_.EnableSafeLinksForTeams -eq $true 
 if (-not $teamsEnabled) {
     New-METCheckResult -CheckId 'MET-Teams001' -Category Teams -Name 'Safe Links for Teams' `
         -Result Fail -Severity High -AffectedObject 'Safe Links Policies' `
-        -Finding 'No Safe Links policy has EnableSafeLinksForTeams enabled — Teams URLs are not scanned' `
+        -Finding 'No Safe Links policy has EnableSafeLinksForTeams enabled - Teams URLs are not scanned' `
         -Recommendation 'Enable EnableSafeLinksForTeams in at least one Safe Links policy and ensure it covers all Teams users. Consider applying the Standard or Strict preset which includes Teams protection.' `
         -ReferenceUrl 'https://aka.ms/mdo-safelinks-teams'
     return

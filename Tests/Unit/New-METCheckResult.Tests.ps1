@@ -27,6 +27,7 @@ Describe 'New-METCheckResult' {
             $result.PSObject.Properties.Name | Should -Contain 'ReferenceUrl'
             $result.PSObject.Properties.Name | Should -Contain 'Timestamp'
             $result.PSObject.Properties.Name | Should -Contain 'Error'
+            $result.PSObject.Properties.Name | Should -Contain 'Metadata'
         }
 
         It 'Sets Score to 100 for a Pass result' {
@@ -76,6 +77,17 @@ Describe 'New-METCheckResult' {
                 -Result Pass -Severity Low -AffectedObject 'Obj' -Finding 'ok'
 
             $result.Error | Should -BeNullOrEmpty
+        }
+
+        It 'Stores structured metadata when provided' {
+            $result = New-METCheckResult `
+                -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
+                -Result Info -Severity Informational -AffectedObject 'Obj' -Finding 'detail' `
+                -Metadata @{ PolicyType = 'Custom'; EffectiveRecipients = 6 }
+
+            $result.Metadata.PolicyType | Should -Be 'Custom'
+            $result.Metadata.EffectiveRecipients | Should -Be 6
+            $result.Score | Should -BeNullOrEmpty
         }
 
         It 'Timestamp is a UTC datetime' {

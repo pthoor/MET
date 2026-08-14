@@ -67,12 +67,25 @@ function Measure-SpfLookups {
 
 foreach ($domain in $domains) {
     $spfRecord = $null
+    $lookupError = $null
 
     try {
         $dns = Resolve-METDnsName -Name $domain.DomainName -Type TXT
         $spfRecord = $dns | Where-Object { $_.Strings -match '^v=spf1' } | Select-Object -First 1
     }
-    catch { Write-Verbose "DNS lookup failed for '$($domain.DomainName)': $_" }
+    catch {
+        $lookupError = $_
+        Write-Verbose "DNS lookup failed for '$($domain.DomainName)': $_"
+    }
+
+    if ($lookupError) {
+        New-METCheckResult -CheckId 'MET-EXO003' -Category EXO -Name 'SPF' `
+            -Result Warning -Severity High -AffectedObject $domain.DomainName `
+            -Finding 'Unable to determine SPF status because the DNS lookup failed' `
+            -Recommendation 'Restore DNS connectivity or install dig/nslookup, then rerun the assessment.' `
+            -ReferenceUrl 'https://aka.ms/spf' -ErrorMessage $lookupError.ToString()
+        continue
+    }
 
     if (-not $spfRecord) {
         New-METCheckResult -CheckId 'MET-EXO003' -Category EXO -Name 'SPF' `
@@ -87,18 +100,18 @@ foreach ($domain in $domains) {
     $issues = [System.Collections.Generic.List[string]]::new()
 
     if ($record -match '\+all') {
-        $issues.Add("SPF record uses '+all' (allow all) — any server can send as this domain")
+        $issues.Add("SPF record uses '+all' (allow all) - any server can send as this domain")
     }
     elseif ($record -notmatch '-all' -and $record -notmatch '~all') {
-        $issues.Add("SPF record does not end with '-all' or '~all' — enforcement is missing")
+        $issues.Add("SPF record does not end with '-all' or '~all' - enforcement is missing")
     }
     elseif ($record -match '~all') {
-        $issues.Add("SPF record uses '~all' (soft fail) — consider '-all' for strict enforcement")
+        $issues.Add("SPF record uses '~all' (soft fail) - consider '-all' for strict enforcement")
     }
 
     $lookupCount = Measure-SpfLookups -DomainName $domain.DomainName
     if ($lookupCount -gt 10) {
-        $issues.Add("SPF record exceeds 10 DNS lookups ($lookupCount) — may cause SPF permerror")
+        $issues.Add("SPF record exceeds 10 DNS lookups ($lookupCount) - may cause SPF permerror")
     }
 
     if ($issues.Count -gt 0) {

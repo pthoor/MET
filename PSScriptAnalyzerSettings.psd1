@@ -2,11 +2,11 @@
     Severity     = @('Error', 'Warning')
 
     ExcludeRules = @(
-        # PS7+ uses UTF-8 without BOM by default — BOM is not required
+        # PS7+ uses UTF-8 without BOM by default - BOM is not required
         'PSUseBOMForUnicodeEncodedFile'
 
         # Write-Host is intentional in Get-METReport and Test-METPrerequisites
-        # for coloured, formatted console output — these are display functions, not scripts
+        # for coloured, formatted console output - these are display functions, not scripts
         'PSAvoidUsingWriteHost'
 
         # False positives: parameters used inside switch($PSCmdlet.ParameterSetName) blocks

@@ -50,7 +50,7 @@ jobs:
             $results | Sort-Object Severity, ScriptName, Line |
               Format-Table -AutoSize -Property Severity, RuleName, ScriptName, Line, Message
             $errorFindings = $results | Where-Object Severity -eq 'Error'
-            Write-Host "PSScriptAnalyzer: $($results.Count) finding(s) — $($errorFindings.Count) error(s)"
+            Write-Host "PSScriptAnalyzer: $($results.Count) finding(s) - $($errorFindings.Count) error(s)"
             if ($errorFindings) { exit 1 }
           } else {
             Write-Host 'PSScriptAnalyzer: no issues found.'
@@ -125,7 +125,7 @@ jobs:
             exit 1
           }
 
-      - name: Run integration tests (mocked — no live tenant required)
+      - name: Run integration tests (mocked - no live tenant required)
         shell: pwsh
         run: |
           $config = New-PesterConfiguration

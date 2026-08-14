@@ -1,6 +1,6 @@
 function Find-METRuleContradictions {
     # Detects mailboxes that appear in both include and exception conditions of the
-    # same policy rule.  In Exchange Online, exception conditions always win — such
+    # same policy rule.  In Exchange Online, exception conditions always win - such
     # users receive no protection from the rule even though they appear to be
     # explicitly included.
     #
@@ -12,7 +12,8 @@ function Find-METRuleContradictions {
         [Parameter(Mandatory)] [object[]]  $Rules,
         [Parameter(Mandatory)] [string[]]  $AllMailboxes,
         [Parameter(Mandatory)] [hashtable] $GroupCache,
-        [Parameter(Mandatory)] [string]    $PolicyType
+        [Parameter(Mandatory)] [string]    $PolicyType,
+        [System.Collections.Generic.List[string]] $RetrievalErrors
     )
 
     $results = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -42,7 +43,7 @@ function Find-METRuleContradictions {
 
         foreach ($grp in @($rule.SentToMemberOf)) {
             if (-not $grp) { continue }
-            foreach ($m in @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache)) {
+            foreach ($m in @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache -RetrievalErrors $RetrievalErrors)) {
                 if (-not $includeMap.ContainsKey($m)) {
                     $includeMap[$m] = "member of included group '$grp'"
                 }
@@ -76,7 +77,7 @@ function Find-METRuleContradictions {
 
         foreach ($grp in @($rule.ExceptIfSentToMemberOf)) {
             if (-not $grp) { continue }
-            foreach ($m in @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache)) {
+            foreach ($m in @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache -RetrievalErrors $RetrievalErrors)) {
                 if (-not $excludeMap.ContainsKey($m)) {
                     $excludeMap[$m] = "member of excluded group '$grp'"
                 }

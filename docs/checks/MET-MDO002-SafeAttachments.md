@@ -1,4 +1,4 @@
-﻿# MET-MDO002 — Safe Attachments
+﻿# MET-MDO002 - Safe Attachments
 
 **Category:** MDO | **Severity:** High
 
@@ -6,12 +6,12 @@
 
 Verifies that Safe Attachments policies are enabled and that the action is not `Allow`:
 
-- `Enable` — policy is active
-- `Action` — must be `Block` or `DynamicDelivery` (not `Allow`)
+- `Enable` - policy is active
+- `Action` - must be `Block` or `DynamicDelivery` (not `Allow`)
 
 ## Why it matters
 
-Safe Attachments detonates email attachments in a sandbox before they reach the user's inbox. An `Allow` action means the policy is in place but provides no protection — attachments are delivered without scanning. `DynamicDelivery` is preferred in most environments because it delivers the message body immediately while attachments are scanned, reducing user delay.
+Safe Attachments detonates email attachments in a sandbox before they reach the user's inbox. An `Allow` action means the policy is in place but provides no protection - attachments are delivered without scanning. `DynamicDelivery` is preferred in most environments because it delivers the message body immediately while attachments are scanned, reducing user delay.
 
 ## Pass / Fail / Warning
 

@@ -6,35 +6,72 @@
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [object]    $Rule,
-        [Parameter(Mandatory)] [string[]]  $AllMailboxes,
-        [Parameter(Mandatory)] [hashtable] $GroupCache
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllMailboxes,
+        [Parameter(Mandatory)] [hashtable] $GroupCache,
+        [ValidateSet('Recipient','Sender')] [string] $ScopeType = 'Recipient',
+        [System.Collections.Generic.List[string]] $RetrievalErrors
     )
 
-    $covered = [System.Collections.Generic.HashSet[string]]::new(
-        [System.StringComparer]::OrdinalIgnoreCase)
+    function New-AddressSet {
+        return ,([System.Collections.Generic.HashSet[string]]::new(
+            [System.StringComparer]::OrdinalIgnoreCase))
+    }
+
+    function Test-RecipientDomain {
+        param([string] $Address, [object[]] $Domains)
+
+        if ($Address -notmatch '@(?<Domain>[^@]+)$') { return $false }
+        $recipientDomain = $Matches.Domain.TrimEnd('.')
+        foreach ($configuredDomain in @($Domains)) {
+            $candidate = ([string]$configuredDomain).Trim().TrimStart('@').TrimEnd('.')
+            if (-not $candidate) { continue }
+            if ($recipientDomain.Equals($candidate, [System.StringComparison]::OrdinalIgnoreCase) -or
+                $recipientDomain.EndsWith(".$candidate", [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+        return $false
+    }
+
+    $covered = New-AddressSet
+    $directProperty = if ($ScopeType -eq 'Sender') { 'From' } else { 'SentTo' }
+    $groupProperty = if ($ScopeType -eq 'Sender') { 'FromMemberOf' } else { 'SentToMemberOf' }
+    $domainProperty = if ($ScopeType -eq 'Sender') { 'SenderDomainIs' } else { 'RecipientDomainIs' }
+    $exceptDirectProperty = if ($ScopeType -eq 'Sender') { 'ExceptIfFrom' } else { 'ExceptIfSentTo' }
+    $exceptGroupProperty = if ($ScopeType -eq 'Sender') { 'ExceptIfFromMemberOf' } else { 'ExceptIfSentToMemberOf' }
+    $exceptDomainProperty = if ($ScopeType -eq 'Sender') { 'ExceptIfSenderDomainIs' } else { 'ExceptIfRecipientDomainIs' }
 
     # ── Include conditions ────────────────────────────────────────────────────
     $hasInclude = $false
 
-    if ($Rule.SentTo) {
+    if ($Rule.$directProperty) {
         $hasInclude = $true
-        foreach ($addr in @($Rule.SentTo)) { $null = $covered.Add($addr) }
+        $conditionMatches = New-AddressSet
+        foreach ($addr in @($Rule.$directProperty)) { $null = $conditionMatches.Add([string]$addr) }
+        $conditionMatches.IntersectWith([string[]]$AllMailboxes)
+        $covered = $conditionMatches
     }
 
-    if ($Rule.SentToMemberOf) {
-        $hasInclude = $true
-        foreach ($grp in @($Rule.SentToMemberOf)) {
-            $members = @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache)
-            foreach ($m in $members) { $null = $covered.Add($m) }
+    if ($Rule.$groupProperty) {
+        $conditionMatches = New-AddressSet
+        foreach ($grp in @($Rule.$groupProperty)) {
+            $members = @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache -RetrievalErrors $RetrievalErrors)
+            foreach ($m in $members) { $null = $conditionMatches.Add([string]$m) }
         }
+        $conditionMatches.IntersectWith([string[]]$AllMailboxes)
+        if ($hasInclude) { $covered.IntersectWith($conditionMatches) } else { $covered = $conditionMatches }
+        $hasInclude = $true
     }
 
-    if ($Rule.RecipientDomainIs) {
-        $hasInclude = $true
+    if ($Rule.$domainProperty) {
+        $conditionMatches = New-AddressSet
         foreach ($mbx in $AllMailboxes) {
-            $domain = ($mbx -split '@', 2)[1]
-            if ($Rule.RecipientDomainIs -contains $domain) { $null = $covered.Add($mbx) }
+            if (Test-RecipientDomain -Address $mbx -Domains @($Rule.$domainProperty)) {
+                $null = $conditionMatches.Add($mbx)
+            }
         }
+        if ($hasInclude) { $covered.IntersectWith($conditionMatches) } else { $covered = $conditionMatches }
+        $hasInclude = $true
     }
 
     # No include conditions = catch-all rule; covers every mailbox before exceptions are applied
@@ -44,27 +81,26 @@
 
     if ($covered.Count -eq 0) { return @() }
 
-    # Intersect with actual mailboxes — rules may reference addresses outside the tenant
+    # Intersect with actual mailboxes - rules may reference addresses outside the tenant
     $mailboxSet = [System.Collections.Generic.HashSet[string]]::new(
         [string[]]$AllMailboxes, [System.StringComparer]::OrdinalIgnoreCase)
     $null = $covered.IntersectWith($mailboxSet)
 
     # ── Exception conditions ──────────────────────────────────────────────────
-    if ($Rule.ExceptIfSentTo) {
-        foreach ($addr in @($Rule.ExceptIfSentTo)) { $null = $covered.Remove($addr) }
+    if ($Rule.$exceptDirectProperty) {
+        foreach ($addr in @($Rule.$exceptDirectProperty)) { $null = $covered.Remove($addr) }
     }
 
-    if ($Rule.ExceptIfSentToMemberOf) {
-        foreach ($grp in @($Rule.ExceptIfSentToMemberOf)) {
-            $members = @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache)
+    if ($Rule.$exceptGroupProperty) {
+        foreach ($grp in @($Rule.$exceptGroupProperty)) {
+            $members = @(Expand-METGroupMembership -Identity $grp -Cache $GroupCache -RetrievalErrors $RetrievalErrors)
             foreach ($m in $members) { $null = $covered.Remove($m) }
         }
     }
 
-    if ($Rule.ExceptIfRecipientDomainIs) {
+    if ($Rule.$exceptDomainProperty) {
         $toRemove = @($covered | Where-Object {
-            $domain = ($_ -split '@', 2)[1]
-            $Rule.ExceptIfRecipientDomainIs -contains $domain
+            Test-RecipientDomain -Address $_ -Domains @($Rule.$exceptDomainProperty)
         })
         foreach ($addr in $toRemove) { $null = $covered.Remove($addr) }
     }

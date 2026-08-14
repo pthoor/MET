@@ -5,7 +5,7 @@
 | Version | Supported |
 |---------|-----------|
 | Latest  | Yes       |
-| < Latest | No — please upgrade |
+| < Latest | No - please upgrade |
 
 ## Reporting a Vulnerability
 

@@ -52,10 +52,10 @@ foreach ($domain in $domains) {
     }
     catch {
         New-METCheckResult -CheckId 'MET-EXO001' -Category EXO -Name 'DMARC' `
-            -Result Fail -Severity High -AffectedObject $domainName `
-            -Finding 'No DMARC record found (DNS lookup failed or record absent)' `
-            -Recommendation (Get-METDmarcRecommendation -DomainName $domainName -IsOnMicrosoftDomain $isOnMicrosoftDomain) `
-            -ReferenceUrl 'https://aka.ms/dmarc'
+            -Result Warning -Severity High -AffectedObject $domainName `
+            -Finding 'Unable to determine DMARC status because the DNS lookup failed' `
+            -Recommendation 'Restore DNS connectivity or install dig/nslookup, then rerun the assessment.' `
+            -ReferenceUrl 'https://aka.ms/dmarc' -ErrorMessage $_.ToString()
         continue
     }
 
@@ -72,14 +72,14 @@ foreach ($domain in $domains) {
     $issues = [System.Collections.Generic.List[string]]::new()
 
     if ($record -match 'p=none') {
-        $issues.Add("DMARC policy is 'none' — no enforcement; emails failing DMARC are not quarantined or rejected")
+        $issues.Add("DMARC policy is 'none' - no enforcement; emails failing DMARC are not quarantined or rejected")
     }
     elseif ($record -notmatch 'p=(quarantine|reject)') {
         $issues.Add('DMARC policy is not set to quarantine or reject')
     }
 
     if ($record -notmatch 'rua=') {
-        $issues.Add('No aggregate reporting address (rua=) configured — DMARC reports will not be received')
+        $issues.Add('No aggregate reporting address (rua=) configured - DMARC reports will not be received')
     }
 
     if ($issues.Count -gt 0) {

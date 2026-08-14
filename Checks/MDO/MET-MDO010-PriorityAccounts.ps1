@@ -1,4 +1,4 @@
-# Check — tenant-wide priority account protection toggle (MDO Plan 2 only)
+# Check - tenant-wide priority account protection toggle (MDO Plan 2 only)
 try {
     $tenantSettings = Get-EmailTenantSettings -ErrorAction Stop
 }
@@ -28,7 +28,7 @@ if ($null -ne $tenantSettings) {
     }
 }
 
-# Check — whether any users are actually tagged as Priority Accounts
+# Check - whether any users are actually tagged as Priority Accounts
 try {
     $priorityUsers = Get-User -IsVIP -ResultSize Unlimited -ErrorAction Stop
 }
