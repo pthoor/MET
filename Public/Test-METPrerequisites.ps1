@@ -63,17 +63,18 @@
 
     # ── Platform note ────────────────────────────────────────────────────────
     if ($IsWindows -eq $false) {
+        $digCommand = Get-Command dig -CommandType Application -ErrorAction SilentlyContinue
+        $nslookupCommand = Get-Command nslookup -CommandType Application -ErrorAction SilentlyContinue
+
         $checks.Add([PSCustomObject]@{
             Component = 'Platform (DNS)'
-            Required  = 'dig or nslookup'
-            Installed = if (Get-Command dig -CommandType Application -ErrorAction SilentlyContinue) { 'dig found' }
-                        elseif (Get-Command nslookup -CommandType Application -ErrorAction SilentlyContinue) { 'nslookup found' }
-                        else { '-' }
+            Required  = 'dig, nslookup, or DNS-over-HTTPS fallback'
+            Installed = if ($digCommand) { 'dig found' }
+                        elseif ($nslookupCommand) { 'nslookup found' }
+                        else { 'DNS-over-HTTPS fallback' }
             Optional  = $false
-            Status    = if (Get-Command dig -CommandType Application -ErrorAction SilentlyContinue) { 'OK' }
-                        elseif (Get-Command nslookup -CommandType Application -ErrorAction SilentlyContinue) { 'OK' }
-                        else { 'Fail - install dig or nslookup for DMARC/SPF checks' }
-            Notes     = 'DMARC (EXO001) and SPF (EXO003) require dig or nslookup on non-Windows'
+            Status    = 'OK'
+            Notes     = 'DMARC (EXO001) and SPF (EXO003) use dig or nslookup when available, and otherwise fall back to DNS-over-HTTPS on non-Windows.'
         })
     }
 

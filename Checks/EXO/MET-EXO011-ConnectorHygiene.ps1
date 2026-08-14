@@ -30,11 +30,14 @@ foreach ($connector in $enabledConnectors) {
 
     $senderIpCount = @($connector.SenderIPAddresses).Count
     $hasIpBinding = $senderIpCount -gt 0 -and $connector.RestrictDomainsToIPAddresses -eq $true
-    $hasCertificateBinding = $connector.RequireTls -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName)
+    $hasCertificateBinding = $connector.RequireTls -eq $true -and $connector.RestrictDomainsToCertificate -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName)
 
     if (-not $hasIpBinding -and -not $hasCertificateBinding) {
         if ($senderIpCount -gt 0 -and $connector.RestrictDomainsToIPAddresses -ne $true) {
             $issues.Add("'$($connector.Name)' lists sender IP addresses but does not enable RestrictDomainsToIPAddresses - the IP list is not bound to connector authentication")
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName) -and $connector.RestrictDomainsToCertificate -ne $true) {
+            $issues.Add("'$($connector.Name)' sets TlsSenderCertificateName but does not enable RestrictDomainsToCertificate - the certificate name is not bound to connector authentication")
         }
         elseif ($connector.RestrictDomainsToCertificate -eq $true -and [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName)) {
             $issues.Add("'$($connector.Name)' enables certificate restriction but has no TLS sender certificate name configured")

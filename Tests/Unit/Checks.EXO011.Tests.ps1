@@ -7,7 +7,7 @@ BeforeAll {
 
 Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
     BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO011-ConnectorHygiene.ps1'
+        $script:checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO011-ConnectorHygiene.ps1'
     }
 
     Context 'no enabled connectors' {
@@ -154,6 +154,29 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
         It 'Returns Pass without sender IP addresses' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'connector with certificate name but no certificate restriction' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name                         = 'LooseCertificateConnector'
+                    Enabled                      = $true
+                    ConnectorType                = 'Partner'
+                    RequireTls                   = $true
+                    SenderIPAddresses            = @()
+                    SenderDomains                = @('partner.example')
+                    RestrictDomainsToIPAddresses = $false
+                    RestrictDomainsToCertificate = $false
+                    TlsSenderCertificateName     = '*.partner.example'
+                }
+            }
+        }
+        It 'Returns Warning because the certificate name is not bound to authentication' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'RestrictDomainsToCertificate'
         }
     }
 
