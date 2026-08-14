@@ -4,19 +4,26 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (for example, v0.6.0)
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
 
 jobs:
   validate:
+    name: Validate release tag
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
       - name: Harden runner egress
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
@@ -30,6 +37,22 @@ jobs:
             cdn.powershellgallery.com:443
             psg-prod-eastus.azureedge.net:443
 
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Verify tagged commit is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          if [[ -z "$tag_commit" ]] || ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "Release tag $RELEASE_TAG does not point to a commit on main."
+            exit 1
+          fi
+
       - name: Validate module manifest
         shell: pwsh
         run: Test-ModuleManifest -Path ./MET.psd1
@@ -37,14 +60,14 @@ jobs:
       - name: Verify tag matches module version
         shell: pwsh
         run: |
-          $manifestVersion = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
-          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          $manifestVersion = [string](Import-PowerShellDataFile ./MET.psd1).ModuleVersion
+          $expectedTag = "v$manifestVersion"
 
-          if ($manifestVersion -ne $tagVersion) {
-            throw "Tag version '$tagVersion' does not match ModuleVersion '$manifestVersion' in MET.psd1."
+          if ($env:RELEASE_TAG -cne $expectedTag) {
+            throw "Tag '$env:RELEASE_TAG' does not exactly match expected tag '$expectedTag'."
           }
 
-          Write-Host "Version match confirmed: $manifestVersion"
+          Write-Host "Version match confirmed: $expectedTag"
 
       - name: Lint
         shell: pwsh
@@ -85,6 +108,7 @@ jobs:
           }
 
   publish:
+    name: Publish signed-off release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: validate
@@ -95,9 +119,6 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
       - name: Harden runner egress
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
@@ -117,6 +138,11 @@ jobs:
             rekor.sigstore.dev:443
             token.actions.githubusercontent.com:443
 
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
       - name: Stage and package module
         shell: pwsh
         run: |
@@ -125,6 +151,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE') -Destination $stage
           Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $stage -Recurse
+          Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop
           Compress-Archive -Path "$stage/*" -DestinationPath "met-$version.zip"
           Write-Host "Packaged met-$version.zip"
 
@@ -142,15 +169,17 @@ jobs:
             throw 'PSGALLERY_API_KEY secret is not set.'
           }
 
+          Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.0.0 -ErrorAction Stop
+          $apiKey = ConvertTo-SecureString $env:PSGALLERY_API_KEY -AsPlainText -Force
           $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
-          Publish-Module -Path $stagingPath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
+          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $apiKey -Verbose
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            echo "GitHub release for tag ${{ github.ref_name }} already exists; skipping creation."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release for tag $RELEASE_TAG already exists; skipping creation."
           else
             shopt -s nullglob
             artifacts=(met-*.zip)
@@ -160,8 +189,8 @@ jobs:
               exit 1
             fi
 
-            gh release create "${{ github.ref_name }}" \
-              --title "MET ${{ github.ref_name }}" \
+            gh release create "$RELEASE_TAG" \
+              --title "MET $RELEASE_TAG" \
               --generate-notes \
               "$artifact"
           fi
