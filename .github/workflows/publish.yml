@@ -10,13 +10,11 @@ permissions:
 
 jobs:
   validate:
+    name: Validate release tag
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
       - name: Harden runner egress
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
@@ -30,6 +28,19 @@ jobs:
             cdn.powershellgallery.com:443
             psg-prod-eastus.azureedge.net:443
 
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Verify tagged commit is on main
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release tag $GITHUB_REF_NAME does not point to a commit on main."
+            exit 1
+          fi
+
       - name: Validate module manifest
         shell: pwsh
         run: Test-ModuleManifest -Path ./MET.psd1
@@ -37,14 +48,14 @@ jobs:
       - name: Verify tag matches module version
         shell: pwsh
         run: |
-          $manifestVersion = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
-          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+          $manifestVersion = [string](Import-PowerShellDataFile ./MET.psd1).ModuleVersion
+          $expectedTag = "v$manifestVersion"
 
-          if ($manifestVersion -ne $tagVersion) {
-            throw "Tag version '$tagVersion' does not match ModuleVersion '$manifestVersion' in MET.psd1."
+          if ($env:GITHUB_REF_NAME -cne $expectedTag) {
+            throw "Tag '$env:GITHUB_REF_NAME' does not exactly match expected tag '$expectedTag'."
           }
 
-          Write-Host "Version match confirmed: $manifestVersion"
+          Write-Host "Version match confirmed: $expectedTag"
 
       - name: Lint
         shell: pwsh
@@ -85,6 +96,7 @@ jobs:
           }
 
   publish:
+    name: Publish signed-off release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: validate
@@ -95,9 +107,6 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
       - name: Harden runner egress
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
@@ -117,6 +126,9 @@ jobs:
             rekor.sigstore.dev:443
             token.actions.githubusercontent.com:443
 
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
       - name: Stage and package module
         shell: pwsh
         run: |
@@ -125,6 +137,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE') -Destination $stage
           Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $stage -Recurse
+          Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop
           Compress-Archive -Path "$stage/*" -DestinationPath "met-$version.zip"
           Write-Host "Packaged met-$version.zip"
 
