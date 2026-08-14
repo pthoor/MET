@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (for example, v0.6.0)
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
@@ -31,13 +40,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ env.RELEASE_TAG }}
           fetch-depth: 0
 
       - name: Verify tagged commit is on main
         shell: bash
         run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "Release tag $GITHUB_REF_NAME does not point to a commit on main."
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          if [[ -z "$tag_commit" ]] || ! git merge-base --is-ancestor "$tag_commit" origin/main; then
+            echo "Release tag $RELEASE_TAG does not point to a commit on main."
             exit 1
           fi
 
@@ -51,8 +63,8 @@ jobs:
           $manifestVersion = [string](Import-PowerShellDataFile ./MET.psd1).ModuleVersion
           $expectedTag = "v$manifestVersion"
 
-          if ($env:GITHUB_REF_NAME -cne $expectedTag) {
-            throw "Tag '$env:GITHUB_REF_NAME' does not exactly match expected tag '$expectedTag'."
+          if ($env:RELEASE_TAG -cne $expectedTag) {
+            throw "Tag '$env:RELEASE_TAG' does not exactly match expected tag '$expectedTag'."
           }
 
           Write-Host "Version match confirmed: $expectedTag"
@@ -128,6 +140,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Stage and package module
         shell: pwsh
@@ -155,15 +169,17 @@ jobs:
             throw 'PSGALLERY_API_KEY secret is not set.'
           }
 
+          Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.0.0 -ErrorAction Stop
+          $apiKey = ConvertTo-SecureString $env:PSGALLERY_API_KEY -AsPlainText -Force
           $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
-          Publish-Module -Path $stagingPath -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
+          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $apiKey -Verbose
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            echo "GitHub release for tag ${{ github.ref_name }} already exists; skipping creation."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release for tag $RELEASE_TAG already exists; skipping creation."
           else
             shopt -s nullglob
             artifacts=(met-*.zip)
@@ -173,8 +189,8 @@ jobs:
               exit 1
             fi
 
-            gh release create "${{ github.ref_name }}" \
-              --title "MET ${{ github.ref_name }}" \
+            gh release create "$RELEASE_TAG" \
+              --title "MET $RELEASE_TAG" \
               --generate-notes \
               "$artifact"
           fi
