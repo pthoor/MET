@@ -28,5 +28,5 @@ The workflow requests the API key only in the protected publish job. GitHub's bu
 
 If a tag-triggered run fails before PowerShell Gallery accepts the package, merge the workflow fix to `main` and use **Run workflow** with the existing tag. The manual run checks out and validates that tag; do not move the tag. Once PowerShell Gallery has accepted a version, it cannot be overwritten or published again.
 
-The publish job imports `Microsoft.PowerShell.PSResourceGet`, converts the secret API key to a `SecureString`, and calls `Publish-PSResource` with the staged module directory and the registered `PSGallery` repository. This follows the current PowerShell Gallery publishing guidance while ensuring the plaintext secret is never written to the repository or workflow log.
+The publish job imports `Microsoft.PowerShell.PSResourceGet` and calls `Publish-PSResource` with the staged module directory, the registered `PSGallery` repository, and the masked `PSGALLERY_API_KEY` environment secret. `Publish-PSResource -ApiKey` expects a plain string; converting the key to a `SecureString` causes PowerShell Gallery to reject it as invalid.
 Release tags must point to a commit on `main`, and the tag must exactly match the module manifest version. PowerShell Gallery versions are immutable, so never reuse or move a released tag.
