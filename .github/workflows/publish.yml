@@ -170,9 +170,8 @@ jobs:
           }
 
           Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.0.0 -ErrorAction Stop
-          $apiKey = ConvertTo-SecureString $env:PSGALLERY_API_KEY -AsPlainText -Force
           $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
-          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $apiKey -Verbose
+          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
 
       - name: Create GitHub Release
         env:
