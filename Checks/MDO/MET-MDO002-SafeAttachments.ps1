@@ -42,7 +42,7 @@ $activePolicies = @($safeAttachPolicies | Where-Object {
     $r -and $r.State -eq 'Enabled'
 })
 
-# The Built-In Protection Policy has no SafeAttachmentRule entry — it applies as a
+# The Built-In Protection Policy has no SafeAttachmentRule entry - it applies as a
 # Microsoft-managed baseline to all users not covered by any other policy.
 $builtInPolicy = $safeAttachPolicies | Where-Object { $_.Name -eq 'Built-In Protection Policy' } |
     Select-Object -First 1
@@ -50,7 +50,7 @@ $builtInPolicy = $safeAttachPolicies | Where-Object { $_.Name -eq 'Built-In Prot
 if (-not $activePolicies -and -not $builtInPolicy) {
     New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
         -Result Fail -Severity High -AffectedObject 'Safe Attachment Policies' `
-        -Finding "$($safeAttachPolicies.Count) Safe Attachments $(if ($safeAttachPolicies.Count -eq 1) { 'policy exists' } else { 'policies exist' }) but none have an enabled rule — no users are protected" `
+        -Finding "$($safeAttachPolicies.Count) Safe Attachments $(if ($safeAttachPolicies.Count -eq 1) { 'policy exists' } else { 'policies exist' }) but none have an enabled rule - no users are protected" `
         -Recommendation 'Enable a Safe Attachments rule scoped to the desired recipients, or apply the Standard/Strict preset.' `
         -ReferenceUrl 'https://aka.ms/mdo-safeattachments'
     return
@@ -68,7 +68,7 @@ function Invoke-SafeAttachAssessment {
         $issues.Add('Safe Attachments is disabled')
     }
     elseif ($Policy.Action -eq 'Allow') {
-        $issues.Add("Action is 'Allow' — attachments are not inspected")
+        $issues.Add("Action is 'Allow' - attachments are not inspected")
     }
 
     if ($issues.Count -gt 0) {
@@ -93,6 +93,6 @@ foreach ($policy in $activePolicies) {
 }
 
 if ($builtInPolicy) {
-    $label = 'Built-In Protection Policy [Microsoft baseline — covers all users not protected by other policies]'
+    $label = 'Built-In Protection Policy [Microsoft baseline - covers all users not protected by other policies]'
     Invoke-SafeAttachAssessment -Policy $builtInPolicy -Label $label
 }

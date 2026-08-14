@@ -1,4 +1,4 @@
-﻿# MET-EXO003 — SPF
+﻿# MET-EXO003 - SPF
 
 **Category:** EXO | **Severity:** High
 
@@ -13,7 +13,7 @@ For each authoritative accepted domain:
 
 ## Why it matters
 
-SPF (Sender Policy Framework) declares which mail servers are authorised to send mail on behalf of a domain. `+all` is effectively equivalent to no SPF record — it authorises any server in the world. `~all` (soft fail) is better than nothing but many receivers treat it the same as pass. DNS lookup count exceeding 10 causes an SPF `permerror`, which many receivers treat as a fail.
+SPF (Sender Policy Framework) declares which mail servers are authorised to send mail on behalf of a domain. `+all` is effectively equivalent to no SPF record - it authorises any server in the world. `~all` (soft fail) is better than nothing but many receivers treat it the same as pass. DNS lookup count exceeding 10 causes an SPF `permerror`, which many receivers treat as a fail.
 
 ## Pass / Fail / Warning
 

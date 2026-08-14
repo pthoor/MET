@@ -1,4 +1,4 @@
-﻿# MET-EXO005 — Tenant Allow/Block List
+﻿# MET-EXO005 - Tenant Allow/Block List
 
 **Category:** EXO | **Severity:** Low
 
@@ -6,13 +6,13 @@
 
 Reviews entries in the Tenant Allow/Block List (TABL) across Sender, URL, and FileHash list types:
 
-- **Stale allows** — entries not modified in > 90 days or with a past expiration date
-- **Wildcard allows** — entries matching `*.domain` or `*` (overly broad)
-- **Allow/block ratio** — allows significantly outnumbering blocks
+- **Stale allows** - entries not modified in > 90 days or with a past expiration date
+- **Wildcard allows** - entries matching `*.domain` or `*` (overly broad)
+- **Allow/block ratio** - allows significantly outnumbering blocks
 
 ## Why it matters
 
-Allow entries bypass EOP filtering. They are often created during incident response to recover false-positive deliveries and are supposed to be temporary. Stale allows that were never cleaned up represent a permanent bypass of security controls. Wildcard allows are particularly dangerous — they can allow entire domains or TLDs to bypass filtering.
+Allow entries bypass EOP filtering. They are often created during incident response to recover false-positive deliveries and are supposed to be temporary. Stale allows that were never cleaned up represent a permanent bypass of security controls. Wildcard allows are particularly dangerous - they can allow entire domains or TLDs to bypass filtering.
 
 ## Pass / Fail / Warning
 

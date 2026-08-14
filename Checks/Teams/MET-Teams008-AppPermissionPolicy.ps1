@@ -6,7 +6,7 @@ try {
         foreach ($propName in @('GlobalCatalogAppsType', 'DefaultCatalogAppsType', 'PrivateCatalogAppsType')) {
             $value = $policy.$propName
             if ($value -notin @('AllowedAppList', 'BlockedAppList')) {
-                $issues.Add("Policy '$($policy.Identity)': $propName is '$value' — apps from this catalog are not restricted to a reviewed allow-list or block-list")
+                $issues.Add("Policy '$($policy.Identity)': $propName is '$value' - apps from this catalog are not restricted to a reviewed allow-list or block-list")
             }
         }
     }

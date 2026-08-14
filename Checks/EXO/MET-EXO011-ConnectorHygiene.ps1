@@ -25,11 +25,26 @@ $issues = [System.Collections.Generic.List[string]]::new()
 
 foreach ($connector in $enabledConnectors) {
     if ($connector.RequireTls -ne $true) {
-        $issues.Add("'$($connector.Name)' does not require TLS — accepts unencrypted or opportunistic-TLS inbound mail")
+        $issues.Add("'$($connector.Name)' does not require TLS - accepts unencrypted or opportunistic-TLS inbound mail")
     }
 
-    if (@($connector.SenderIPAddresses).Count -eq 0 -and @($connector.SenderDomains).Count -eq 0) {
-        $issues.Add("'$($connector.Name)' has no sender IP or domain restriction — accepts mail from any source")
+    $senderIpCount = @($connector.SenderIPAddresses).Count
+    $hasIpBinding = $senderIpCount -gt 0 -and $connector.RestrictDomainsToIPAddresses -eq $true
+    $hasCertificateBinding = $connector.RequireTls -eq $true -and -not [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName)
+
+    if (-not $hasIpBinding -and -not $hasCertificateBinding) {
+        if ($senderIpCount -gt 0 -and $connector.RestrictDomainsToIPAddresses -ne $true) {
+            $issues.Add("'$($connector.Name)' lists sender IP addresses but does not enable RestrictDomainsToIPAddresses - the IP list is not bound to connector authentication")
+        }
+        elseif ($connector.RestrictDomainsToCertificate -eq $true -and [string]::IsNullOrWhiteSpace([string]$connector.TlsSenderCertificateName)) {
+            $issues.Add("'$($connector.Name)' enables certificate restriction but has no TLS sender certificate name configured")
+        }
+        elseif (@($connector.SenderDomains).Count -gt 0) {
+            $issues.Add("'$($connector.Name)' is scoped only by sender domain - SenderDomains does not authenticate the sending infrastructure")
+        }
+        else {
+            $issues.Add("'$($connector.Name)' has no authenticated sender IP or TLS certificate restriction - accepts mail without validating the source infrastructure")
+        }
     }
 }
 
@@ -37,12 +52,12 @@ if ($issues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-EXO011' -Category EXO -Name 'Mail Flow Connector Hygiene' `
         -Result Warning -Severity High -AffectedObject "Inbound Connectors ($enabledCount enabled)" `
         -Finding ($issues -join '; ') `
-        -Recommendation 'Review flagged connectors. Inbound connectors that accept unencrypted mail or have no sender restriction can be abused to make external mail appear internally authenticated, undermining anti-spoofing and anti-phishing checks downstream. Set RequireTls to $true and restrict SenderIPAddresses/SenderDomains to only the specific partner or on-premises infrastructure that legitimately needs this connector. Run: Set-InboundConnector -Identity <name> -RequireTls $true' `
+        -Recommendation 'Review flagged connectors. Require TLS and authenticate the source using either sender IP addresses bound with RestrictDomainsToIPAddresses, or a specific TlsSenderCertificateName. SenderDomains limits connector scope but does not authenticate the sending infrastructure. Run: Set-InboundConnector -Identity <name> -RequireTls $true and configure the appropriate IP or certificate restriction.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-inboundconnector'
 }
 else {
     New-METCheckResult -CheckId 'MET-EXO011' -Category EXO -Name 'Mail Flow Connector Hygiene' `
         -Result Pass -Severity High -AffectedObject "Inbound Connectors ($enabledCount enabled)" `
-        -Finding 'All enabled inbound connectors require TLS and restrict senders by IP or domain' `
+        -Finding 'All enabled inbound connectors require TLS and authenticate their source by bound IP addresses or a TLS sender certificate' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-inboundconnector'
 }

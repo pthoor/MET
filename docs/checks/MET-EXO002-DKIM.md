@@ -1,4 +1,4 @@
-﻿# MET-EXO002 — DKIM
+﻿# MET-EXO002 - DKIM
 
 **Category:** EXO | **Severity:** High
 
@@ -6,9 +6,9 @@
 
 For each domain with a DKIM signing configuration:
 
-- `Enabled` — signing is active
-- `KeySize` — key is at least 2048 bits
-- `Status` — CNAME records are published and valid in DNS
+- `Enabled` - signing is active
+- `KeySize` - key is at least 2048 bits
+- `Status` - CNAME records are published and valid in DNS
 
 ## Why it matters
 

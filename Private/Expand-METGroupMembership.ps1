@@ -4,9 +4,10 @@ function Expand-METGroupMembership {
         [Parameter(Mandatory)] [string]    $Identity,
         [Parameter(Mandatory)] [hashtable] $Cache,
         # Shared visited set passed through recursive EXO calls to prevent infinite loops
-        # on circular group membership. Callers should omit this — it is initialised
+        # on circular group membership. Callers should omit this - it is initialised
         # automatically on the first call and threaded through recursion internally.
-        [System.Collections.Generic.HashSet[string]] $Visited = $null
+        [System.Collections.Generic.HashSet[string]] $Visited = $null,
+        [System.Collections.Generic.List[string]] $RetrievalErrors
     )
 
     if ($Cache.ContainsKey($Identity)) { return $Cache[$Identity] }
@@ -15,15 +16,16 @@ function Expand-METGroupMembership {
         $Visited = [System.Collections.Generic.HashSet[string]]::new(
             [System.StringComparer]::OrdinalIgnoreCase)
     }
-    # Cycle guard — if this identity is already being expanded in the current call
+    # Cycle guard - if this identity is already being expanded in the current call
     # stack, return empty to break the loop.
     if (-not $Visited.Add($Identity)) { return @() }
 
     $addresses = [System.Collections.Generic.HashSet[string]]::new(
         [System.StringComparer]::OrdinalIgnoreCase)
     $graphSucceeded = $false
+    $graphError = $null
 
-    # Try Graph first — handles M365 Unified Groups, Azure AD Security Groups,
+    # Try Graph first - handles M365 Unified Groups, Azure AD Security Groups,
     # Distribution Lists, and nested memberships via transitive expansion.
     try {
         $escaped = $Identity -replace "'", "''"
@@ -50,6 +52,7 @@ function Expand-METGroupMembership {
         }
     }
     catch {
+        $graphError = $_.ToString()
         Write-Verbose "Graph group expansion failed for '$Identity': $_"
     }
 
@@ -65,7 +68,7 @@ function Expand-METGroupMembership {
                 $rtype = [string]$m.RecipientType
                 if ($rtype -match 'Group') {
                     $nestedId = if ($m.PrimarySmtpAddress) { $m.PrimarySmtpAddress } else { $m.Identity }
-                    $nested   = @(Expand-METGroupMembership -Identity $nestedId -Cache $Cache -Visited $Visited)
+                    $nested   = @(Expand-METGroupMembership -Identity $nestedId -Cache $Cache -Visited $Visited -RetrievalErrors $RetrievalErrors)
                     foreach ($n in $nested) { $null = $addresses.Add($n) }
                 } elseif ($m.PrimarySmtpAddress) {
                     $null = $addresses.Add($m.PrimarySmtpAddress)
@@ -74,6 +77,11 @@ function Expand-METGroupMembership {
         }
         catch {
             Write-Verbose "Exchange group expansion failed for '$Identity': $_"
+            if ($null -ne $RetrievalErrors) {
+                $details = if ($graphError) { "Graph: $graphError; Exchange: $($_.ToString())" } else { $_.ToString() }
+                $RetrievalErrors.Add("Unable to expand group '$Identity'. $details")
+            }
+            return @()
         }
     }
 

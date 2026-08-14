@@ -1,4 +1,4 @@
-﻿# MET-EXO004 — Quarantine Policies
+﻿# MET-EXO004 - Quarantine Policies
 
 **Category:** EXO | **Severity:** Medium
 
@@ -6,9 +6,9 @@
 
 For each quarantine policy:
 
-- `EndUserQuarantinePermissionsValue` — users have at least some permissions (> 0) so they can review quarantined mail
-- `QuarantineRetentionDays` — retention is at least 15 days
-- High-confidence phish policies — end-user self-release should NOT be enabled
+- `EndUserQuarantinePermissionsValue` - users have at least some permissions (> 0) so they can review quarantined mail
+- `QuarantineRetentionDays` - retention is at least 15 days
+- High-confidence phish policies - end-user self-release should NOT be enabled
 
 ## Why it matters
 

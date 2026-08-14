@@ -55,7 +55,7 @@ Describe 'MET-EXO012 Mailbox Forwarding' {
         It 'Returns Warning, Finding includes silent marker' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'bob@contoso.com -> external-user@evil.com \[silent — no local copy retained\]'
+            $results[0].Finding | Should -Match 'bob@contoso.com -> external-user@evil.com \[silent - no local copy retained\]'
         }
     }
 

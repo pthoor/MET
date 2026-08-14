@@ -1,4 +1,4 @@
-# MET-Teams008 — App Permission Policy Exposure
+# MET-Teams008 - App Permission Policy Exposure
 
 **Category:** Teams | **Severity:** Medium
 
@@ -8,15 +8,15 @@ Reviews every Teams app permission policy returned by `Get-CsTeamsAppPermissionP
 
 A value of `AllowedAppList` (an explicit, reviewed allow-list) or `BlockedAppList` (an explicit block-list) is treated as an intentional, restrictive configuration. Any other value is treated as an unrestricted "allow everything" configuration and flagged.
 
-This check is **read-only awareness only**. It calls only the `Get-` cmdlet and never attempts to modify a policy — Microsoft's guidance is that Teams app permission policies must be created and modified in the Teams admin center (Teams apps > Permission policies), not via PowerShell `Set-`/`New-` cmdlets.
+This check is **read-only awareness only**. It calls only the `Get-` cmdlet and never attempts to modify a policy - Microsoft's guidance is that Teams app permission policies must be created and modified in the Teams admin center (Teams apps > Permission policies), not via PowerShell `Set-`/`New-` cmdlets.
 
 ## Why it matters
 
 Third-party Teams apps request delegated Microsoft Graph permissions (mail, files, calendar, chat) when a user consents to install them. When an app permission policy leaves a catalog unrestricted, any user can install any published app without review, exposing the tenant to:
 
-- **OAuth consent phishing** — a malicious or look-alike app tricks a user into granting delegated Graph permissions
-- **Supply-chain risk** — a legitimate-looking app is later compromised or sold, and its existing consent grants persist
-- **Unreviewed data access** — apps with broad Graph scopes reading mail, files, or chat content without security team visibility
+- **OAuth consent phishing** - a malicious or look-alike app tricks a user into granting delegated Graph permissions
+- **Supply-chain risk** - a legitimate-looking app is later compromised or sold, and its existing consent grants persist
+- **Unreviewed data access** - apps with broad Graph scopes reading mail, files, or chat content without security team visibility
 
 Restricting each catalog to an explicit allow-list (or block-list, for organizations that prefer default-allow with named exceptions) ensures app installation goes through a deliberate review process rather than defaulting to open.
 

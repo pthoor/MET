@@ -34,7 +34,7 @@ foreach ($mbx in $mailboxes) {
     }
 
     $target = if ($mbx.ForwardingSmtpAddress) { $mbx.ForwardingSmtpAddress } else { $mbx.ForwardingAddress }
-    $silentSuffix = if (-not $mbx.DeliverToMailboxAndForward) { ' [silent — no local copy retained]' } else { '' }
+    $silentSuffix = if (-not $mbx.DeliverToMailboxAndForward) { ' [silent - no local copy retained]' } else { '' }
     $sampleLines.Add("$($mbx.PrimarySmtpAddress) -> $target$silentSuffix")
     $index++
 }
@@ -47,5 +47,5 @@ New-METCheckResult -CheckId 'MET-EXO012' -Category EXO -Name 'Mailbox Forwarding
     -Result Warning -Severity Critical `
     -AffectedObject "Mailboxes ($totalCount with forwarding)" `
     -Finding "$totalCount mailbox(es) have forwarding configured; $silentCount are silent (no local copy retained). $($sampleLines -join '; ')" `
-    -Recommendation 'Review each forwarding mailbox. Attacker-configured forwarding after a credential compromise is a common way to exfiltrate mail (invoices, wire approvals, credentials) even after the password is reset — especially "silent" forwarding where DeliverToMailboxAndForward is $false, since the mailbox owner never sees a copy and has no visual cue anything is wrong. Confirm each entry is a known, intentional business need (e.g. shared mailbox routing, employee departure handoff). Remove unexpected entries immediately and treat them as a potential compromise indicator. Run: Set-Mailbox -Identity <mailbox> -ForwardingSmtpAddress $null to remove.' `
+    -Recommendation 'Review each forwarding mailbox. Attacker-configured forwarding after a credential compromise is a common way to exfiltrate mail (invoices, wire approvals, credentials) even after the password is reset - especially "silent" forwarding where DeliverToMailboxAndForward is $false, since the mailbox owner never sees a copy and has no visual cue anything is wrong. Confirm each entry is a known, intentional business need (e.g. shared mailbox routing, employee departure handoff). Remove unexpected entries immediately and treat them as a potential compromise indicator. Run: Set-Mailbox -Identity <mailbox> -ForwardingSmtpAddress $null to remove.' `
     -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-exomailbox'

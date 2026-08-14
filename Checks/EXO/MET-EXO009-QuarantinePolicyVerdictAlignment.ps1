@@ -1,5 +1,5 @@
 # Verifies that quarantine policies assigned to each verdict type enforce permissions
-# appropriate to the risk level of that verdict — regardless of policy name.
+# appropriate to the risk level of that verdict - regardless of policy name.
 # Catches tenants that built custom quarantine policies but assigned them to the wrong verdicts.
 
 $policyPermissions = @{}
@@ -88,10 +88,10 @@ try {
     }
 }
 catch {
-    Write-Verbose "MET-EXO009: Get-AntiPhishPolicy unavailable — may not be MDO licensed"
+    Write-Verbose "MET-EXO009: Get-AntiPhishPolicy unavailable - may not be MDO licensed"
 }
 
-# Safe Attachments (MDO Plan 1+) — only Block action results in quarantine
+# Safe Attachments (MDO Plan 1+) - only Block action results in quarantine
 try {
     foreach ($p in (Get-SafeAttachmentPolicy -ErrorAction Stop | Where-Object { $_.Action -eq 'Block' })) {
         if ($p.QuarantineTag) {
@@ -100,7 +100,7 @@ try {
     }
 }
 catch {
-    Write-Verbose "MET-EXO009: Get-SafeAttachmentPolicy unavailable — may not be MDO licensed"
+    Write-Verbose "MET-EXO009: Get-SafeAttachmentPolicy unavailable - may not be MDO licensed"
 }
 
 if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {

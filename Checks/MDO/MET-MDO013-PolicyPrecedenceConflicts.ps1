@@ -4,10 +4,7 @@ if ($METContext -and $METContext.AllMailboxes) {
     $allMailboxes = $METContext.AllMailboxes
 } else {
     try {
-        $allMailboxes = @(
-            Get-EXOMailbox -ResultSize Unlimited -PropertySets Minimum -ErrorAction Stop |
-            Select-Object -ExpandProperty PrimarySmtpAddress
-        )
+        $allMailboxes = @(Get-METAssessableMailboxes)
         if ($METContext) { $METContext.AllMailboxes = $allMailboxes }
     }
     catch {
@@ -30,19 +27,31 @@ if ($total -eq 0) {
 }
 
 $groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
+$retrievalErrors = [System.Collections.Generic.List[string]]::new()
 
 $matrix = if ($METContext -and $METContext.CoverageMatrix) {
     $METContext.CoverageMatrix
 } else {
-    Resolve-METCoverageMatrix -AllMailboxes $allMailboxes -GroupCache $groupCache
+    Resolve-METCoverageMatrix -AllMailboxes $allMailboxes -GroupCache $groupCache -RetrievalErrors $retrievalErrors
 }
 
-# ── Custom rule sources — same cmdlets Resolve-METCoverageMatrix uses as its
-# "Custom" tier signals for EOP (anti-spam) and ATP (Safe Links, Anti-Phish) ──
+if ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-MDO013' -Category MDO -Name 'Policy Precedence Conflicts' `
+        -Result Fail -Severity High -AffectedObject 'Policy Precedence Data' `
+        -Finding 'Unable to complete policy precedence assessment because required policy or recipient data could not be retrieved.' `
+        -Recommendation 'Verify Exchange Online and Microsoft Graph permissions and retry the assessment.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/preset-security-policies' `
+        -ErrorMessage ($retrievalErrors -join "`n")
+    return
+}
+
+# ── Custom rule sources across every policy family shadowed by presets ────────
 $sources = @(
-    @{ Label = 'EOP (Anti-Spam)';  Getter = { @(Get-HostedContentFilterRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Default' }) };                          TierKey = 'EopTier' },
-    @{ Label = 'Safe Links';       Getter = { @(Get-SafeLinksRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' }) };                                                                  TierKey = 'AtpTier' },
-    @{ Label = 'Anti-Phish';       Getter = { @(Get-AntiPhishRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Office365 AntiPhish Default' }) };                  TierKey = 'AtpTier' }
+    @{ Label = 'EOP (Anti-Spam)'; Getter = { @(Get-HostedContentFilterRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Default' }) }; TierKey = 'EopTier' },
+    @{ Label = 'Anti-Malware';    Getter = { @(Get-MalwareFilterRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Default' }) }; TierKey = 'EopTier' },
+    @{ Label = 'Safe Links';      Getter = { @(Get-SafeLinksRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' }) }; TierKey = 'AtpTier' },
+    @{ Label = 'Safe Attachments'; Getter = { @(Get-SafeAttachmentRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' }) }; TierKey = 'AtpTier' },
+    @{ Label = 'Anti-Phish';      Getter = { @(Get-AntiPhishRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Office365 AntiPhish Default' }) }; TierKey = 'AtpTier' }
 )
 
 $shadowFindings = [System.Collections.Generic.List[string]]::new()
@@ -53,12 +62,13 @@ foreach ($source in $sources) {
     }
     catch {
         Write-Verbose "Precedence scan for '$($source.Label)' rules failed: $_"
+        $retrievalErrors.Add("Unable to retrieve $($source.Label) rules. $($_.ToString())")
         continue
     }
     if (-not $rules -or $rules.Count -eq 0) { continue }
 
     foreach ($rule in $rules) {
-        $targeted = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $allMailboxes -GroupCache $groupCache)
+        $targeted = @(Expand-METRuleRecipients -Rule $rule -AllMailboxes $allMailboxes -GroupCache $groupCache -RetrievalErrors $retrievalErrors)
         if ($targeted.Count -eq 0) { continue }
 
         $shadowed = @($targeted | Where-Object { $matrix[$_].($source.TierKey) -in @('Standard', 'Strict') })
@@ -66,8 +76,18 @@ foreach ($source in $sources) {
 
         $sample = if ($shadowed.Count -le 5) { $shadowed -join ', ' } else { "$($shadowed[0..4] -join ', ') (+$($shadowed.Count - 5) more)" }
         $scope  = Get-METRuleScope -Rule $rule
-        $shadowFindings.Add("$($source.Label) rule '$($rule.Name)' ($scope) targets $($targeted.Count) mailbox(es), but $($shadowed.Count) of them are already covered by a Standard/Strict preset policy, which takes precedence — this custom rule's settings do not apply to: $sample")
+        $shadowFindings.Add("$($source.Label) rule '$($rule.Name)' ($scope) targets $($targeted.Count) mailbox(es), but $($shadowed.Count) of them are already covered by a Standard/Strict preset policy, which takes precedence - this custom rule's settings do not apply to: $sample")
     }
+}
+
+if ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-MDO013' -Category MDO -Name 'Policy Precedence Conflicts' `
+        -Result Fail -Severity High -AffectedObject 'Policy Precedence Data' `
+        -Finding 'Unable to complete policy precedence assessment because one or more custom rule collections or recipient scopes could not be retrieved.' `
+        -Recommendation 'Verify Exchange Online and Microsoft Graph permissions and retry the assessment.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/preset-security-policies' `
+        -ErrorMessage ($retrievalErrors -join "`n")
+    return
 }
 
 $checker = 'https://microsoft.github.io/CSS-Exchange/M365/MDO/MDOThreatPolicyChecker/'
@@ -81,6 +101,6 @@ if ($shadowFindings.Count -gt 0) {
 } else {
     New-METCheckResult -CheckId 'MET-MDO013' -Category MDO -Name 'Policy Precedence Conflicts' `
         -Result Pass -Severity High -AffectedObject "Tenant ($total mailboxes)" `
-        -Finding "No custom EOP or MDO policies are silently shadowed by a preset policy — every custom rule's targeted recipients are either uncovered by a preset or the custom rule is the winning policy." `
+        -Finding "No custom EOP or MDO policies are silently shadowed by a preset policy - every custom rule's targeted recipients are either uncovered by a preset or the custom rule is the winning policy." `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/preset-security-policies'
 }

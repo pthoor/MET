@@ -27,11 +27,11 @@ foreach ($config in $dkimConfigs) {
     }
 
     if ($config.KeySize -and $config.KeySize -lt 2048) {
-        $issues.Add("DKIM key size is $($config.KeySize) bits — minimum recommended is 2048 bits")
+        $issues.Add("DKIM key size is $($config.KeySize) bits - minimum recommended is 2048 bits")
     }
 
     if ($config.Status -ne 'Valid') {
-        $issues.Add("DKIM record status is '$($config.Status)' — CNAME records may not be published in DNS")
+        $issues.Add("DKIM record status is '$($config.Status)' - CNAME records may not be published in DNS")
     }
 
     $cnames = @()

@@ -1,56 +1,31 @@
-﻿try {
-    $outboundRules    = @(Get-HostedOutboundSpamFilterRule    -ErrorAction Stop | Sort-Object Priority)
-    $outboundPolicies = @(Get-HostedOutboundSpamFilterPolicy  -ErrorAction Stop)
+$allSenders = $null
+try {
+    $allSenders = if ($METContext -and $METContext.AllMailboxes) { @($METContext.AllMailboxes) } else { @(Get-METAssessableMailboxes) }
+    if ($METContext -and -not $METContext.AllMailboxes) { $METContext.AllMailboxes = $allSenders }
 }
 catch {
-    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound' `
-        -Result Fail -Severity Medium -AffectedObject 'Outbound Spam Filter Policies' `
-        -Finding 'Unable to retrieve outbound spam filter policies' `
-        -Recommendation 'Ensure the account has Security Reader or higher permissions.' `
-        -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -ErrorMessage $_.ToString()
+    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result Warning -Severity Medium -AffectedObject 'All Senders' -Finding 'Unable to determine effective outbound anti-spam coverage because the sender list could not be retrieved.' -Recommendation 'Ensure the account has Exchange View-Only Recipients permission and rerun the assessment.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -ErrorMessage $_.ToString()
     return
 }
-
-$ruleByPolicy = @{}
-foreach ($r in $outboundRules) { $ruleByPolicy[$r.HostedOutboundSpamFilterPolicy] = $r }
-
-foreach ($policy in $outboundPolicies) {
-    $isDefault = $policy.IsDefault -eq $true
-    $rule      = $ruleByPolicy[$policy.Name]
-
-    if (-not $isDefault -and (-not $rule -or $rule.State -ne 'Enabled')) { continue }
-
-    $scope = if ($isDefault) {
-        'catch-all (default — applies to all uncovered senders)'
-    } else {
-        Get-METRuleScope -Rule $rule
-    }
-    $label = "$($policy.Name) [$scope]"
-
-    $issues = [System.Collections.Generic.List[string]]::new()
-
-    if ($policy.AutoForwardingMode -ne 'Off') {
-        $issues.Add("Auto-forwarding is '$($policy.AutoForwardingMode)' — should be 'Off' to prevent data exfiltration")
-    }
-    if ($policy.ActionWhenThresholdReached -eq 'Alert') {
-        $issues.Add("Action when sending limit is reached is 'Alert' only — consider 'BlockUser' or 'BlockUserForToday'")
-    }
-    if ($policy.NotifyOutboundSpamRecipients.Count -eq 0) {
-        $issues.Add('No admin notification address configured for outbound spam events')
-    }
-
-    if ($issues.Count -gt 0) {
-        $result = if ($policy.AutoForwardingMode -ne 'Off') { 'Fail' } else { 'Warning' }
-        New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound' `
-            -Result $result -Severity Medium -AffectedObject $label `
-            -Finding ($issues -join '; ') `
-            -Recommendation "Disable auto-forwarding (set AutoForwardingMode to 'Off'), set action on limit breach to 'BlockUser', and configure an admin notification address." `
-            -ReferenceUrl 'https://aka.ms/mdo-outboundspam'
-    }
-    else {
-        New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound' `
-            -Result Pass -Severity Medium -AffectedObject $label `
-            -Finding 'Outbound spam filter policy is correctly configured' `
-            -ReferenceUrl 'https://aka.ms/mdo-outboundspam'
-    }
+if ($allSenders.Count -eq 0) {
+    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result NotApplicable -Severity Medium -AffectedObject 'Tenant (0 senders)' -Finding 'No assessable senders were found in the tenant.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam'
+    return
 }
+$errors = [System.Collections.Generic.List[string]]::new()
+try { $rules = @(Get-HostedOutboundSpamFilterRule -ErrorAction Stop) } catch { $rules=@(); $errors.Add("Unable to retrieve outbound anti-spam rules. $($_.ToString())") }
+try { $policies = @(Get-HostedOutboundSpamFilterPolicy -ErrorAction Stop) } catch { $policies=@(); $errors.Add("Unable to retrieve outbound anti-spam policies. $($_.ToString())") }
+$groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
+$resolution = Resolve-METEffectivePolicy -Subjects $allSenders -GroupCache $groupCache -Rules $rules -Policies $policies -PolicyLinkProperty HostedOutboundSpamFilterPolicy -ProtectionType 'outbound anti-spam' -ScopeType Sender -RetrievalErrors $errors
+$evaluate = {
+    param($policy, $policyType)
+    $issues = [System.Collections.Generic.List[string]]::new()
+    if (-not $policy) { $issues.Add('Policy settings could not be retrieved'); return $issues.ToArray() }
+    if ($policy.AutoForwardingMode -eq 'On') { $issues.Add('Automatic external forwarding is enabled') }
+    if ($policy.ActionWhenThresholdReached -ne 'BlockUser') { $issues.Add("Sending-limit action is '$($policy.ActionWhenThresholdReached)' - Standard recommends BlockUser") }
+    $issues.ToArray()
+}
+$warnings = {
+    param($policy, $policyType)
+    if ($policy -and $policy.AutoForwardingMode -notin @('Off','On')) { "Automatic forwarding is '$($policy.AutoForwardingMode)' - system-controlled rather than explicitly disabled" }
+}
+New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO007' -Name 'Anti-Spam Outbound Effective Coverage' -ProtectionType 'Outbound Anti-Spam' -Severity Medium -Subjects $allSenders -SubjectLabel 'senders' -Resolution $resolution -GetPolicyIssues $evaluate -GetPolicyWarnings $warnings -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -Recommendation 'Apply a compliant outbound anti-spam policy to every affected sender. Explicitly disable automatic external forwarding and use BlockUser when sending limits are reached. Use the restricted-user alert policy for administrator notifications.'

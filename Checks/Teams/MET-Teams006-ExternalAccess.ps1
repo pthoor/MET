@@ -14,10 +14,10 @@ try {
     }
 
     if ($config.AllowFederatedUsers -eq $true -and $isAllowAllKnownDomains) {
-        $issues.Add('Federation is open to all external domains (AllowAllKnownDomains) — any external Teams user can attempt to chat with your staff, a common vector for Teams-based phishing and vishing')
+        $issues.Add('Federation is open to all external domains (AllowAllKnownDomains) - any external Teams user can attempt to chat with your staff, a common vector for Teams-based phishing and vishing')
     }
     if ($config.AllowTeamsConsumer -eq $true) {
-        $issues.Add('Teams accounts not managed by any organization (consumer/personal accounts) are allowed to federate — widens the pool of untrusted external contacts who can reach your users')
+        $issues.Add('Teams accounts not managed by any organization (consumer/personal accounts) are allowed to federate - widens the pool of untrusted external contacts who can reach your users')
     }
 }
 catch {

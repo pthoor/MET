@@ -1,4 +1,4 @@
-﻿# MET-EXO007 — Transport Rule Audit
+﻿# MET-EXO007 - Transport Rule Audit
 
 **Category:** EXO | **Severity:** Medium
 
@@ -6,11 +6,11 @@
 
 Audits transport rules (mail flow rules) for security-relevant configurations:
 
-- Rules that **set SCL to -1** — bypasses spam filtering entirely for matching messages
-- Rules that **disable Safe Links processing** — via header manipulation
-- Rules that **set SCL explicitly** (non-bypass) — informational note
+- Rules that **set SCL to -1** - bypasses spam filtering entirely for matching messages
+- Rules that **disable Safe Links processing** - via header manipulation
+- Rules that **set SCL explicitly** (non-bypass) - informational note
 
-This is an **informational / Warning** check — MET cannot determine whether a bypass is intentional and authorised. All findings are surfaced for human review.
+This is an **informational / Warning** check - MET cannot determine whether a bypass is intentional and authorised. All findings are surfaced for human review.
 
 ## Why it matters
 

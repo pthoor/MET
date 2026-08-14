@@ -10,7 +10,8 @@
         [Parameter(Mandatory)] [string] $Finding,
         [string] $Recommendation = '',
         [string] $ReferenceUrl   = '',
-        [string] $ErrorMessage   = $null
+        [string] $ErrorMessage   = $null,
+        [hashtable] $Metadata    = $null
     )
 
     if ($ReferenceUrl -and $ReferenceUrl -notmatch '^https?://') {
@@ -32,5 +33,6 @@
         ReferenceUrl   = $ReferenceUrl
         Timestamp      = [datetime]::UtcNow
         Error          = $ErrorMessage
+        Metadata       = $Metadata
     }
 }

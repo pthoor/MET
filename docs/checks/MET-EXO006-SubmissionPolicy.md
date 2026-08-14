@@ -1,4 +1,4 @@
-﻿# MET-EXO006 — Submission Policy
+﻿# MET-EXO006 - Submission Policy
 
 **Category:** EXO | **Severity:** Medium
 
@@ -6,8 +6,8 @@
 
 Verifies the report submission policy configuration:
 
-- `EnableReportToMicrosoft` — user-reported messages are also submitted to Microsoft for analysis
-- `EnableUserEmailNotification` — users are notified of the review outcome
+- `EnableReportToMicrosoft` - user-reported messages are also submitted to Microsoft for analysis
+- `EnableUserEmailNotification` - users are notified of the review outcome
 - A custom submission mailbox (via `Get-ReportSubmissionRule`) is configured so SecOps receives copies
 
 ## Why it matters

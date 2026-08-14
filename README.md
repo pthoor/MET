@@ -3,7 +3,7 @@
   <img src="assets/met-icon-dark.svg#gh-dark-mode-only" width="72" height="72" alt="MET logo">
 </p>
 
-<h1 align="center">MET — Security Posture Scanner for MDO, EXO and Teams</h1>
+<h1 align="center">MET - Security Posture Scanner for MDO, EXO and Teams</h1>
 
 <p align="center">Open-source PowerShell module for assessing the security posture of a Microsoft 365 tenant across Microsoft Defender for Office 365 (MDO), Exchange Online Protection (EOP), and Microsoft Teams threat protection.</p>
 
@@ -17,7 +17,7 @@
 |---|---|
 | **Minimum** | PowerShell **7.4** |
 | **Tested on** | PowerShell **7.4**, **7.6** |
-| **Platform** | Windows (full support). Linux/macOS: all checks except DMARC (EXO001) and SPF (EXO003), which require `Resolve-DnsName` — a Windows-only cmdlet. |
+| **Platform** | Windows (full support). Linux/macOS: all checks except DMARC (EXO001) and SPF (EXO003), which require `Resolve-DnsName` - a Windows-only cmdlet. |
 
 ### Required modules
 
@@ -39,7 +39,7 @@ Install-Module MicrosoftTeams -MinimumVersion 6.0.0 -Scope CurrentUser
 
 ### Required M365 permissions
 
-MET is **read-only** — it never modifies tenant configuration. Follow the principle of least privilege: grant only what is listed here.
+MET is **read-only** - it never modifies tenant configuration. Follow the principle of least privilege: grant only what is listed here.
 
 #### Exchange Online
 
@@ -48,7 +48,7 @@ MET is **read-only** — it never modifies tenant configuration. Follow the prin
 | **Security Reader** (EXO role group) | Read all MDO/EOP policy cmdlets: `Get-SafeLinksPolicy`, `Get-AntiPhishPolicy`, `Get-MalwareFilterPolicy`, `Get-HostedContentFilterPolicy`, `Get-QuarantinePolicy`, `Get-TenantAllowBlockListItems`, `Get-ReportSubmissionPolicy`, `Get-DkimSigningConfig`, `Get-TransportRule`, `Get-AtpPolicyForO365`, `Get-ProtectionAlert`, `Get-Tag` |
 | **View-Only Recipients** (EXO management role) | Enumerate mailboxes and distribution group membership (`Get-EXOMailbox`, `Get-DistributionGroupMember`, `Get-User`, `Get-AcceptedDomain`, `Get-EOPProtectionPolicyRule`) |
 
-> The **Security Reader** EXO role group already includes View-Only Configuration, so you only need to add **View-Only Recipients** on top of it. Do _not_ use Organization Management or Security Administrator — those grant write access.
+> The **Security Reader** EXO role group already includes View-Only Configuration, so you only need to add **View-Only Recipients** on top of it. Do _not_ use Organization Management or Security Administrator - those grant write access.
 
 #### Microsoft Graph (Application permissions)
 
@@ -67,7 +67,7 @@ These are requested by `Connect-METSession`. All are **read-only**.
 |---|---|
 | **Global Reader** (Microsoft Entra role) | Read Teams federation and meeting policy settings via `Get-CsTenantFederationConfiguration` and `Get-CsTeamsMeetingPolicy` |
 
-> **Do not use Teams Administrator** — that role grants write access to Teams configuration. Global Reader is sufficient for all current Teams checks. If you do not run Teams checks, use `Connect-METSession -SkipTeams`.
+> **Do not use Teams Administrator** - that role grants write access to Teams configuration. Global Reader is sufficient for all current Teams checks. If you do not run Teams checks, use `Connect-METSession -SkipTeams`.
 
 #### Assigning roles to a service principal (unattended / CI)
 
@@ -161,7 +161,7 @@ Invoke-METTriage -CheckId MET-MDO001, MET-EXO001
 # All checks except transport rule audit (informational)
 Invoke-METTriage -ExcludeCheckId MET-EXO007
 
-# MSSP — run against a delegated tenant
+# MSSP - run against a delegated tenant
 Invoke-METTriage -DelegatedOrganization contoso.onmicrosoft.com
 ```
 
@@ -190,9 +190,9 @@ Connect-METSession -UserPrincipalName admin@contoso.com -Verbose
 
 ---
 
-## Custom Policy Baseline — Promotions Folder
+## Custom Policy Baseline - Promotions Folder
 
-Microsoft's **Strict and Standard preset policies** apply a fixed, all-or-nothing configuration. The newer **Promotions folder** feature (currently in Preview) routes bulk email below the BCL threshold to a dedicated Promotions folder in supported Outlook clients — but **`BulkMovesEnabled` is Off in both preset policies and cannot be turned on within them**.
+Microsoft's **Strict and Standard preset policies** apply a fixed, all-or-nothing configuration. The newer **Promotions folder** feature (currently in Preview) routes bulk email below the BCL threshold to a dedicated Promotions folder in supported Outlook clients - but **`BulkMovesEnabled` is Off in both preset policies and cannot be turned on within them**.
 
 The only way to enable the Promotions folder is to move affected users out of the preset policies and onto **custom policies for every protection type**. Because preset policies bundle anti-spam, anti-phishing, anti-malware, Safe Links, and Safe Attachments together, removing users from a preset drops them back to the (weaker) default policies for all five areas unless you explicitly create custom equivalents.
 
@@ -202,7 +202,7 @@ The baseline below creates Strict-equivalent custom policies for all five protec
 > 1. A mail flow rule that stamps external bulk mail with the `X-MS-Exchange-Organization-BulkStamping: 1` header
 > 2. `BulkMovesEnabled = On` in the anti-spam policy applied to those users
 
-### Step 1 — Create the opt-in security group
+### Step 1 - Create the opt-in security group
 
 ```powershell
 New-DistributionGroup `
@@ -215,7 +215,7 @@ New-DistributionGroup `
 
 > `MemberJoinRestriction Open` lets users join or leave the group themselves to opt in or out. Change to `Closed` for admin-only control. To apply the Promotions folder to everyone, skip the group and replace `-SentToMemberOf 'Promotions-OptIn'` with `-RecipientDomainIs (Get-AcceptedDomain).DomainName` in each rule below.
 
-### Step 2 — Create the bulk-stamping mail flow rule
+### Step 2 - Create the bulk-stamping mail flow rule
 
 ```powershell
 New-TransportRule `
@@ -228,7 +228,7 @@ New-TransportRule `
     -Priority           0
 ```
 
-### Step 3 — Custom anti-spam policy (Strict + Promotions folder)
+### Step 3 - Custom anti-spam policy (Strict + Promotions folder)
 
 ```powershell
 New-HostedContentFilterPolicy `
@@ -257,7 +257,7 @@ New-HostedContentFilterRule `
     -Priority                  0
 ```
 
-### Step 4 — Custom anti-phishing policy (Strict equivalent)
+### Step 4 - Custom anti-phishing policy (Strict equivalent)
 
 ```powershell
 New-AntiPhishPolicy `
@@ -299,7 +299,7 @@ New-AntiPhishRule `
 > ```
 > Max 350 entries. Mailbox intelligence impersonation (`EnableMailboxIntelligenceProtection`) covers all users automatically, so targeted user protection adds an extra layer specifically for your VIPs.
 
-### Step 5 — Custom anti-malware policy (same settings as Standard and Strict)
+### Step 5 - Custom anti-malware policy (same settings as Standard and Strict)
 
 When creating a malware filter policy via PowerShell without `-FileTypes`, the file type list starts **empty** even if `EnableFileFilter` is `$true`. The fix is to copy the list from the Default policy, which Microsoft maintains and updates over time.
 
@@ -324,7 +324,7 @@ New-MalwareFilterRule `
 
 > The Default policy contains Microsoft's maintained default file type list (`ace, ani, apk, app, appx, arj, bat, cab, cmd, com, deb, dex, dll, docm, elf, exe, hta, img, iso, jar, jnlp, kext, lha, lib, library, lnk, lzh, macho, msc, msi, msix, msp, mst, pif, ppa, ppam, reg, rev, scf, scr, sct, sys, uif, vb, vbe, vbs, vxd, wsc, wsf, wsh, xll, xz, z` and more). Copying from it instead of hardcoding ensures your custom policy stays in sync as Microsoft adds new types.
 
-### Step 6 — Custom Safe Links policy (same settings as Standard and Strict)
+### Step 6 - Custom Safe Links policy (same settings as Standard and Strict)
 
 ```powershell
 New-SafeLinksPolicy `
@@ -346,7 +346,7 @@ New-SafeLinksRule `
     -Priority        0
 ```
 
-### Step 7 — Custom Safe Attachments policy (same settings as Standard and Strict)
+### Step 7 - Custom Safe Attachments policy (same settings as Standard and Strict)
 
 ```powershell
 New-SafeAttachmentPolicy `
@@ -362,7 +362,7 @@ New-SafeAttachmentRule `
     -Priority             0
 ```
 
-### Step 8 — Exclude the opt-in group from preset policies
+### Step 8 - Exclude the opt-in group from preset policies
 
 Users in `Promotions-OptIn` must be excluded from both the Standard and Strict preset scope, otherwise the preset wins the priority order and the custom policies never apply. Presets have two rule sets: EOP (anti-spam, anti-phish, anti-malware) and ATP (Safe Links, Safe Attachments).
 
@@ -371,12 +371,12 @@ Users in `Promotions-OptIn` must be excluded from both the Standard and Strict p
 Get-EOPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
 Get-ATPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
 
-# Exclude from Strict preset — EOP rules
+# Exclude from Strict preset - EOP rules
 Set-EOPProtectionPolicyRule `
     -Identity               'Strict Preset Security Policy' `
     -ExceptIfSentToMemberOf 'Promotions-OptIn'
 
-# Exclude from Strict preset — ATP rules (Safe Links + Safe Attachments)
+# Exclude from Strict preset - ATP rules (Safe Links + Safe Attachments)
 Set-ATPProtectionPolicyRule `
     -Identity               'Strict Preset Security Policy' `
     -ExceptIfSentToMemberOf 'Promotions-OptIn'
@@ -398,7 +398,7 @@ Set-ATPProtectionPolicyRule `
 | BCL ≥ 5 (meets/exceeds threshold) | Quarantined (`BulkSpamAction = Quarantine`) |
 | BCL < 5, stamped by mail flow rule | Delivered to **Promotions** folder |
 | Sender is in user's Safe Senders list | Delivered to Inbox (bypasses Promotions) |
-| Sender is internal / accepted domain | Not stamped by the rule — delivered normally |
+| Sender is internal / accepted domain | Not stamped by the rule - delivered normally |
 
 Microsoft 365 learns from user behaviour in the Promotions folder (moving messages in or out) and applies those preferences automatically to future messages.
 
@@ -412,9 +412,9 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO004 | Anti-spoofing action and DMARC honour settings |
 | MET-MDO005 | Anti-malware: file filter, ZAP, quarantine tag |
 | MET-MDO006 | BCL threshold, bulk action, spam/phish actions, ZAP |
-| MET-MDO008 | Preset policy coverage — opt-in users on custom policies will show as uncovered; this is expected and accepted for this scenario |
+| MET-MDO008 | Preset policy coverage - opt-in users on custom policies will show as uncovered; this is expected and accepted for this scenario |
 | MET-MDO009 | ZAP enabled in all active policies including the custom ones |
-| MET-EXO007 | Transport rule audit — bulk-stamping rule listed as informational |
+| MET-EXO007 | Transport rule audit - bulk-stamping rule listed as informational |
 | MET-EXO008 | Quarantine retention ≥ 30 days in the custom anti-spam policy |
 | MET-EXO009 | Quarantine tag permissiveness for each verdict across all custom policies |
 
@@ -422,7 +422,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 
 ## Check Inventory
 
-### MDO — Microsoft Defender for Office 365
+### MDO - Microsoft Defender for Office 365
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
@@ -439,7 +439,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO011 | User Tags | Low | Custom tags defined + alert policies referencing them |
 | MET-MDO012 | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
 
-### EXO — Exchange Online / Email Authentication
+### EXO - Exchange Online / Email Authentication
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
@@ -453,7 +453,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO008 | Quarantine Retention | Medium | QuarantineRetentionPeriod ≥ 30 days in all anti-spam policies |
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for high-risk verdicts (malware, high-confidence phish) |
 
-### Teams — Microsoft Teams Threat Protection
+### Teams - Microsoft Teams Threat Protection
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
@@ -492,7 +492,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | HTML | `Get-METReport -Format HTML -OutputPath ./assessments` | Self-contained; auto-opens in browser |
 | All | `Get-METReport -Format All -OutputPath ./assessments` | Writes both JSON and HTML to a per-run subfolder |
 
-The HTML report is a **single self-contained file** — all CSS and JavaScript are inlined, no CDN or internet connection required to view it.
+The HTML report is a **single self-contained file** - all CSS and JavaScript are inlined, no CDN or internet connection required to view it.
 
 When `-OutputPath` is provided, MET now creates a timestamped run folder and writes reports inside it (for example `./assessments/20260602-102530-contoso_onmicrosoft.com/`).
 
@@ -516,7 +516,7 @@ Invoke-Pester -Configuration $config
 ```
 MET/
 ├── MET.psd1                    # Module manifest
-├── MET.psm1                    # Module root — dot-sources Public/ and Private/
+├── MET.psm1                    # Module root - dot-sources Public/ and Private/
 ├── Public/                     # Exported functions
 ├── Private/                     # Internal helpers
 ├── Checks/                      # Check scripts (MDO/ EXO/ Teams/)
@@ -544,4 +544,4 @@ See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

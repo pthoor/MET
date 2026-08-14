@@ -1,14 +1,17 @@
-﻿# MET-MDO007 — Anti-Spam Outbound
+﻿# MET-MDO007 - Anti-Spam Outbound
 
 **Category:** MDO | **Severity:** Medium
 
 ## What it checks
 
-Verifies outbound spam filter policy settings:
+Resolves the effective outbound anti-spam policy for each assessable sender using custom rule priority, sender/group/domain conditions, exceptions, and default fallback. It then verifies:
 
-- `AutoForwardingMode` — must be `Off` to prevent data exfiltration via auto-forwarding
-- `ActionWhenThresholdReached` — should block the sending user, not just alert
-- `NotifyOutboundSpamRecipients` — admin notification address is configured
+- `AutoForwardingMode` - `Off` is the explicit recommended setting; `On` fails and `Automatic` produces a review warning
+- `ActionWhenThresholdReached` - Standard recommends `BlockUser`
+
+`NotifyOutboundSpamRecipients` is not required. Microsoft recommends the built-in restricted-user alert policy for administrator notifications and documents the outbound policy notification setting as disabled in its recommended configurations.
+
+The report warns when a higher-priority outbound catch-all shadows specialized sender policies. If a catch-all is needed, it should have the lowest custom precedence so narrower sender, group, or domain policies remain effective.
 
 ## Why it matters
 
@@ -18,14 +21,16 @@ Auto-forwarding rules are a common post-compromise technique for exfiltrating ma
 
 | Result | Condition |
 |---|---|
-| Pass | Auto-forward off, block-user action, notification configured |
-| Fail | Auto-forwarding not `Off` |
-| Warning | Auto-forwarding off but other settings sub-optimal |
+| Pass | Every sender receives an effective policy with forwarding explicitly off and the Standard restriction action |
+| Fail | One or more effective policies enable forwarding or use a restriction action below the Standard baseline |
+| Warning | Forwarding is system-controlled, or effective coverage is incomplete |
+| NotApplicable | No assessable senders were found |
 
 ## Recommendation
 
-Set `AutoForwardingMode` to `Off`. Set the sending limit action to `BlockUser`. Configure a notification address for SecOps awareness.
+Set `AutoForwardingMode` to `Off` and the sending limit action to `BlockUser`. Verify the `User restricted from sending email` alert policy separately for administrator notification coverage.
 
 ## Reference
 
 - [Outbound spam protection in EOP](https://aka.ms/mdo-outboundspam)
+- [Microsoft recommended threat policy settings](https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365#outbound-spam-policy-settings)

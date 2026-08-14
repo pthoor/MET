@@ -1,4 +1,4 @@
-# MET-EXO010 — Direct Send / Anonymous Relay Exposure
+# MET-EXO010 - Direct Send / Anonymous Relay Exposure
 
 **Category:** EXO | **Severity:** Critical
 
@@ -15,7 +15,7 @@ When `RejectDirectSend` is disabled (the dangerous state), an attacker can:
 2. Submit mail claiming to be from an internal user (e.g., `ceo@contoso.com`)
 3. Deliver that mail to any recipient, bypassing anti-spoofing controls entirely
 
-This is actively being abused in the wild. The attacker's message never authenticates as external, so DMARC, DKIM, and SPF validation cannot intervene — the spoofing happens at the relay point, not the sender's domain.
+This is actively being abused in the wild. The attacker's message never authenticates as external, so DMARC, DKIM, and SPF validation cannot intervene - the spoofing happens at the relay point, not the sender's domain.
 
 Blocking Direct Send forces legitimate senders to authenticate via SMTP AUTH client submission or use a configured mail relay connector, both of which create audit trails and can be restricted to known, trusted applications.
 
@@ -43,13 +43,13 @@ Set-OrganizationConfig -RejectDirectSend $true
 
 These applications must be migrated to one of these methods:
 
-1. **SMTP AUTH client submission** — Configure the application to authenticate with an Exchange Online mailbox and send via `smtp.office365.com:587` (STARTTLS) or port 25 (on your relay connector, if restricted)
-2. **SMTP relay connector** — Create an inbound connector restricted by sending IP/FQDN and configure the application to relay through it
-3. **Authenticated SMTP gateway** — Use a mail relay service that handles credential management and retries
+1. **SMTP AUTH client submission** - Configure the application to authenticate with an Exchange Online mailbox and send via `smtp.office365.com:587` (STARTTLS) or port 25 (on your relay connector, if restricted)
+2. **SMTP relay connector** - Create an inbound connector restricted by sending IP/FQDN and configure the application to relay through it
+3. **Authenticated SMTP gateway** - Use a mail relay service that handles credential management and retries
 
 If you do not migrate legitimate senders before enabling `RejectDirectSend`, their mail will start being rejected with an NDR (non-delivery report).
 
 ## Reference
 
 - [Set-OrganizationConfig: RejectDirectSend parameter](https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/set-organizationconfig)
-- [Direct Send via SMTP — Overview](https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/mail-flow-best-practices)
+- [Direct Send via SMTP - Overview](https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/mail-flow-best-practices)

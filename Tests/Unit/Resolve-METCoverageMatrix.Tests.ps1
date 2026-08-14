@@ -7,7 +7,7 @@
     . (Join-Path $root 'Private' 'Resolve-METPresetPolicy.ps1')
     . (Join-Path $root 'Private' 'Resolve-METCoverageMatrix.ps1')
 
-    # Stubs for EXO/Graph cmdlets — replaced by Pester mocks in each Context block.
+    # Stubs for EXO/Graph cmdlets - replaced by Pester mocks in each Context block.
     function Get-EOPProtectionPolicyRule  { throw 'not mocked' }
     function Get-ATPProtectionPolicyRule  { throw 'not mocked' }
     function Get-HostedContentFilterRule  { throw 'not mocked' }
@@ -17,10 +17,11 @@
     function Get-MgGroupTransitiveMember  { throw 'not mocked' }
     function Get-DistributionGroupMember  { throw 'not mocked' }
 
-    # Minimal rule stub — only the fields Expand-METRuleRecipients reads.
+    # Minimal rule stub - only the fields Expand-METRuleRecipients reads.
     function New-RuleStub {
-        param([string[]]$SentTo, [string]$State = 'Enabled')
+        param([string[]]$SentTo, [string]$State = 'Enabled', [string]$Name)
         [PSCustomObject]@{
+            Name                    = $Name
             State                   = $State
             SentTo                  = $SentTo
             SentToMemberOf          = $null
@@ -36,6 +37,8 @@ Describe 'Resolve-METCoverageMatrix' {
 
     Context 'All mailboxes in Strict preset (EOP and ATP)' {
         BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { @(New-RuleStub -Name 'Strict Preset Security Policy' -SentTo @('alice@contoso.com','bob@contoso.com')) }
+            Mock Get-ATPProtectionPolicyRule { @(New-RuleStub -Name 'Strict Preset Security Policy' -SentTo @('alice@contoso.com','bob@contoso.com')) }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 [PSCustomObject]@{
@@ -64,6 +67,8 @@ Describe 'Resolve-METCoverageMatrix' {
 
     Context 'EOP preset covers all; ATP preset covers none (condition divergence)' {
         BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { @(New-RuleStub -Name 'Strict Preset Security Policy' -SentTo @('alice@contoso.com','bob@contoso.com')) }
+            Mock Get-ATPProtectionPolicyRule { @() }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 $strictAddrs = @('alice@contoso.com','bob@contoso.com')
@@ -78,7 +83,7 @@ Describe 'Resolve-METCoverageMatrix' {
             Mock Get-AntiPhishRule           { @() }
         }
 
-        It 'EopTier is Strict and AtpTier is BuiltIn — detected as ATP gap' {
+        It 'EopTier is Strict and AtpTier is BuiltIn - detected as ATP gap' {
             $matrix = Resolve-METCoverageMatrix `
                 -AllMailboxes @('alice@contoso.com','bob@contoso.com') `
                 -GroupCache @{}
@@ -90,12 +95,14 @@ Describe 'Resolve-METCoverageMatrix' {
 
     Context 'No preset; some mailboxes in custom EOP policy, some in custom ATP policy' {
         BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { @() }
+            Mock Get-ATPProtectionPolicyRule { @() }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 [PSCustomObject]@{ Tier=$Tier; Stack=$Stack; Enabled=$false; Rule=$null }
             }
             Mock Get-HostedContentFilterRule {
-                @(New-RuleStub -SentTo @('alice@contoso.com') | Add-Member -NotePropertyName Name -NotePropertyValue 'CustomEOP' -PassThru |
+                @(New-RuleStub -SentTo @('alice@contoso.com') | Add-Member -NotePropertyName Name -NotePropertyValue 'CustomEOP' -Force -PassThru |
                   Add-Member -NotePropertyName Priority -NotePropertyValue 0 -PassThru)
             }
             Mock Get-SafeLinksRule {
@@ -128,6 +135,8 @@ Describe 'Resolve-METCoverageMatrix' {
     Context 'Standard preset covers all mailboxes; Strict covers none' {
         BeforeEach {
             $allAddrs = @('alice@contoso.com','bob@contoso.com')
+            Mock Get-EOPProtectionPolicyRule { @(New-RuleStub -Name 'Standard Preset Security Policy' -SentTo $allAddrs) }
+            Mock Get-ATPProtectionPolicyRule { @(New-RuleStub -Name 'Standard Preset Security Policy' -SentTo $allAddrs) }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 if ($Tier -eq 'Standard') {
@@ -154,9 +163,21 @@ Describe 'Resolve-METCoverageMatrix' {
     Context 'Strict preset wins over Standard when a mailbox is in both' {
         BeforeEach {
             $allAddrs = @('alice@contoso.com')
+            Mock Get-EOPProtectionPolicyRule {
+                @(
+                    New-RuleStub -Name 'Strict Preset Security Policy' -SentTo $allAddrs
+                    New-RuleStub -Name 'Standard Preset Security Policy' -SentTo $allAddrs
+                )
+            }
+            Mock Get-ATPProtectionPolicyRule {
+                @(
+                    New-RuleStub -Name 'Strict Preset Security Policy' -SentTo $allAddrs
+                    New-RuleStub -Name 'Standard Preset Security Policy' -SentTo $allAddrs
+                )
+            }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
-                # Both Strict and Standard include alice — Strict should win.
+                # Both Strict and Standard include alice - Strict should win.
                 [PSCustomObject]@{ Tier=$Tier; Stack=$Stack; Enabled=$true; Rule=(New-RuleStub -SentTo $allAddrs) }
             }
             Mock Get-HostedContentFilterRule { @() }
@@ -171,10 +192,12 @@ Describe 'Resolve-METCoverageMatrix' {
         }
     }
 
-    Context 'Strict preset configured for all recipients (no include conditions — catch-all rule)' {
+    Context 'Strict preset configured for all recipients (no include conditions - catch-all rule)' {
         BeforeEach {
-            # Rule with no SentTo/SentToMemberOf/RecipientDomainIs — matches all recipients
-            $catchAllRule = New-RuleStub
+            # Rule with no SentTo/SentToMemberOf/RecipientDomainIs - matches all recipients
+            $catchAllRule = New-RuleStub -Name 'Strict Preset Security Policy'
+            Mock Get-EOPProtectionPolicyRule { @($catchAllRule) }
+            Mock Get-ATPProtectionPolicyRule { @($catchAllRule) }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 [PSCustomObject]@{ Tier=$Tier; Stack=$Stack; Enabled=($Tier -eq 'Strict'); Rule=if ($Tier -eq 'Strict') { $catchAllRule } else { $null } }
@@ -197,6 +220,8 @@ Describe 'Resolve-METCoverageMatrix' {
 
     Context 'Empty mailbox list' {
         BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { @() }
+            Mock Get-ATPProtectionPolicyRule { @() }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 [PSCustomObject]@{ Tier=$Tier; Stack=$Stack; Enabled=$false; Rule=$null }
@@ -214,6 +239,8 @@ Describe 'Resolve-METCoverageMatrix' {
 
     Context 'Anti-Phish rule promotes ATP tier when Safe Links has no match' {
         BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { @() }
+            Mock Get-ATPProtectionPolicyRule { @() }
             Mock Resolve-METPresetPolicy {
                 param($Tier, $Stack)
                 [PSCustomObject]@{ Tier=$Tier; Stack=$Stack; Enabled=$false; Rule=$null }
@@ -222,7 +249,7 @@ Describe 'Resolve-METCoverageMatrix' {
             Mock Get-SafeLinksRule           { @() }
             Mock Get-AntiPhishRule {
                 @(New-RuleStub -SentTo @('alice@contoso.com') |
-                  Add-Member -NotePropertyName Name     -NotePropertyValue 'CustomAP'  -PassThru |
+                  Add-Member -NotePropertyName Name     -NotePropertyValue 'CustomAP' -Force -PassThru |
                   Add-Member -NotePropertyName Priority -NotePropertyValue 0           -PassThru)
             }
         }
@@ -230,6 +257,24 @@ Describe 'Resolve-METCoverageMatrix' {
         It 'alice AtpTier is Custom from Anti-Phish rule' {
             $matrix = Resolve-METCoverageMatrix -AllMailboxes @('alice@contoso.com') -GroupCache @{}
             $matrix['alice@contoso.com'].AtpTier | Should -Be 'Custom'
+        }
+    }
+
+    Context 'A preset rule collection cannot be retrieved' {
+        BeforeEach {
+            Mock Get-EOPProtectionPolicyRule { throw 'Access denied' }
+            Mock Get-ATPProtectionPolicyRule { @() }
+            Mock Get-HostedContentFilterRule { @() }
+            Mock Get-SafeLinksRule { @() }
+            Mock Get-AntiPhishRule { @() }
+        }
+
+        It 'records the retrieval failure for the caller' {
+            $errors = [System.Collections.Generic.List[string]]::new()
+            $null = Resolve-METCoverageMatrix -AllMailboxes @('alice@contoso.com') -GroupCache @{} -RetrievalErrors $errors
+
+            $errors.Count | Should -BeGreaterThan 0
+            $errors[0] | Should -Match 'Access denied'
         }
     }
 }

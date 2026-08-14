@@ -4,10 +4,10 @@
 try {
     $tenantConfig = Get-CsTenantFederationConfiguration -ErrorAction Stop
     if ($tenantConfig.AllowFederatedUsers -eq $false) {
-        $issues.Add('External access (federation) is fully disabled — may impact legitimate collaboration')
+        $issues.Add('External access (federation) is fully disabled - may impact legitimate collaboration')
     }
     if ($tenantConfig.AllowPublicUsers -eq $true) {
-        $issues.Add('Access from Skype consumer users is allowed — consider disabling if not needed')
+        $issues.Add('Access from Skype consumer users is allowed - consider disabling if not needed')
     }
 }
 catch {
@@ -25,7 +25,7 @@ try {
             $issues.Add('Anonymous users are allowed to join meetings without being admitted from the lobby')
         }
         if ($globalPolicy.AutoAdmittedUsers -eq 'Everyone') {
-            $issues.Add("AutoAdmittedUsers is 'Everyone' — all users bypass the lobby; recommended: 'EveryoneInSameAndFederatedCompany' or stricter")
+            $issues.Add("AutoAdmittedUsers is 'Everyone' - all users bypass the lobby; recommended: 'EveryoneInSameAndFederatedCompany' or stricter")
         }
         if ($globalPolicy.AllowExternalNonTrustedMeetingChat -eq $true) {
             $issues.Add('External non-trusted participants are allowed to use meeting chat')
@@ -41,8 +41,8 @@ catch {
 try {
     $channelMeetingPolicy = Get-CsTeamsChannelsPolicy -ErrorAction Stop | Where-Object { $_.Identity -eq 'Global' }
     if ($channelMeetingPolicy -and $channelMeetingPolicy.AllowSharedChannelCreation -eq $true) {
-        # Shared channels bypass some external access controls — informational
-        Write-Verbose 'Shared channel creation is enabled — ensure external sharing is reviewed in shared channels.'
+        # Shared channels bypass some external access controls - informational
+        Write-Verbose 'Shared channel creation is enabled - ensure external sharing is reviewed in shared channels.'
     }
 }
 catch {

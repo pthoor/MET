@@ -36,20 +36,20 @@ $wildcardAllows = $allowEntries | Where-Object {
 $issues = [System.Collections.Generic.List[string]]::new()
 
 if (@($staleAllows).Count -gt 0) {
-    $issues.Add("$(@($staleAllows).Count) allow entry(ies) are stale (not modified in 90+ days or expired) — review and remove if no longer needed")
+    $issues.Add("$(@($staleAllows).Count) allow entry(ies) are stale (not modified in 90+ days or expired) - review and remove if no longer needed")
 }
 
 if (@($wildcardAllows).Count -gt 0) {
-    $issues.Add("$(@($wildcardAllows).Count) wildcard allow entry(ies) found — overly broad allows can bypass security controls")
+    $issues.Add("$(@($wildcardAllows).Count) wildcard allow entry(ies) found - overly broad allows can bypass security controls")
 }
 
 $allowCount = @($allowEntries).Count
 $blockCount = @($blockEntries).Count
 if ($allowCount -gt 0 -and $blockCount -eq 0) {
-    $issues.Add("$allowCount allow entries exist with no corresponding block entries — review whether all allows are intentional")
+    $issues.Add("$allowCount allow entries exist with no corresponding block entries - review whether all allows are intentional")
 }
 elseif ($allowCount -gt ($blockCount * 3) -and $blockCount -gt 0) {
-    $issues.Add("Allow entries ($allowCount) significantly outnumber block entries ($blockCount) — ensure allows are reviewed regularly")
+    $issues.Add("Allow entries ($allowCount) significantly outnumber block entries ($blockCount) - ensure allows are reviewed regularly")
 }
 
 if ($issues.Count -gt 0) {

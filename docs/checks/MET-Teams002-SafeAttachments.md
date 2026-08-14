@@ -1,4 +1,4 @@
-﻿# MET-Teams002 — Safe Attachments for Teams
+﻿# MET-Teams002 - Safe Attachments for Teams
 
 **Category:** Teams | **Severity:** High
 
@@ -8,7 +8,7 @@ Verifies that at least one Safe Attachments policy has `EnableSafeAttachmentsFor
 
 ## Why it matters
 
-Files shared via Teams channels and chats are a growing attack surface. Malicious files — macro-enabled Office documents, executables disguised as PDFs — can be shared by compromised internal accounts or external guests. Safe Attachments for Teams scans files shared in Teams before users can open them.
+Files shared via Teams channels and chats are a growing attack surface. Malicious files - macro-enabled Office documents, executables disguised as PDFs - can be shared by compromised internal accounts or external guests. Safe Attachments for Teams scans files shared in Teams before users can open them.
 
 ## Pass / Fail / Warning
 

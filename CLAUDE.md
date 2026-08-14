@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# MET — Security Posture Scanner for MDO, EXO and Teams
+# MET - Security Posture Scanner for MDO, EXO and Teams
 
 > Open-source PowerShell module for assessing Microsoft Defender for Office 365 (MDO), Exchange Online (EOP), and Microsoft Teams protection posture.
 
@@ -10,11 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Mission
 
-MET assesses the security posture of an M365 tenant across MDO, EXO/EOP, and Teams threat protection. It produces structured, machine-readable output (PSCustomObject / JSON) suitable for human review, CI/CD gates, SIEM ingestion, and dashboards. It is not a replacement for the built-in MDO Configuration Analyzer — it goes further: Teams protection, email authentication, quarantine policy hygiene, per-user coverage gaps, and Tenant Allow/Block List hygiene.
+MET assesses the security posture of an M365 tenant across MDO, EXO/EOP, and Teams threat protection. It produces structured, machine-readable output (PSCustomObject / JSON) suitable for human review, CI/CD gates, SIEM ingestion, and dashboards. It is not a replacement for the built-in MDO Configuration Analyzer - it goes further: Teams protection, email authentication, quarantine policy hygiene, per-user coverage gaps, and Tenant Allow/Block List hygiene.
 
 Comparable tools for context:
-- **ORCA** (cammurray/orca) — MDO/EOP HTML report, no Teams, no structured output, showing its age
-- **MDOThreatPolicyChecker** (microsoft/CSS-Exchange) — per-user policy resolution only, not a posture assessment
+- **ORCA** (cammurray/orca) - MDO/EOP HTML report, no Teams, no structured output, showing its age
+- **MDOThreatPolicyChecker** (microsoft/CSS-Exchange) - per-user policy resolution only, not a posture assessment
 
 ---
 
@@ -23,9 +23,9 @@ Comparable tools for context:
 ```
 MET/
 ├── MET.psd1                         # Module manifest
-├── MET.psm1                         # Module root — dot-sources Public/ and Private/
+├── MET.psm1                         # Module root - dot-sources Public/ and Private/
 ├── Public/
-│   ├── Invoke-METTriage.ps1         # Main entry point — runs all or selected checks
+│   ├── Invoke-METTriage.ps1         # Main entry point - runs all or selected checks
 │   ├── Get-METReport.ps1            # Formats and exports results (console / JSON / HTML)
 │   ├── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
 │   └── Test-METPrerequisites.ps1    # Verifies required module versions before triage
@@ -87,7 +87,7 @@ MET/
 │   │   ├── Checks.MDO.Tests.ps1          # MDO001-MDO012 (MDO013 has its own file below)
 │   │   ├── Checks.EXO.Tests.ps1          # EXO001-EXO009 (EXO010+ each have their own file below)
 │   │   ├── Checks.Teams.Tests.ps1        # Teams001-Teams005 (Teams006+ each have their own file below)
-│   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check from MDO013/EXO010+/Teams006+ onward — each check's tests now get a dedicated file (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file.
+│   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check from MDO013/EXO010+/Teams006+ onward - each check's tests now get a dedicated file (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file.
 │   └── Integration/
 │       └── Invoke-METTriage.Tests.ps1
 ├── docs/
@@ -109,28 +109,28 @@ MET/
 | Requirement | Detail |
 |---|---|
 | PowerShell | 7.4+ (tested on 7.4, 7.6) |
-| ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) — required |
-| Microsoft.Graph.Identity.SignIns / .Groups | 2.x — required |
-| MicrosoftTeams | 6.x+ (latest 7.x) — optional; Teams checks skip gracefully if absent |
+| ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) - required |
+| Microsoft.Graph.Identity.SignIns / .Groups | 2.x - required |
+| MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
 
-No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only — on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there.
+No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only - on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there.
 
-`RequiredModules` is deliberately empty in `MET.psd1` — declaring them there causes a hard import failure when a dependency is missing, which would prevent `Test-METPrerequisites` from running and guiding the user. Dependencies are checked at runtime instead.
+`RequiredModules` is deliberately empty in `MET.psd1` - declaring them there causes a hard import failure when a dependency is missing, which would prevent `Test-METPrerequisites` from running and guiding the user. Dependencies are checked at runtime instead.
 
 ---
 
 ## Development Commands
 
 ```powershell
-# Import the module locally (no build step — this is a pure PowerShell script module)
+# Import the module locally (no build step - this is a pure PowerShell script module)
 Import-Module ./MET.psd1 -Force
 
-# Lint (matches CI's lint job exactly — must be zero errors)
+# Lint (matches CI's lint job exactly - must be zero errors)
 Install-Module PSScriptAnalyzer -MinimumVersion 1.21.0 -Scope CurrentUser
 Invoke-ScriptAnalyzer -Path Public,Private,Checks -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
 
-# Unit tests (no tenant connection required — all EXO/Graph/Teams cmdlets are mocked)
+# Unit tests (no tenant connection required - all EXO/Graph/Teams cmdlets are mocked)
 $config = New-PesterConfiguration
 $config.Run.Path = './Tests/Unit'
 $config.Output.Verbosity = 'Detailed'
@@ -142,7 +142,7 @@ Invoke-Pester -Path ./Tests/Unit/Checks.MDO.Tests.ps1 -Output Detailed
 # Run a single test by name
 Invoke-Pester -Path ./Tests/Unit -FullNameFilter '*MET-EXO001*' -Output Detailed
 
-# Integration tests (also mocked — no live tenant required)
+# Integration tests (also mocked - no live tenant required)
 Invoke-Pester -Path ./Tests/Integration -Output Detailed
 ```
 
@@ -152,15 +152,15 @@ CI (`pester.yml`) runs three jobs in order: `lint` (PSScriptAnalyzer, zero error
 
 ## Coding Conventions
 
-- **Approved verbs only** — `Invoke-`, `Get-`, `Test-`, `Connect-`, `New-`, `Resolve-`
+- **Approved verbs only** - `Invoke-`, `Get-`, `Test-`, `Connect-`, `New-`, `Resolve-`
 - **No inline comments** unless a section is genuinely non-obvious (e.g., a workaround for a known API quirk)
-- **Output shape** — always `PSCustomObject` via `New-METCheckResult`, never raw strings
-- **Error handling** — `try/catch` on all EXO/Graph/Teams calls; non-terminating errors surfaced in the `Error` field of the result object, not thrown. Populate it via `New-METCheckResult`'s `-ErrorMessage` parameter, never `-Error` — `$Error` is a PowerShell automatic variable and using it as a param name trips `PSAvoidAssignmentToAutomaticVariable`.
-- **No `Write-Host` in checks or library code** — use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues. `Get-METReport` and `Test-METPrerequisites` are the sole exceptions (coloured console display output); `PSAvoidUsingWriteHost` is disabled repo-wide in `PSScriptAnalyzerSettings.psd1` for that reason.
-- **Secure by default** — no credential params, no plain-text secrets; all auth via `Connect-METSession` using modern auth / service principal / managed identity
-- **Param blocks** — all public functions use `[CmdletBinding()]` and typed parameters
+- **Output shape** - always `PSCustomObject` via `New-METCheckResult`, never raw strings
+- **Error handling** - `try/catch` on all EXO/Graph/Teams calls; non-terminating errors surfaced in the `Error` field of the result object, not thrown. Populate it via `New-METCheckResult`'s `-ErrorMessage` parameter, never `-Error` - `$Error` is a PowerShell automatic variable and using it as a param name trips `PSAvoidAssignmentToAutomaticVariable`.
+- **No `Write-Host` in checks or library code** - use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues. `Get-METReport` and `Test-METPrerequisites` are the sole exceptions (coloured console display output); `PSAvoidUsingWriteHost` is disabled repo-wide in `PSScriptAnalyzerSettings.psd1` for that reason.
+- **Secure by default** - no credential params, no plain-text secrets; all auth via `Connect-METSession` using modern auth / service principal / managed identity
+- **Param blocks** - all public functions use `[CmdletBinding()]` and typed parameters
 - **No positional parameters** on public functions
-- Check scripts are standalone `.ps1` files, not functions — see [Check Execution Model](#check-execution-model) below.
+- Check scripts are standalone `.ps1` files, not functions - see [Check Execution Model](#check-execution-model) below.
 
 ---
 
@@ -170,7 +170,7 @@ Every check returns one or more objects from `New-METCheckResult`. Shape:
 
 ```powershell
 [PSCustomObject]@{
-    CheckId          = 'MET-MDO001'           # String — matches filename prefix
+    CheckId          = 'MET-MDO001'           # String - matches filename prefix
     Category         = 'MDO'                   # MDO | EXO | Teams
     Name             = 'Safe Links Policy'     # Human-readable name
     Result           = 'Fail'                  # Pass | Fail | Warning | Info | NotApplicable
@@ -187,7 +187,7 @@ Every check returns one or more objects from `New-METCheckResult`. Shape:
 
 ---
 
-## Invoke-METTriage — Behaviour
+## Invoke-METTriage - Behaviour
 
 ```powershell
 # Run all checks
@@ -215,23 +215,23 @@ Invoke-METTriage -PassThru
 Invoke-METTriage -Detailed
 ```
 
-Returns `[PSCustomObject[]]` — the full collection of check results. `Get-METReport` handles formatting.
+Returns `[PSCustomObject[]]` - the full collection of check results. `Get-METReport` handles formatting.
 
-> `-DelegatedOrganization` is declared on the param block but not yet wired into the check-execution path — it's a placeholder for future MSSP support (hence its exclusion from `PSReviewUnusedParameter` in `PSScriptAnalyzerSettings.psd1`). Don't assume it changes behavior today.
+> `-DelegatedOrganization` is declared on the param block but not yet wired into the check-execution path - it's a placeholder for future MSSP support (hence its exclusion from `PSReviewUnusedParameter` in `PSScriptAnalyzerSettings.psd1`). Don't assume it changes behavior today.
 
 ### Check Execution Model
 
 `Invoke-METTriage` does not dot-source `Checks/` at module load time (unlike `Public/` and `Private/`, which `MET.psm1` loads on import). Instead, each call to `Invoke-METTriage`:
 
-1. Discovers check scripts fresh via `Get-ChildItem -Path Checks -Recurse -Filter 'MET-*.ps1'` — dropping a new file into `Checks/<Category>/` is enough to register it; no manifest or export list to update.
+1. Discovers check scripts fresh via `Get-ChildItem -Path Checks -Recurse -Filter 'MET-*.ps1'` - dropping a new file into `Checks/<Category>/` is enough to register it; no manifest or export list to update.
 2. Pre-fetches shared context once (currently `AcceptedDomains` via `Get-AcceptedDomain`) into a `$METContext` hashtable, so every check that needs it doesn't repeat the same round-trip.
-3. Runs each check inside a wrapper scriptblock — `& { param($METContext) . $checkPath } $METContext` — rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METTriage` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
+3. Runs each check inside a wrapper scriptblock - `& { param($METContext) . $checkPath } $METContext` - rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METTriage` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
 4. Catches any terminating error per-check and converts it into a synthetic `Fail`/`High` result with the exception text in `Error`, so one broken check never aborts the run.
-5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object — see `Get-METAggregationNoun` in `Invoke-METTriage.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
+5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object - see `Get-METAggregationNoun` in `Invoke-METTriage.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
 
 ---
 
-## Get-METReport — Behaviour
+## Get-METReport - Behaviour
 
 ```powershell
 # Console summary (default)
@@ -257,13 +257,13 @@ Console output must include:
 
 ## HTML Report Specification
 
-The HTML report is a **single self-contained file** — all CSS and JS inlined, no CDN dependencies, works offline. It auto-opens in the default browser after generation. Inspired by microsoft/adoqr's report UX.
+The HTML report is a **single self-contained file** - all CSS and JS inlined, no CDN dependencies, works offline. It auto-opens in the default browser after generation. Inspired by microsoft/adoqr's report UX.
 
 ### Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  MET — Security Posture Scanner for MDO, EXO and Teams                │
+│  MET - Security Posture Scanner for MDO, EXO and Teams                │
 │  Tenant: contoso.onmicrosoft.com   Run: 2026-06-01 14:32 UTC│
 ├─────────────────────────────────────────────────────────────┤
 │  [Score: 74 / Fair]  MDO: 81  EXO: 68  Teams: 72           │
@@ -296,7 +296,7 @@ Tab counts update in real-time as filters are applied.
 
 ### Search and Filter Bar
 
-- Free-text search box — filters cards live on `CheckId`, `Name`, `AffectedObject`, `Finding` (case-insensitive, no submit button)
+- Free-text search box - filters cards live on `CheckId`, `Name`, `AffectedObject`, `Finding` (case-insensitive, no submit button)
 - Severity filter dropdown: All / Critical / High / Medium / Low / Informational
 - Result filter dropdown: All / Fail / Warning / Pass / NotApplicable
 - Filters and search combine (AND logic)
@@ -319,7 +319,7 @@ Each check result renders as a card:
 
 - Card border color = Severity (red=Critical, orange=High, yellow=Medium, blue=Low, grey=Info)
 - Result badge = Pass (green) / Fail (red) / Warning (amber) / N/A (grey)
-- "How to fix" section is collapsed by default, expands on click — contains the `Recommendation` field rendered as numbered steps if line-breaks are present
+- "How to fix" section is collapsed by default, expands on click - contains the `Recommendation` field rendered as numbered steps if line-breaks are present
 - "Microsoft Docs" links to `ReferenceUrl`
 - Pass cards render collapsed by default (title bar only) to reduce noise; expandable
 - Error cards (check failed to run) shown with a distinct style and the `Error` field content
@@ -343,10 +343,10 @@ Displayed as a prominent section above the check cards (collapsed by default on 
 
 ### Styling
 
-- Dark/light mode — respects `prefers-color-scheme`
+- Dark/light mode - respects `prefers-color-scheme`
 - Microsoft Fluent-adjacent aesthetic: clean sans-serif, subtle card shadows, category colour coding consistent with MDO portal (blue for MDO, teal for EXO, purple for Teams)
-- Responsive — usable at 1024px minimum width; not mobile-optimised
-- No frameworks (no Bootstrap, no Tailwind) — plain CSS with CSS variables for theming
+- Responsive - usable at 1024px minimum width; not mobile-optimised
+- No frameworks (no Bootstrap, no Tailwind) - plain CSS with CSS variables for theming
 
 ### JSON Output Schema
 
@@ -383,15 +383,15 @@ Schema documented at `docs/schema/MET-report-schema.json` (JSON Schema draft-07)
 
 ---
 
-## Connect-METSession — Behaviour
+## Connect-METSession - Behaviour
 
 Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`. Detects existing sessions and skips reconnect. Supports:
 
 - Interactive (device code / browser)
 - Service principal with certificate (`-CertificateThumbprint`, `-AppId`, `-TenantId`)
 - Managed Identity (`-ManagedIdentity`)
-- Delegated org (`-DelegatedOrganization`) — for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name
-- `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` — opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
+- Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name
+- `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` - opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
 
 ---
 
@@ -413,7 +413,7 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-MDO010 | Priority Accounts | Priority account tag applied; differentiated protection policy active |
 | MET-MDO011 | User Tags | Tags in use; alert policies referencing tags exist |
 | MET-MDO012 | Safe Documents | `EnableSafeDocs` enabled; `AllowSafeDocsOpen` disabled (via `Get-AtpPolicyForO365`) |
-| MET-MDO013 | Policy Precedence Conflicts | Reuses `Resolve-METCoverageMatrix`/`Expand-METRuleRecipients` from MDO008 to find custom EOP/Safe Links/Anti-Phish rules whose targeted recipients are also covered by a Standard/Strict preset — since presets always win, the custom rule is silently inert for the overlap even though it looks active |
+| MET-MDO013 | Policy Precedence Conflicts | Finds custom anti-spam, anti-malware, Anti-Phish, Safe Links, and Safe Attachments rules whose targeted recipients are also covered by a Standard/Strict preset; incomplete source data produces a failed check instead of a clean result |
 
 ### EXO Checks
 
@@ -427,14 +427,14 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-EXO006 | User Reported Message Settings | Report button mode (built-in Microsoft vs. non-Microsoft add-in via `EnableThirdPartyAddress`); `EnableReportToMicrosoft`; SecOps mailbox routing for all three flows (Junk / Not Junk / Phishing via `ReportJunkToCustomizedAddress` etc.); user post-review notifications |
 | MET-EXO007 | Transport Rule Audit | Rules that bypass spam filtering (`SCLJunk=-1`) or disable safe links; informational listing |
 | MET-EXO008 | Quarantine Retention | `QuarantineRetentionPeriod` ≥ 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30) |
-| MET-EXO009 | Quarantine Policy Verdict Alignment | Cross-references every filter policy (anti-spam, anti-malware, anti-phish, Safe Attachments) with its assigned quarantine tag; verifies `PermissionToRelease = $false` for high-risk verdicts (Malware, High-Confidence Phish, impersonation) and warns for medium-risk (Phish, Spoof, Mailbox Intelligence) — catches custom quarantine policies that are too permissive for the verdict they protect |
-| MET-EXO010 | Direct Send | `Get-OrganizationConfig` → `RejectDirectSend` — unauthenticated senders can otherwise relay mail through the tenant's own domain without SMTP auth, a path actively abused to spoof internal senders |
-| MET-EXO011 | Mail Flow Connector Hygiene | `Get-InboundConnector` — flags enabled connectors with `RequireTls` off or no `SenderIPAddresses`/`SenderDomains` restriction; outbound connectors out of scope |
-| MET-EXO012 | Mailbox Forwarding | `Get-EXOMailbox` `ForwardingSmtpAddress`/`ForwardingAddress`/`DeliverToMailboxAndForward` — surfaces mailboxes with forwarding configured, flagging "silent" forwarding (no local copy) as the higher-risk BEC persistence pattern; inbox-rule-based forwarding is out of scope (does not scale to `Get-InboxRule` per mailbox) |
-| MET-EXO013 | Spoof Intelligence Allow-List | `Get-TenantAllowBlockListSpoofItems -Action Allow` — reviews standing spoof-intelligence exceptions, distinguishing Internal vs. External spoof type |
-| MET-EXO014 | Advanced Delivery Policy | `Get-ExoPhishSimOverrideRule` — surfaces enabled phishing-simulation/SecOps override rules for periodic review (Info-only, no correct value) |
-| MET-EXO015 | External Sender Warning Tag | `Get-ExternalInOutlook` — the native Outlook "External" banner, a user-facing (not filter-level) signal against lookalike-domain/BEC senders |
-| MET-EXO016 | ARC Trusted Sealers | `Get-ArcConfig` → `ArcTrustedSealers` — Info-only listing of domains trusted to vouch for message authentication results via Authenticated Received Chain |
+| MET-EXO009 | Quarantine Policy Verdict Alignment | Cross-references every filter policy (anti-spam, anti-malware, anti-phish, Safe Attachments) with its assigned quarantine tag; verifies `PermissionToRelease = $false` for high-risk verdicts (Malware, High-Confidence Phish, impersonation) and warns for medium-risk (Phish, Spoof, Mailbox Intelligence) - catches custom quarantine policies that are too permissive for the verdict they protect |
+| MET-EXO010 | Direct Send | `Get-OrganizationConfig` → `RejectDirectSend` - unauthenticated senders can otherwise relay mail through the tenant's own domain without SMTP auth, a path actively abused to spoof internal senders |
+| MET-EXO011 | Mail Flow Connector Hygiene | `Get-InboundConnector` - flags enabled connectors with `RequireTls` off or no effective source IP/TLS certificate authentication binding; `SenderDomains` alone is not authentication |
+| MET-EXO012 | Mailbox Forwarding | `Get-EXOMailbox` `ForwardingSmtpAddress`/`ForwardingAddress`/`DeliverToMailboxAndForward` - surfaces mailboxes with forwarding configured, flagging "silent" forwarding (no local copy) as the higher-risk BEC persistence pattern; inbox-rule-based forwarding is out of scope (does not scale to `Get-InboxRule` per mailbox) |
+| MET-EXO013 | Spoof Intelligence Allow-List | `Get-TenantAllowBlockListSpoofItems -Action Allow` - reviews standing spoof-intelligence exceptions, distinguishing Internal vs. External spoof type |
+| MET-EXO014 | Advanced Delivery Policy | `Get-ExoPhishSimOverrideRule` and `Get-ExoSecOpsOverrideRule` - surfaces enforceable phishing-simulation and SecOps mailbox override rules for periodic review (Info-only when retrieval succeeds) |
+| MET-EXO015 | External Sender Warning Tag | `Get-ExternalInOutlook` - the native Outlook "External" banner, a user-facing (not filter-level) signal against lookalike-domain/BEC senders |
+| MET-EXO016 | ARC Trusted Sealers | `Get-ArcConfig` → `ArcTrustedSealers` - Info-only listing of domains trusted to vouch for message authentication results via Authenticated Received Chain |
 
 ### Teams Checks
 
@@ -445,9 +445,9 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-Teams003 | Meeting Protection | External access settings; anonymous join policy; lobby bypass settings from a security perspective |
 | MET-Teams004 | ZAP for Teams | `TeamsProtectionPolicy.ZapEnabled`; malware and high-confidence phish quarantine tags set to `AdminOnlyAccessPolicy` |
 | MET-Teams005 | Teams User Reporting | `ReportTeamsMsgEnabled` in report submission policy; `AllowSecurityEndUserReporting` in Teams messaging policy |
-| MET-Teams006 | External Access / Federation Allow-List | `Get-CsTenantFederationConfiguration` — flags open federation (`AllowAllKnownDomains`) and `AllowTeamsConsumer`; distinct control plane from Teams003's meeting-level anonymous join |
-| MET-Teams007 | Guest Messaging/Calling Configuration | `Get-CsTeamsGuestMessagingConfiguration`/`Get-CsTeamsGuestCallingConfiguration` — flags guest-initiated 1:1 chat and private calling; distinct from federation (Teams006) and meeting join (Teams003) |
-| MET-Teams008 | App Permission Policy Exposure | `Get-CsTeamsAppPermissionPolicy` (read-only) — flags any `*CatalogAppsType` not restricted to an explicit `AllowedAppList`/`BlockedAppList`, detected by exclusion since Microsoft requires policy changes via the admin center, not PowerShell `Set-`/`New-` |
+| MET-Teams006 | External Access / Federation Allow-List | `Get-CsTenantFederationConfiguration` - flags open federation (`AllowAllKnownDomains`) and `AllowTeamsConsumer`; distinct control plane from Teams003's meeting-level anonymous join |
+| MET-Teams007 | Guest Messaging/Calling Configuration | `Get-CsTeamsGuestMessagingConfiguration`/`Get-CsTeamsGuestCallingConfiguration` - flags guest-initiated 1:1 chat and private calling; distinct from federation (Teams006) and meeting join (Teams003) |
+| MET-Teams008 | App Permission Policy Exposure | `Get-CsTeamsAppPermissionPolicy` (read-only) - flags any `*CatalogAppsType` not restricted to an explicit `AllowedAppList`/`BlockedAppList`, detected by exclusion since Microsoft requires policy changes via the admin center, not PowerShell `Set-`/`New-` |
 
 ---
 
@@ -468,7 +468,7 @@ Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration
 - Azure Automation / GitHub Actions wrapper examples
 - Signed module release for PSGallery publication
-- Attack Simulation Training coverage and Secure Score correlation — see ROADMAP.md "Under Investigation" (each needs a new Graph scope/module dependency decision before becoming a committed check)
+- Attack Simulation Training coverage and Secure Score correlation - see ROADMAP.md "Under Investigation" (each needs a new Graph scope/module dependency decision before becoming a committed check)
 
 ---
 
@@ -485,7 +485,17 @@ Backlog (not yet started):
 ## Non-Goals
 
 - No GUI
-- No agent or scheduled runner (out of scope — consumers can wrap in Azure Automation / GitHub Actions themselves)
-- No remediation / auto-fix — assessment only
+- No agent or scheduled runner (out of scope - consumers can wrap in Azure Automation / GitHub Actions themselves)
+- No remediation / auto-fix - assessment only
 - No Terraform, ARM, or Python
 - No dependency on the legacy `MSOnline` or `AzureAD` modules
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

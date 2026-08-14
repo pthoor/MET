@@ -31,6 +31,8 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
                     RequireTls               = $true
                     SenderIPAddresses        = @('203.0.113.5')
                     SenderDomains            = @()
+                    RestrictDomainsToIPAddresses = $true
+                    RestrictDomainsToCertificate = $false
                     TlsSenderCertificateName = 'partner.contoso.com'
                 }
             }
@@ -51,6 +53,8 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
                     RequireTls               = $false
                     SenderIPAddresses        = @('203.0.113.10')
                     SenderDomains            = @()
+                    RestrictDomainsToIPAddresses = $true
+                    RestrictDomainsToCertificate = $false
                     TlsSenderCertificateName = $null
                 }
             }
@@ -73,6 +77,8 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
                     RequireTls               = $true
                     SenderIPAddresses        = @()
                     SenderDomains            = @()
+                    RestrictDomainsToIPAddresses = $false
+                    RestrictDomainsToCertificate = $false
                     TlsSenderCertificateName = $null
                 }
             }
@@ -80,7 +86,7 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
         It 'Returns Warning and mentions no sender restriction' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'no sender IP or domain restriction'
+            $results[0].Finding | Should -Match 'no authenticated sender IP or TLS certificate restriction'
         }
     }
 
@@ -94,6 +100,8 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
                     RequireTls               = $false
                     SenderIPAddresses        = @()
                     SenderDomains            = @()
+                    RestrictDomainsToIPAddresses = $false
+                    RestrictDomainsToCertificate = $false
                     TlsSenderCertificateName = $null
                 }
             }
@@ -101,6 +109,51 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
         It 'Returns Info since there are no enabled connectors' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Info'
+        }
+    }
+
+    Context 'connector scoped only by sender domain' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name                         = 'DomainOnlyConnector'
+                    Enabled                      = $true
+                    ConnectorType                = 'Partner'
+                    RequireTls                   = $true
+                    SenderIPAddresses            = @()
+                    SenderDomains                = @('partner.example')
+                    RestrictDomainsToIPAddresses = $false
+                    RestrictDomainsToCertificate = $false
+                    TlsSenderCertificateName     = $null
+                }
+            }
+        }
+        It 'Returns Warning because sender domains do not authenticate the source' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'SenderDomains does not authenticate'
+        }
+    }
+
+    Context 'connector authenticated by TLS sender certificate' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name                         = 'CertificateConnector'
+                    Enabled                      = $true
+                    ConnectorType                = 'Partner'
+                    RequireTls                   = $true
+                    SenderIPAddresses            = @()
+                    SenderDomains                = @('partner.example')
+                    RestrictDomainsToIPAddresses = $false
+                    RestrictDomainsToCertificate = $true
+                    TlsSenderCertificateName     = '*.partner.example'
+                }
+            }
+        }
+        It 'Returns Pass without sender IP addresses' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
         }
     }
 

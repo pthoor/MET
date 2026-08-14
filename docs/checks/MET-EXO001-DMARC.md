@@ -1,4 +1,4 @@
-﻿# MET-EXO001 — DMARC
+﻿# MET-EXO001 - DMARC
 
 **Category:** EXO | **Severity:** High
 
@@ -15,7 +15,7 @@ For `*.onmicrosoft.com` tenant domains, the recommendation points to Microsoft 3
 
 ## Why it matters
 
-DMARC (Domain-based Message Authentication, Reporting and Conformance) ties together SPF and DKIM into an enforcement policy. A policy of `p=none` is monitoring-only — it generates reports but does not protect recipients from spoofed mail. Moving to `p=quarantine` or `p=reject` is the single most impactful email authentication step a domain owner can take.
+DMARC (Domain-based Message Authentication, Reporting and Conformance) ties together SPF and DKIM into an enforcement policy. A policy of `p=none` is monitoring-only - it generates reports but does not protect recipients from spoofed mail. Moving to `p=quarantine` or `p=reject` is the single most impactful email authentication step a domain owner can take.
 
 ## Pass / Fail / Warning
 

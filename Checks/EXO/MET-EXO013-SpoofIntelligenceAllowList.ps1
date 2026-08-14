@@ -14,7 +14,7 @@ catch {
 if ($allowEntries.Count -eq 0) {
     New-METCheckResult -CheckId 'MET-EXO013' -Category EXO -Name 'Spoof Intelligence Allow-List' `
         -Result Info -Severity Low -AffectedObject 'Spoof Intelligence Allow List' `
-        -Finding 'No spoof intelligence allow entries found — no standing exceptions to anti-spoofing protection' `
+        -Finding 'No spoof intelligence allow entries found - no standing exceptions to anti-spoofing protection' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-tenantallowblocklistspoofitems'
     return
 }
@@ -37,5 +37,5 @@ if ($count -gt 10) {
 New-METCheckResult -CheckId 'MET-EXO013' -Category EXO -Name 'Spoof Intelligence Allow-List' `
     -Result Warning -Severity High -AffectedObject "Spoof Intelligence Allow List ($count entries)" `
     -Finding ($findingParts -join '; ') `
-    -Recommendation 'Review each allowed spoof pair. These are often created automatically when spoof intelligence learns a legitimate sender pattern, or manually during incident response, and are meant to be periodically reviewed — not permanent. Remove entries for senders/infrastructure no longer in use. External spoof types are higher risk than Internal since they permit an outside domain to impersonate a sender address. Run: Get-TenantAllowBlockListSpoofItems -Action Allow | Remove-TenantAllowBlockListSpoofItems to clean up stale entries.' `
+    -Recommendation 'Review each allowed spoof pair. These are often created automatically when spoof intelligence learns a legitimate sender pattern, or manually during incident response, and are meant to be periodically reviewed - not permanent. Remove entries for senders/infrastructure no longer in use. External spoof types are higher risk than Internal since they permit an outside domain to impersonate a sender address. Run: Get-TenantAllowBlockListSpoofItems -Action Allow | Remove-TenantAllowBlockListSpoofItems to clean up stale entries.' `
     -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-tenantallowblocklistspoofitems'

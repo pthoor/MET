@@ -40,9 +40,9 @@
         } elseif ($m.Optional -and $found) {
             'Upgrade needed (optional)'
         } elseif (-not $found) {
-            'Fail — not installed'
+            'Fail - not installed'
         } else {
-            "Fail — installed $($found.Version), need $($m.Min)+"
+            "Fail - installed $($found.Version), need $($m.Min)+"
         }
 
         $notes = if (-not $versionOk -and -not $m.Optional) {
@@ -54,7 +54,7 @@
         $checks.Add([PSCustomObject]@{
             Component = $m.Name
             Required  = "$($m.Min)+"
-            Installed = if ($found) { $found.Version.ToString() } else { '—' }
+            Installed = if ($found) { $found.Version.ToString() } else { '-' }
             Optional  = $m.Optional
             Status    = $status
             Notes     = $notes
@@ -68,11 +68,11 @@
             Required  = 'dig or nslookup'
             Installed = if (Get-Command dig -CommandType Application -ErrorAction SilentlyContinue) { 'dig found' }
                         elseif (Get-Command nslookup -CommandType Application -ErrorAction SilentlyContinue) { 'nslookup found' }
-                        else { '—' }
+                        else { '-' }
             Optional  = $false
             Status    = if (Get-Command dig -CommandType Application -ErrorAction SilentlyContinue) { 'OK' }
                         elseif (Get-Command nslookup -CommandType Application -ErrorAction SilentlyContinue) { 'OK' }
-                        else { 'Fail — install dig or nslookup for DMARC/SPF checks' }
+                        else { 'Fail - install dig or nslookup for DMARC/SPF checks' }
             Notes     = 'DMARC (EXO001) and SPF (EXO003) require dig or nslookup on non-Windows'
         })
     }

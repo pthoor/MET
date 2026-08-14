@@ -4,10 +4,7 @@ if ($METContext -and $METContext.AllMailboxes) {
     $allMailboxes = $METContext.AllMailboxes
 } else {
     try {
-        $allMailboxes = @(
-            Get-EXOMailbox -ResultSize Unlimited -PropertySets Minimum -ErrorAction Stop |
-            Select-Object -ExpandProperty PrimarySmtpAddress
-        )
+        $allMailboxes = @(Get-METAssessableMailboxes)
         if ($METContext) { $METContext.AllMailboxes = $allMailboxes }
     }
     catch {
@@ -32,9 +29,60 @@ if ($total -eq 0) {
 $groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
 
 # ── Build per-mailbox EOP + ATP coverage matrix ───────────────────────────────
-$matrix = Resolve-METCoverageMatrix -AllMailboxes $allMailboxes -GroupCache $groupCache
+$retrievalErrors = [System.Collections.Generic.List[string]]::new()
+$matrix = Resolve-METCoverageMatrix -AllMailboxes $allMailboxes -GroupCache $groupCache -RetrievalErrors $retrievalErrors
 
-# Cache the matrix for use by Get-METReport (HTML user-coverage table)
+if ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-MDO008' -Category MDO -Name 'Preset Policy Coverage' `
+        -Result Fail -Severity High -AffectedObject 'Policy Coverage Data' `
+        -Finding 'Unable to complete policy coverage assessment because required policy or recipient data could not be retrieved.' `
+        -Recommendation 'Verify Exchange Online and Microsoft Graph permissions and retry the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-presetpolicies' -ErrorMessage ($retrievalErrors -join "`n")
+    return
+}
+
+$contradictionSets = @(
+    @{ Label = 'EOP Preset';       Getter = { @(Get-EOPProtectionPolicyRule -ErrorAction Stop | Where-Object State -eq 'Enabled') }; Rules = @() },
+    @{ Label = 'MDO Preset';       Getter = { @(Get-ATPProtectionPolicyRule -ErrorAction Stop | Where-Object State -eq 'Enabled') }; Rules = @() },
+    @{ Label = 'Safe Links';       Getter = { @(Get-SafeLinksRule -ErrorAction Stop | Where-Object State -eq 'Enabled') }; Rules = @() },
+    @{ Label = 'Safe Attachments'; Getter = { @(Get-SafeAttachmentRule -ErrorAction Stop | Where-Object State -eq 'Enabled') }; Rules = @() },
+    @{ Label = 'Anti-Phishing';    Getter = { @(Get-AntiPhishRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Office365 AntiPhish Default' }) }; Rules = @() },
+    @{ Label = 'Anti-Spam';        Getter = { @(Get-HostedContentFilterRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Default' }) }; Rules = @() }
+)
+
+foreach ($set in $contradictionSets) {
+    try { $set.Rules = @(& $set.Getter) }
+    catch { $retrievalErrors.Add("Unable to retrieve $($set.Label) rules for contradiction analysis. $($_.ToString())") }
+}
+
+if ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-MDO008' -Category MDO -Name 'Preset Policy Coverage' `
+        -Result Fail -Severity High -AffectedObject 'Policy Contradiction Data' `
+        -Finding 'Unable to complete policy contradiction assessment because one or more rule collections could not be retrieved.' `
+        -Recommendation 'Verify Exchange Online permissions and retry the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-presetpolicies' -ErrorMessage ($retrievalErrors -join "`n")
+    return
+}
+
+$allContradictions = [System.Collections.Generic.List[PSCustomObject]]::new()
+foreach ($set in $contradictionSets) {
+    $rules = @($set.Rules)
+    if ($rules.Count -eq 0) { continue }
+    $found = @(Find-METRuleContradictions -Rules $rules -AllMailboxes $allMailboxes -GroupCache $groupCache -PolicyType $set.Label -RetrievalErrors $retrievalErrors)
+    foreach ($c in $found) { $allContradictions.Add($c) }
+}
+
+if ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-MDO008' -Category MDO -Name 'Preset Policy Coverage' `
+        -Result Fail -Severity High -AffectedObject 'Policy Recipient Data' `
+        -Finding 'Unable to complete policy contradiction assessment because one or more group scopes could not be expanded.' `
+        -Recommendation 'Verify Exchange Online and Microsoft Graph group-read permissions and retry the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-presetpolicies' -ErrorMessage ($retrievalErrors -join "`n")
+    return
+}
+
+# Cache only a matrix whose underlying rule collections and recipient expansion
+# completed successfully. A later check must never reuse incomplete coverage.
 if ($METContext) { $METContext.CoverageMatrix = $matrix }
 
 # ── Analyse gaps ──────────────────────────────────────────────────────────────
@@ -88,10 +136,10 @@ if ($eopGap.Count -gt 0) {
     })
 
     New-METCheckResult -CheckId 'MET-MDO008' -Category MDO `
-        -Name 'Preset Policy Coverage — EOP Gap' `
+        -Name 'Preset Policy Coverage - EOP Gap' `
         -Result $level -Severity High `
         -AffectedObject "$($eopGap.Count) of $total mailboxes" `
-        -Finding "$($eopGap.Count) mailbox(es) ($pct) are covered only by the EOP Default policy — no Standard/Strict preset or custom anti-spam/anti-malware rule matches them.`n    $(Format-Sample $sampleLines)" `
+        -Finding "$($eopGap.Count) mailbox(es) ($pct) are covered only by the EOP Default policy - no Standard/Strict preset or custom anti-spam/anti-malware rule matches them.`n    $(Format-Sample $sampleLines)" `
         -Recommendation "1. Open https://security.microsoft.com > Email & collaboration > Policies & rules > Preset security policies.`n2. Edit the Standard or Strict preset and add these mailboxes (or their groups/domains) to the EOP included recipients list.`n3. Ensure the EOP and MDO preset rules share the same conditions so protection is consistent across both stacks.`n4. $drillDown" `
         -ReferenceUrl 'https://aka.ms/mdo-presetpolicies'
 }
@@ -107,11 +155,11 @@ if ($atpGap.Count -gt 0) {
     })
 
     New-METCheckResult -CheckId 'MET-MDO008' -Category MDO `
-        -Name 'Preset Policy Coverage — MDO Gap' `
+        -Name 'Preset Policy Coverage - MDO Gap' `
         -Result $level -Severity High `
         -AffectedObject "$($atpGap.Count) of $total mailboxes" `
-        -Finding "$($atpGap.Count) mailbox(es) ($pct) have no explicit Safe Links, Safe Attachments, or Anti-Phish policy — they receive only the MDO Built-in Protection baseline.`n    $(Format-Sample $sampleLines)" `
-        -Recommendation "1. Open https://security.microsoft.com > Email & collaboration > Policies & rules > Preset security policies.`n2. Edit the Standard or Strict MDO preset rule and ensure these mailboxes are included.`n3. Verify the MDO preset conditions match the EOP preset conditions — they are configured separately and can diverge.`n4. $drillDown" `
+        -Finding "$($atpGap.Count) mailbox(es) ($pct) have no explicit Safe Links, Safe Attachments, or Anti-Phish policy - they receive only the MDO Built-in Protection baseline.`n    $(Format-Sample $sampleLines)" `
+        -Recommendation "1. Open https://security.microsoft.com > Email & collaboration > Policies & rules > Preset security policies.`n2. Edit the Standard or Strict MDO preset rule and ensure these mailboxes are included.`n3. Verify the MDO preset conditions match the EOP preset conditions - they are configured separately and can diverge.`n4. $drillDown" `
         -ReferenceUrl 'https://aka.ms/mdo-presetpolicies'
 }
 
@@ -123,10 +171,10 @@ if ($mismatch.Count -gt 0) {
     })
 
     New-METCheckResult -CheckId 'MET-MDO008' -Category MDO `
-        -Name 'Preset Policy Coverage — EOP/MDO Mismatch' `
+        -Name 'Preset Policy Coverage - EOP/MDO Mismatch' `
         -Result Warning -Severity Medium `
         -AffectedObject "$($mismatch.Count) of $total mailboxes" `
-        -Finding "$($mismatch.Count) mailbox(es) have a higher EOP protection tier than their MDO protection tier — the EOP and MDO preset policy conditions have diverged.`n    $(Format-Sample $sampleLines)" `
+        -Finding "$($mismatch.Count) mailbox(es) have a higher EOP protection tier than their MDO protection tier - the EOP and MDO preset policy conditions have diverged.`n    $(Format-Sample $sampleLines)" `
         -Recommendation "1. Open https://security.microsoft.com > Email & collaboration > Policies & rules > Preset security policies.`n2. Compare the 'Apply to' conditions of the EOP rule and MDO rule for the same tier.`n3. Align the SentTo, MemberOf, and RecipientDomainIs conditions so both rules cover the same recipients.`n4. $drillDown" `
         -ReferenceUrl 'https://aka.ms/mdo-presetpolicies'
 }
@@ -135,29 +183,6 @@ if ($mismatch.Count -gt 0) {
 # Checks all active policy rules for users who appear in both include and exception
 # conditions.  Exception conditions always win in Exchange Online, so such users
 # silently fall through to a lower-priority policy even though they seem covered.
-
-$contradictionSets = @(
-    @{ Label = 'EOP Preset';       Getter = { @(Get-EOPProtectionPolicyRule -ErrorAction Stop | Where-Object State -eq 'Enabled') } },
-    @{ Label = 'MDO Preset';       Getter = { @(Get-ATPProtectionPolicyRule -ErrorAction Stop | Where-Object State -eq 'Enabled') } },
-    @{ Label = 'Safe Links';       Getter = { @(Get-SafeLinksRule -ErrorAction Stop | Where-Object State -eq 'Enabled') } },
-    @{ Label = 'Safe Attachments'; Getter = { @(Get-SafeAttachmentRule -ErrorAction Stop | Where-Object State -eq 'Enabled') } },
-    @{ Label = 'Anti-Phishing';    Getter = { @(Get-AntiPhishRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Office365 AntiPhish Default' }) } },
-    @{ Label = 'Anti-Spam';        Getter = { @(Get-HostedContentFilterRule -ErrorAction Stop | Where-Object { $_.State -eq 'Enabled' -and $_.Name -ne 'Default' }) } }
-)
-
-$allContradictions = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-foreach ($set in $contradictionSets) {
-    try {
-        $rules = & $set.Getter
-        if (-not $rules -or $rules.Count -eq 0) { continue }
-        $found = @(Find-METRuleContradictions -Rules $rules -AllMailboxes $allMailboxes -GroupCache $groupCache -PolicyType $set.Label)
-        foreach ($c in $found) { $allContradictions.Add($c) }
-    }
-    catch {
-        Write-Verbose "Contradiction scan for '$($set.Label)' rules failed: $_"
-    }
-}
 
 if ($allContradictions.Count -gt 0) {
     $byRule = $allContradictions | Group-Object RuleName
@@ -172,7 +197,7 @@ if ($allContradictions.Count -gt 0) {
     }
 
     New-METCheckResult -CheckId 'MET-MDO008' -Category MDO `
-        -Name 'Preset Policy Coverage — Condition Contradictions' `
+        -Name 'Preset Policy Coverage - Condition Contradictions' `
         -Result Warning -Severity Medium `
         -AffectedObject "$($byRule.Count) rule(s) with include/exception conflicts" `
         -Finding ($findingLines -join "`n`n") `
