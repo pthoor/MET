@@ -163,6 +163,22 @@
                     Write-Verbose 'Connecting to Microsoft Teams...'
                     $teamsParams = @{}
                     switch ($PSCmdlet.ParameterSetName) {
+                        'Interactive' {
+                            if ($UserPrincipalName) {
+                                $teamsParams['AccountId'] = $UserPrincipalName
+                            }
+                            if ($UseDeviceAuthentication) {
+                                $teamsParams['UseDeviceAuthentication'] = $true
+                            }
+                            # WAM became the default in MicrosoftTeams 7.9.0 and P/Invokes
+                            # kernel32.dll, which does not exist off Windows. The switch is
+                            # documented as temporary, so only pass it if it is still present.
+                            $disableWamRequested = $DisableWAM -or -not $IsWindows
+                            if ($disableWamRequested -and
+                                (Get-Command Connect-MicrosoftTeams).Parameters.ContainsKey('DisableWAM')) {
+                                $teamsParams['DisableWAM'] = $true
+                            }
+                        }
                         'ServicePrincipal' {
                             $teamsParams['ApplicationId']         = $AppId
                             $teamsParams['TenantId']              = $TenantId
