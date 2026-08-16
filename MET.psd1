@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.6.0'
+    ModuleVersion        = '0.6.1'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -27,7 +27,7 @@
             Tags         = @('MDO', 'Microsoft365', 'Defender', 'ExchangeOnline', 'Teams', 'Security', 'Posture', 'Assessment')
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
-            ReleaseNotes = 'v0.6.0 - Added 11 protection-gap checks across MDO, Exchange Online, and Teams, including Direct Send, connector authentication, forwarding, policy precedence, Advanced Delivery, external access, guest controls, and app permissions. Hardened policy retrieval so incomplete data cannot produce clean results, expanded precedence coverage to all relevant policy families, and completed Advanced Delivery coverage for phishing simulations and SecOps mailboxes.'
+            ReleaseNotes = 'v0.6.1 - Fixes Microsoft Teams authentication. MicrosoftTeams 7.9.0 made Web Account Manager the default auth broker, which is Windows-only and broke Connect-MicrosoftTeams on Linux and macOS with a kernel32.dll load failure; Connect-METSession now forwards -UseDeviceAuthentication, -UserPrincipalName and -DisableWAM to the Teams leg and disables WAM automatically off Windows. Also corrects two parameter names that do not exist on Connect-MicrosoftTeams: certificate authentication now passes -Certificate (resolved from the thumbprint via X509Store) instead of -CertificateThumbprint, and managed identity now passes -Identity instead of -ManagedIdentity. Teams connection failures no longer hide their cause behind a suppressed import error and a generic warning.'
         }
     }
 }

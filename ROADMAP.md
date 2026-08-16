@@ -132,6 +132,19 @@ Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for ful
 
 ---
 
+## v0.6.1 - Teams authentication fixes ✅
+
+| Item | Status |
+|---|---|
+| Forward `-UseDeviceAuthentication` / `-UserPrincipalName` / `-DisableWAM` to the Teams leg | ✅ |
+| Disable WAM automatically on non-Windows (MicrosoftTeams 7.9.0+ `kernel32.dll` failure) | ✅ |
+| `Connect-MicrosoftTeams` certificate auth via `-Certificate` (`X509Store`), not `-CertificateThumbprint` | ✅ |
+| `Connect-MicrosoftTeams` managed identity via `-Identity`, not `-ManagedIdentity` | ✅ |
+| Surface actionable guidance when the Teams connection fails | ✅ |
+| First unit test coverage for `Connect-METSession` | ✅ |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |
