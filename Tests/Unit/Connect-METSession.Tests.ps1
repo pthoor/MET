@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Public/Connect-METSession.ps1"
+    . "$root/Private/Get-METCertificateByThumbprint.ps1"
 
     # Stubs mirror the real cmdlets' parameter names so that splatting a
     # non-existent parameter fails binding instead of silently passing.
@@ -61,6 +62,23 @@ Describe 'Connect-METSession Teams leg' {
             Connect-METSession -SkipGraph -SkipExchangeOnline -UseDeviceAuthentication
 
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
+        }
+    }
+
+    Context 'Service principal with certificate' {
+        It 'Resolves the thumbprint to an X509Certificate2 and passes -Certificate' {
+            $fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
+            Mock Get-METCertificateByThumbprint { $fakeCert }
+
+            Connect-METSession -SkipGraph -SkipExchangeOnline `
+                -AppId '11111111-1111-1111-1111-111111111111' `
+                -TenantId '00000000-0000-0000-0000-000000000000' `
+                -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01'
+
+            Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
+                $ApplicationId -eq '11111111-1111-1111-1111-111111111111' -and
+                $null -ne $Certificate
+            }
         }
     }
 }

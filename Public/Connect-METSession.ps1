@@ -180,9 +180,9 @@
                             }
                         }
                         'ServicePrincipal' {
-                            $teamsParams['ApplicationId']         = $AppId
-                            $teamsParams['TenantId']              = $TenantId
-                            $teamsParams['CertificateThumbprint'] = $CertificateThumbprint
+                            $teamsParams['ApplicationId'] = $AppId
+                            $teamsParams['TenantId']      = $TenantId
+                            $teamsParams['Certificate']   = Get-METCertificateByThumbprint -Thumbprint $CertificateThumbprint
                         }
                         'ManagedIdentity' {
                             $teamsParams['ManagedIdentity'] = $true
