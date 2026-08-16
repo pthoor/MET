@@ -114,7 +114,7 @@ MET/
 | MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
 
-No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only - on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there.
+No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only - on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there. Teams auth on Linux/macOS additionally needs `-UseDeviceAuthentication`: MicrosoftTeams 7.9.0+ defaults to WAM, which P/Invokes `kernel32.dll`. `Connect-METSession` passes `-DisableWAM` automatically off Windows.
 
 `RequiredModules` is deliberately empty in `MET.psd1` - declaring them there causes a hard import failure when a dependency is missing, which would prevent `Test-METPrerequisites` from running and guiding the user. Dependencies are checked at runtime instead.
 

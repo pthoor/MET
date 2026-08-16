@@ -17,7 +17,7 @@
 |---|---|
 | **Minimum** | PowerShell **7.4** |
 | **Tested on** | PowerShell **7.4**, **7.6** |
-| **Platform** | Windows (full support). Linux/macOS: all checks except DMARC (EXO001) and SPF (EXO003), which require `Resolve-DnsName` - a Windows-only cmdlet. |
+| **Platform** | Windows (full support). Linux/macOS: all checks except DMARC (EXO001) and SPF (EXO003), which require `Resolve-DnsName` - a Windows-only cmdlet. On Linux/macOS with MicrosoftTeams 7.9.0+, connect with `-UseDeviceAuthentication` - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). |
 
 ### Required modules
 
@@ -187,6 +187,22 @@ Connect-METSession -SkipGraph -SkipTeams -DisableWAM -Verbose
 # Optional: pre-select the account
 Connect-METSession -UserPrincipalName admin@contoso.com -Verbose
 ```
+
+#### Teams sign-in on Linux/macOS
+
+MicrosoftTeams **7.9.0** (July 2026) made Web Account Manager (WAM) the default authentication broker for `Connect-MicrosoftTeams`. WAM is Windows-only - it calls into `kernel32.dll` - so on Linux and macOS the default interactive sign-in fails before any network request:
+
+```
+Connect-MicrosoftTeams: Unable to load shared library 'kernel32.dll' or one of its dependencies.
+```
+
+Use device-code authentication instead:
+
+```powershell
+Connect-METSession -UseDeviceAuthentication
+```
+
+MET disables WAM automatically on non-Windows platforms, but a headless host still has no browser to hand off to, so `-UseDeviceAuthentication` is required there. MicrosoftTeams 6.0.0 through 7.8.0 are unaffected.
 
 ---
 
