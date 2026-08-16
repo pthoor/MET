@@ -91,4 +91,23 @@ Describe 'Connect-METSession Teams leg' {
             }
         }
     }
+
+    Context 'Teams connection fails' {
+        It 'Warns with actionable guidance and does not throw' {
+            Mock Connect-MicrosoftTeams {
+                throw [System.DllNotFoundException]::new("Unable to load shared library 'kernel32.dll'")
+            }
+
+            # -WarningVariable would bind inside the Should scriptblock's own scope,
+            # so capture the warning stream by redirection instead.
+            $script:teamsWarnings = @()
+            {
+                $script:teamsWarnings = @(
+                    Connect-METSession -SkipGraph -SkipExchangeOnline -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            ($script:teamsWarnings -join ' ') | Should -Match 'UseDeviceAuthentication'
+        }
+    }
 }

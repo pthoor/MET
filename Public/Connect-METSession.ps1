@@ -153,7 +153,7 @@
             Write-Warning 'MicrosoftTeams 6.x or later is not installed. Teams checks will be skipped. Install with: Install-Module MicrosoftTeams -Scope CurrentUser'
         }
         else {
-            Import-Module MicrosoftTeams -ErrorAction SilentlyContinue
+            Import-Module MicrosoftTeams -ErrorAction Stop
             try {
                 # Get-CsTenant throws (not returns $null) when not connected, so probe inside try/catch.
                 $teamsConnection = $null
@@ -195,7 +195,12 @@
                 }
             }
             catch {
-                Write-Warning "Failed to connect to Microsoft Teams: $_. Teams checks will produce errors."
+                $guidance = 'Teams checks will be skipped. Retry with: Connect-METSession -UseDeviceAuthentication'
+                if ($_.Exception -is [System.DllNotFoundException]) {
+                    $guidance = 'MicrosoftTeams 7.9.0+ defaults to WAM, which is Windows-only. ' +
+                                'Retry with: Connect-METSession -UseDeviceAuthentication'
+                }
+                Write-Warning "Failed to connect to Microsoft Teams: $($_.Exception.Message) $guidance"
             }
         }
     }
