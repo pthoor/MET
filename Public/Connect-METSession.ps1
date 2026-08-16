@@ -185,7 +185,7 @@
                             $teamsParams['Certificate']   = Get-METCertificateByThumbprint -Thumbprint $CertificateThumbprint
                         }
                         'ManagedIdentity' {
-                            $teamsParams['ManagedIdentity'] = $true
+                            $teamsParams['Identity'] = $true
                         }
                     }
                     Connect-MicrosoftTeams @teamsParams

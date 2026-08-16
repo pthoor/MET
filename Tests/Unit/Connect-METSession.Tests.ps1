@@ -81,4 +81,14 @@ Describe 'Connect-METSession Teams leg' {
             }
         }
     }
+
+    Context 'Managed identity' {
+        It 'Passes -Identity rather than -ManagedIdentity' {
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity
+
+            Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
+                $Identity -eq $true
+            }
+        }
+    }
 }
