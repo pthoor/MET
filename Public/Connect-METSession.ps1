@@ -42,51 +42,12 @@
         'User.Read.All'
     )
 
-    if (-not $SkipGraph) {
-        $graphModuleMissing = @(
-            'Microsoft.Graph.Identity.SignIns'
-            'Microsoft.Graph.Groups'
-        ) | Where-Object { -not (Get-Module -ListAvailable -Name $_ | Where-Object { $_.Version -ge [version]'2.0.0' }) }
-
-        if ($graphModuleMissing) {
-            throw "Required Graph module(s) not installed: $($graphModuleMissing -join ', '). Run: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
-        }
-
-        $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
-
-        if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
-            $graphParams['UseDeviceCode'] = $true
-        }
-
-        switch ($PSCmdlet.ParameterSetName) {
-            'ServicePrincipal' {
-                $graphParams = @{
-                    ClientId              = $AppId
-                    TenantId              = $TenantId
-                    CertificateThumbprint = $CertificateThumbprint
-                    NoWelcome             = $true
-                }
-            }
-            'ManagedIdentity' {
-                $graphParams = @{ Identity = $true; NoWelcome = $true }
-            }
-        }
-
-        try {
-            $mgContext = Get-MgContext -ErrorAction SilentlyContinue
-            if (-not $mgContext) {
-                Write-Verbose 'Connecting to Microsoft Graph...'
-                Connect-MgGraph @graphParams -ErrorAction Stop
-            }
-            else {
-                Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
-            }
-        }
-        catch {
-            throw "Failed to connect to Microsoft Graph: $_"
-        }
-    }
-
+    # Exchange Online must connect first. Each module carries its own
+    # Microsoft.Identity.Client (MSAL) build, only one of which can occupy the
+    # default AssemblyLoadContext. ExchangeOnlineManagement ships the newest
+    # (4.83.1 vs Graph's 4.82.1), and .NET resolves a lower version request
+    # against a higher loaded one but never the reverse. Connecting Graph first
+    # pins the older MSAL and Exchange then fails with 0x80131040.
     if (-not $SkipExchangeOnline) {
         $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
             Where-Object { $_.Version -ge [version]'3.0.0' } | Select-Object -First 1
@@ -142,7 +103,52 @@
             }
         }
         catch {
-            throw "Failed to connect to Exchange Online: $_`nTry: Connect-METSession -SkipGraph -SkipTeams -UseDeviceAuthentication -Verbose`nIf that still fails, try: Connect-METSession -SkipGraph -SkipTeams -DisableWAM -Verbose"
+            throw "Failed to connect to Exchange Online: $_`nOn Linux/macOS try: Connect-METSession -UseDeviceAuthentication -Verbose`nIf that still fails, try: Connect-METSession -DisableWAM -Verbose"
+        }
+    }
+
+    if (-not $SkipGraph) {
+        $graphModuleMissing = @(
+            'Microsoft.Graph.Identity.SignIns'
+            'Microsoft.Graph.Groups'
+        ) | Where-Object { -not (Get-Module -ListAvailable -Name $_ | Where-Object { $_.Version -ge [version]'2.0.0' }) }
+
+        if ($graphModuleMissing) {
+            throw "Required Graph module(s) not installed: $($graphModuleMissing -join ', '). Run: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
+        }
+
+        $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
+
+        if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
+            $graphParams['UseDeviceCode'] = $true
+        }
+
+        switch ($PSCmdlet.ParameterSetName) {
+            'ServicePrincipal' {
+                $graphParams = @{
+                    ClientId              = $AppId
+                    TenantId              = $TenantId
+                    CertificateThumbprint = $CertificateThumbprint
+                    NoWelcome             = $true
+                }
+            }
+            'ManagedIdentity' {
+                $graphParams = @{ Identity = $true; NoWelcome = $true }
+            }
+        }
+
+        try {
+            $mgContext = Get-MgContext -ErrorAction SilentlyContinue
+            if (-not $mgContext) {
+                Write-Verbose 'Connecting to Microsoft Graph...'
+                Connect-MgGraph @graphParams -ErrorAction Stop
+            }
+            else {
+                Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
+            }
+        }
+        catch {
+            throw "Failed to connect to Microsoft Graph: $_"
         }
     }
 

@@ -132,7 +132,7 @@ Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for ful
 
 ---
 
-## v0.6.1 - Teams authentication fixes ✅
+## v0.6.1 - Authentication fixes ✅
 
 | Item | Status |
 |---|---|
@@ -142,6 +142,7 @@ Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for ful
 | `Connect-MicrosoftTeams` managed identity via `-Identity`, not `-ManagedIdentity` | ✅ |
 | Surface actionable guidance when the Teams connection fails | ✅ |
 | First unit test coverage for `Connect-METSession` | ✅ |
+| Connect Exchange Online before Graph (Microsoft.Identity.Client load-order conflict) | ✅ |
 
 ---
 

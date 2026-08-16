@@ -18,10 +18,39 @@ BeforeAll {
         )
     }
     function Get-CsTenant { [CmdletBinding()] param() }
-    function Connect-MgGraph { [CmdletBinding()] param() }
     function Get-MgContext { [CmdletBinding()] param() }
-    function Connect-ExchangeOnline { [CmdletBinding()] param() }
     function Get-ConnectionInformation { [CmdletBinding()] param() }
+
+    function Connect-MgGraph {
+        [CmdletBinding()]
+        param(
+            [string[]] $Scopes,
+            [switch] $NoWelcome,
+            [switch] $UseDeviceCode,
+            [string] $ClientId,
+            [string] $TenantId,
+            [string] $CertificateThumbprint,
+            [switch] $Identity
+        )
+    }
+
+    function Connect-ExchangeOnline {
+        [CmdletBinding()]
+        param(
+            [switch] $ShowBanner,
+            [switch] $ShowProgress,
+            [switch] $SkipLoadingFormatData,
+            [switch] $SkipLoadingCmdletHelp,
+            [string] $UserPrincipalName,
+            [switch] $DisableWAM,
+            [switch] $Device,
+            [string] $DelegatedOrganization,
+            [string] $AppId,
+            [string] $Organization,
+            [switch] $ManagedIdentity,
+            [System.Security.Cryptography.X509Certificates.X509Certificate2] $Certificate
+        )
+    }
 }
 
 Describe 'Connect-METSession Teams leg' {
@@ -109,5 +138,32 @@ Describe 'Connect-METSession Teams leg' {
 
             ($script:teamsWarnings -join ' ') | Should -Match 'UseDeviceAuthentication'
         }
+    }
+}
+
+Describe 'Connect-METSession connection ordering' {
+    It 'Connects Exchange Online before Microsoft Graph' {
+        # A List mutated via .Add() avoids the mock-scope assignment problem:
+        # reference semantics mean no cross-scope variable assignment is needed.
+        $order = [System.Collections.Generic.List[string]]::new()
+
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
+        } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+        Mock Get-MgContext { $null }
+        Mock Get-ConnectionInformation { $null }
+        Mock Connect-MgGraph { $order.Add('Graph') }
+        Mock Connect-ExchangeOnline { $order.Add('ExchangeOnline') }
+
+        Connect-METSession -SkipTeams -UseDeviceAuthentication
+
+        $order.Count | Should -Be 2
+        $order[0] | Should -Be 'ExchangeOnline'
+        $order[1] | Should -Be 'Graph'
     }
 }
