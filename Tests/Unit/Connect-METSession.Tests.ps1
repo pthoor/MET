@@ -36,6 +36,23 @@ BeforeAll {
         )
     }
 
+    # Captured before any Mock replaces it, so a mock can delegate to the real
+    # implementation while injecting a synthetic loaded-assembly list.
+    $script:RealTestAssemblyLoadConflict = (Get-Command Test-METAssemblyLoadConflict).ScriptBlock
+
+    function New-FakeLoadedAssembly {
+        param(
+            [string] $Name,
+            [string] $Version,
+            [string] $Location
+        )
+
+        $nameObject = [PSCustomObject]@{ Name = $Name; Version = [version]$Version }
+        $fake = [PSCustomObject]@{ Location = $Location }
+        $fake | Add-Member -MemberType ScriptMethod -Name GetName -Value { $nameObject }.GetNewClosure()
+        $fake
+    }
+
     function Connect-ExchangeOnline {
         [CmdletBinding()]
         param(
@@ -141,6 +158,23 @@ Describe 'Connect-METSession Teams leg' {
             ($script:teamsWarnings -join ' ') | Should -Match 'UseDeviceAuthentication'
         }
     }
+
+    Context 'Importing MicrosoftTeams fails' {
+        It 'Warns and continues rather than aborting the whole session' {
+            Mock Import-Module { throw 'Could not load file or assembly Microsoft.Identity.Client' } `
+                -ParameterFilter { $Name -eq 'MicrosoftTeams' }
+
+            $script:teamsWarnings = @()
+            {
+                $script:teamsWarnings = @(
+                    Connect-METSession -SkipGraph -SkipExchangeOnline -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            ($script:teamsWarnings -join ' ') | Should -Match 'Failed to connect to Microsoft Teams'
+            Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
+        }
+    }
 }
 
 Describe 'Connect-METSession Graph leg' {
@@ -193,6 +227,39 @@ Describe 'Connect-METSession Graph leg' {
             Connect-METSession -SkipExchangeOnline -SkipTeams
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+
+    Context 'A newer MSAL than Graph requires is already loaded' {
+        It 'Still connects - a higher loaded version is not a conflict' {
+            Mock Get-Module {
+                [PSCustomObject]@{
+                    Name       = $Name
+                    Version    = [version]'2.39.0'
+                    ModuleBase = '/fake/Microsoft.Graph.Authentication/2.39.0'
+                }
+            } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+            # Graph ships MSAL 4.82.1.0; Exchange Online already loaded 4.83.1.0.
+            Mock Get-METAssemblyFileVersion { [version]'4.82.1.0' }
+            Mock Test-METAssemblyLoadConflict {
+                $loaded = @(
+                    New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' `
+                        -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
+                )
+                & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+            }
+
+            $script:graphWarnings = @()
+            {
+                $script:graphWarnings = @(
+                    Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly
+            ($script:graphWarnings -join ' ') | Should -Not -Match 'already active in this PowerShell session'
         }
     }
 }

@@ -1,6 +1,6 @@
 # MET-MDO014 - Group Reference Audit
 
-**Category:** MDO | **Severity:** High (empty group) / Informational (populated group)
+**Category:** MDO | **Severity:** High (empty group) / Medium (group could not be resolved) / Informational (populated group)
 
 ## What it checks
 
@@ -12,12 +12,16 @@ A policy that targets `SentToMemberOf: "VIP Executives"` looks correctly configu
 
 ## Pass / Fail / Warning
 
-| Result | Condition |
-|---|---|
-| Info | The referenced group has one or more members - shown with its member count and which rule(s) reference it |
-| Fail | The referenced group has 0 members - the policy condition matches nobody |
-| Fail | Rule or group-membership data could not be retrieved |
-| NotApplicable | No mailboxes exist in the tenant, or no enabled rule uses a group-based recipient condition |
+| Result | Severity | Condition |
+|---|---|---|
+| Info | Informational | The referenced group resolved successfully and has one or more members - shown with its member count and which rule(s) reference it |
+| Fail | High | The referenced group resolved successfully but has **0 members** - the policy condition matches nobody |
+| Fail | Medium | The referenced group **could not be resolved at all** (Graph, `Get-DistributionGroupMember`, and `Get-UnifiedGroupLinks` all failed), so its coverage is unknown. Reported per group, with the underlying errors in the `Error` field - explicitly *not* reported as an empty group |
+| Fail | Medium | One or more **nested** groups could not be expanded while their parent resolved, so the reported member counts may be incomplete. Emitted once, only for errors not already attributed to a specific group above |
+| Fail | High | Rule collections (`Get-SafeLinksRule`, `Get-AntiPhishRule`, …) or the mailbox list could not be retrieved, so the audit could not run at all |
+| NotApplicable | Medium | No mailboxes exist in the tenant, or no enabled rule uses a group-based recipient condition |
+
+A group is never reported twice for the same underlying cause: a resolution failure produces the per-group Medium `Fail` **or** contributes to the trailing nested-expansion summary, never both.
 
 ## Recommendation
 
@@ -25,7 +29,8 @@ For each empty group reported:
 
 1. Confirm the group still exists and is the one the admin intended - a typo'd or renamed group identity resolves to 0 members the same way an actually-empty group does.
 2. Repopulate the group, or remove the stale `SentToMemberOf`/`ExceptIfSentToMemberOf` reference from the rule(s) listed if the group is intentionally retired.
-3. For every populated group listed at Info level, treat the member count as a point-in-time snapshot worth re-checking periodically - group membership drifts as people join, leave, or change teams, and MET does not track membership trend over time.
+3. For each group reported as unresolvable, check that the identity in the rule still exists and that the running account has Exchange View-Only Recipients and (if installed) Microsoft Graph `Group.Read.All` - an unresolvable group is an unknown, not a confirmed gap.
+4. For every populated group listed at Info level, treat the member count as a point-in-time snapshot worth re-checking periodically - group membership drifts as people join, leave, or change teams, and MET does not track membership trend over time.
 
 ## Reference
 

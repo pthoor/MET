@@ -75,12 +75,31 @@ if ($referencedBy.Count -eq 0) {
 }
 
 $expansionErrors = [System.Collections.Generic.List[string]]::new()
+# Errors already surfaced against a specific group, so the trailing summary
+# does not report the same failure a second time.
+$reportedErrors = [System.Collections.Generic.List[string]]::new()
 
 foreach ($groupId in ($referencedBy.Keys | Sort-Object)) {
+    $errorsBefore = $expansionErrors.Count
     $members = @(Expand-METGroupMembership -Identity $groupId -Cache $groupCache -RetrievalErrors $expansionErrors)
     $usedBy = $referencedBy[$groupId] -join '; '
+    $newErrors = @(if ($expansionErrors.Count -gt $errorsBefore) { $expansionErrors[$errorsBefore..($expansionErrors.Count - 1)] })
 
-    if ($members.Count -eq 0) {
+    # An empty member list means "no members" only when resolution actually
+    # succeeded - Expand-METGroupMembership returns @() for a failed lookup too,
+    # appending the reason to $expansionErrors. A group that still yielded
+    # members despite an error only lost a nested group, so it is reported as
+    # Info here and the shortfall is summarised at the end.
+    if ($members.Count -eq 0 -and $newErrors.Count -gt 0) {
+        foreach ($e in $newErrors) { $reportedErrors.Add($e) }
+        New-METCheckResult -CheckId 'MET-MDO014' -Category MDO -Name 'Group Reference Audit' `
+            -Result Fail -Severity Medium -AffectedObject $groupId `
+            -Finding "Group '$groupId' referenced by $usedBy could not be resolved to a member list, so its policy coverage could not be assessed." `
+            -Recommendation "Verify Exchange Online and Microsoft Graph group-read permissions, and confirm '$groupId' still exists." `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365' `
+            -ErrorMessage ($newErrors -join "`n")
+    }
+    elseif ($members.Count -eq 0) {
         New-METCheckResult -CheckId 'MET-MDO014' -Category MDO -Name 'Group Reference Audit' `
             -Result Fail -Severity High -AffectedObject $groupId `
             -Finding "Group '$groupId' has 0 members but is referenced by: $usedBy. The policy condition matches nobody." `
@@ -96,11 +115,14 @@ foreach ($groupId in ($referencedBy.Keys | Sort-Object)) {
     }
 }
 
-if ($expansionErrors.Count -gt 0) {
+# Only errors not already attributed to a specific group above - e.g. a nested
+# group that failed to expand while its parent resolved successfully.
+$unreported = @($expansionErrors | Where-Object { $reportedErrors -notcontains $_ })
+if ($unreported.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-MDO014' -Category MDO -Name 'Group Reference Audit' `
         -Result Fail -Severity Medium -AffectedObject 'Group Membership Data' `
-        -Finding 'One or more referenced groups could not be expanded to a member list.' `
+        -Finding 'One or more nested groups could not be expanded to a member list, so the member counts reported above may be incomplete.' `
         -Recommendation 'Verify Exchange Online and Microsoft Graph group-read permissions and retry the assessment.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/recommended-settings-for-eop-and-office365' `
-        -ErrorMessage ($expansionErrors -join "`n")
+        -ErrorMessage ($unreported -join "`n")
 }

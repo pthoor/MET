@@ -125,6 +125,33 @@ Describe 'MET-MDO014 Group Reference Audit' {
         }
     }
 
+    Context 'A referenced group cannot be resolved at all' {
+        BeforeAll {
+            Mock Get-EXOMailbox {
+                @('alice@contoso.com') | ForEach-Object { [PSCustomObject]@{ PrimarySmtpAddress = $_ } }
+            }
+        }
+
+        It 'Reports a resolution failure, not a "0 members" Fail, and does not double-report' {
+            Mock Get-DistributionGroupMember { throw 'The operation could not be performed' }
+            Mock Get-UnifiedGroupLinks       { throw 'Object could not be found' }
+            Mock Get-SafeLinksRule {
+                @([PSCustomObject]@{ Name = 'Unresolvable Rule'; State = 'Enabled'; SentTo = $null; SentToMemberOf = @('Mystery Group'); ExceptIfSentToMemberOf = $null })
+            }
+
+            $results = @(& $checkFile)
+
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].AffectedObject | Should -Be 'Mystery Group'
+            $results[0].Finding | Should -Match 'could not be resolved'
+            $results[0].Finding | Should -Not -Match '0 members'
+            $results[0].Finding | Should -Match 'Unresolvable Rule'
+            $results[0].Error | Should -Match 'Object could not be found'
+            @($results | Where-Object AffectedObject -eq 'Group Membership Data') | Should -BeNullOrEmpty
+        }
+    }
+
     Context 'Rule retrieval fails' {
         BeforeAll {
             Mock Get-EXOMailbox {

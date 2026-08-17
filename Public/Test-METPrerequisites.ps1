@@ -20,8 +20,11 @@
     # ── Modules ──────────────────────────────────────────────────────────────
     $moduleChecks = @(
         [PSCustomObject]@{ Name = 'ExchangeOnlineManagement';         Min = '3.0.0'; Optional = $false }
-        [PSCustomObject]@{ Name = 'Microsoft.Graph.Identity.SignIns'; Min = '2.0.0'; Optional = $false }
-        [PSCustomObject]@{ Name = 'Microsoft.Graph.Groups';           Min = '2.0.0'; Optional = $false }
+        # Graph is optional: Connect-METSession treats a missing module or a
+        # failed connection as non-fatal, and Expand-METGroupMembership falls
+        # back to Exchange Online cmdlets.
+        [PSCustomObject]@{ Name = 'Microsoft.Graph.Identity.SignIns'; Min = '2.0.0'; Optional = $true  }
+        [PSCustomObject]@{ Name = 'Microsoft.Graph.Groups';           Min = '2.0.0'; Optional = $true  }
         [PSCustomObject]@{ Name = 'MicrosoftTeams';                   Min = '6.0.0'; Optional = $true  }
         [PSCustomObject]@{ Name = 'Pester';                           Min = '5.0.0'; Optional = $true  }
     )
@@ -48,7 +51,12 @@
         $notes = if (-not $versionOk -and -not $m.Optional) {
             "Install-Module '$($m.Name)' -MinimumVersion '$($m.Min)' -Scope CurrentUser"
         } elseif (-not $versionOk -and $m.Optional) {
-            "Install-Module '$($m.Name)' -MinimumVersion '$($m.Min)' -Scope CurrentUser  (Teams checks only)"
+            $reason = switch -Wildcard ($m.Name) {
+                'Microsoft.Graph.*' { 'group expansion falls back to Exchange Online cmdlets without it' }
+                'MicrosoftTeams'    { 'Teams checks only' }
+                default             { 'optional' }
+            }
+            "Install-Module '$($m.Name)' -MinimumVersion '$($m.Min)' -Scope CurrentUser  ($reason)"
         } else { '' }
 
         $checks.Add([PSCustomObject]@{

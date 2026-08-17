@@ -201,8 +201,12 @@
             Write-Warning 'MicrosoftTeams 6.x or later is not installed. Teams checks will be skipped. Install with: Install-Module MicrosoftTeams -Scope CurrentUser'
         }
         else {
-            Import-Module MicrosoftTeams -ErrorAction Stop
             try {
+                # Inside the try so an import failure (e.g. an MSAL assembly-load
+                # conflict) degrades to a warning like every other Teams failure,
+                # rather than aborting a session where EXO and Graph already connected.
+                Import-Module MicrosoftTeams -ErrorAction Stop
+
                 # Get-CsTenant throws (not returns $null) when not connected, so probe inside try/catch.
                 $teamsConnection = $null
                 try { $teamsConnection = Get-CsTenant -ErrorAction Stop } catch { $teamsConnection = $null }

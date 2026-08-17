@@ -21,17 +21,22 @@
 
 ### Required modules
 
-These must be installed before you can import MET or run any checks.
+Exchange Online is the only hard requirement - every MDO and EXO check runs through it, and `Connect-METSession` aborts if it cannot connect.
 
 ```powershell
-Install-Module ExchangeOnlineManagement          -MinimumVersion 3.0.0 -Scope CurrentUser
-Install-Module Microsoft.Graph.Identity.SignIns  -MinimumVersion 2.0.0 -Scope CurrentUser
-Install-Module Microsoft.Graph.Groups            -MinimumVersion 2.0.0 -Scope CurrentUser
+Install-Module ExchangeOnlineManagement -MinimumVersion 3.0.0 -Scope CurrentUser
 ```
 
 ### Optional modules
 
-Required only for Teams checks (Teams001–003). If not installed, `Connect-METSession` logs a warning and Teams checks fail gracefully with an explanatory error in the result object.
+**Microsoft Graph** - used only by `Expand-METGroupMembership` to resolve group references. A missing module or a failed Graph connection is non-fatal: `Connect-METSession` warns and continues, and group expansion falls back to the Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups). Installing it is still recommended - Graph resolves nested and Azure AD security group membership more accurately.
+
+```powershell
+Install-Module Microsoft.Graph.Identity.SignIns -MinimumVersion 2.0.0 -Scope CurrentUser
+Install-Module Microsoft.Graph.Groups           -MinimumVersion 2.0.0 -Scope CurrentUser
+```
+
+**MicrosoftTeams** - required by the Teams checks that call the native `Get-Cs*` cmdlets (Teams003, Teams005, Teams006, Teams007, Teams008). Teams001, Teams002, and Teams004 use Exchange-hosted cmdlets and run without it. If it is not installed, `Connect-METSession` logs a warning and the affected checks fail gracefully with an explanatory error in the result object.
 
 ```powershell
 Install-Module MicrosoftTeams -MinimumVersion 6.0.0 -Scope CurrentUser
@@ -454,6 +459,8 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO010 | Priority Accounts | Medium | Priority Account tag usage + differentiated protection policy |
 | MET-MDO011 | User Tags | Low | Custom tags defined + alert policies referencing them |
 | MET-MDO012 | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
+| MET-MDO013 | Policy Precedence Conflicts | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
+| MET-MDO014 | Group Reference Audit | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
 
 ### EXO - Exchange Online / Email Authentication
 
@@ -468,6 +475,13 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO007 | Transport Rule Audit | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
 | MET-EXO008 | Quarantine Retention | Medium | QuarantineRetentionPeriod ≥ 30 days in all anti-spam policies |
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for high-risk verdicts (malware, high-confidence phish) |
+| MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
+| MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
+| MET-EXO012 | Mailbox Forwarding | Critical | Mailboxes with SMTP forwarding configured, flagging silent (no local copy) forwarding |
+| MET-EXO013 | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
+| MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
+| MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
+| MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
 
 ### Teams - Microsoft Teams Threat Protection
 
@@ -478,6 +492,9 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-Teams003 | Meeting Protection | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers), federation |
 | MET-Teams004 | ZAP for Teams | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy |
 | MET-Teams005 | Teams User Reporting | Low | ReportTeamsMsgEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
+| MET-Teams006 | External Access / Federation | High | Open federation (AllowAllKnownDomains) and AllowTeamsConsumer in tenant federation configuration |
+| MET-Teams007 | Guest Messaging/Calling | Medium | Guest-initiated 1:1 chat and private calling configuration |
+| MET-Teams008 | App Permission Policy Exposure | Medium | Catalog app types not restricted to an explicit allow/block list |
 
 ---
 

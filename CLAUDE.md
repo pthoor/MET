@@ -110,7 +110,7 @@ MET/
 |---|---|
 | PowerShell | 7.4+ (tested on 7.4, 7.6) |
 | ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) - required |
-| Microsoft.Graph.Identity.SignIns / .Groups | 2.x - required |
+| Microsoft.Graph.Identity.SignIns / .Groups | 2.x - optional; a missing module or failed Graph connection is non-fatal, and group expansion degrades to Exchange Online cmdlets (see [Connection Requirements for New Checks](#connection-requirements-for-new-checks)) |
 | MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
 

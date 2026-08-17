@@ -146,6 +146,21 @@ Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for ful
 
 ---
 
+## v0.7.0 - Optional Graph + group reference audit ✅
+
+Follow-on to v0.6.1's auth work. Connect order alone cannot fix every MSAL collision - each Microsoft 365 module ships its own `Microsoft.Identity.Client` build and .NET cannot unload one once loaded - so Graph became an optional leg rather than a hard dependency, with Exchange Online fallbacks for every Graph call site.
+
+| Item | Status | Notes |
+|---|---|---|
+| MDO014 Group Reference Audit | ✅ | New check. Flags groups referenced by enabled EOP/MDO rules via `SentToMemberOf`/`ExceptIfSentToMemberOf` that have 0 members (the condition matches nobody), and separately reports groups whose membership could not be resolved at all so a lookup failure is never reported as an empty group |
+| Microsoft Graph is optional, not required | ✅ | A missing Graph module or a failed `Connect-MgGraph` warns and continues instead of aborting. `Test-METPrerequisites` marks both Graph modules optional |
+| `Expand-METGroupMembership` Exchange Online fallback | ✅ | `Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups - covering every group type EOP/MDO policies can target |
+| MSAL assembly-conflict pre-flight detection | ✅ | `Test-METAssemblyLoadConflict` reports an actionable message instead of MSAL's opaque 0x80131040 manifest mismatch. Only a genuine downgrade (loaded version older than required) is a conflict - .NET resolves an older-or-equal request against a newer loaded assembly |
+| `Import-Module MicrosoftTeams` failures are non-fatal | ✅ | Moved inside the Teams leg's `try/catch` so an import failure warns and continues, like every other Teams failure |
+| Aggregate `Info`-only results in default output | ✅ | Multiple `Info` results for one CheckId are now summarised rather than truncated to the first item (affected MDO014, EXO013/014/016) |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |
