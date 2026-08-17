@@ -143,6 +143,60 @@ Describe 'Connect-METSession Teams leg' {
     }
 }
 
+Describe 'Connect-METSession Graph leg' {
+    BeforeEach {
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
+        } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+        Mock Get-MgContext { $null }
+        Mock Connect-MgGraph {}
+    }
+
+    Context 'Graph connection throws' {
+        It 'Warns with actionable guidance and does not throw' {
+            Mock Connect-MgGraph { throw 'Method not found: some MSAL API mismatch' }
+
+            $script:graphWarnings = @()
+            {
+                $script:graphWarnings = @(
+                    Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            ($script:graphWarnings -join ' ') | Should -Match 'Failed to connect to Microsoft Graph'
+        }
+    }
+
+    Context 'Required Graph modules are missing' {
+        It 'Warns and does not throw, and never calls Connect-MgGraph' {
+            Mock Get-Module {
+                $null
+            } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+            $script:graphWarnings = @()
+            {
+                $script:graphWarnings = @(
+                    Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            ($script:graphWarnings -join ' ') | Should -Match 'Microsoft.Graph'
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+
+    Context 'Already connected' {
+        It 'Does not call Connect-MgGraph when Get-MgContext succeeds' {
+            Mock Get-MgContext { [PSCustomObject]@{ Account = 'admin@contoso.com' } }
+
+            Connect-METSession -SkipExchangeOnline -SkipTeams
+
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+}
+
 Describe 'Connect-METSession assembly conflict detection' {
     BeforeEach {
         Mock Get-Module {

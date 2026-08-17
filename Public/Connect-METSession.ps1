@@ -136,41 +136,61 @@
         ) | Where-Object { -not (Get-Module -ListAvailable -Name $_ | Where-Object { $_.Version -ge [version]'2.0.0' }) }
 
         if ($graphModuleMissing) {
-            throw "Required Graph module(s) not installed: $($graphModuleMissing -join ', '). Run: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
+            Write-Warning "Required Graph module(s) not installed: $($graphModuleMissing -join ', '). Group-membership expansion will fall back to Exchange Online cmdlets. Install with: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
         }
+        else {
+            $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
 
-        $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
+            if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
+                $graphParams['UseDeviceCode'] = $true
+            }
 
-        if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
-            $graphParams['UseDeviceCode'] = $true
-        }
-
-        switch ($PSCmdlet.ParameterSetName) {
-            'ServicePrincipal' {
-                $graphParams = @{
-                    ClientId              = $AppId
-                    TenantId              = $TenantId
-                    CertificateThumbprint = $CertificateThumbprint
-                    NoWelcome             = $true
+            switch ($PSCmdlet.ParameterSetName) {
+                'ServicePrincipal' {
+                    $graphParams = @{
+                        ClientId              = $AppId
+                        TenantId              = $TenantId
+                        CertificateThumbprint = $CertificateThumbprint
+                        NoWelcome             = $true
+                    }
+                }
+                'ManagedIdentity' {
+                    $graphParams = @{ Identity = $true; NoWelcome = $true }
                 }
             }
-            'ManagedIdentity' {
-                $graphParams = @{ Identity = $true; NoWelcome = $true }
-            }
-        }
 
-        try {
-            $mgContext = Get-MgContext -ErrorAction SilentlyContinue
-            if (-not $mgContext) {
-                Write-Verbose 'Connecting to Microsoft Graph...'
-                Connect-MgGraph @graphParams -ErrorAction Stop
+            try {
+                $mgContext = Get-MgContext -ErrorAction SilentlyContinue
+                if (-not $mgContext) {
+                    # A different MSAL version already loaded in-process (most often by
+                    # ExchangeOnlineManagement connecting first, per the comment at the top
+                    # of this function) cannot be reconciled by .NET at runtime. Detect it
+                    # up front so the warning names the real cause instead of surfacing
+                    # MSAL's opaque MissingMethodException/manifest-mismatch failure.
+                    $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+                        Sort-Object Version -Descending | Select-Object -First 1
+                    $requiredMsalVersion = $null
+                    if ($graphAuthModule.ModuleBase) {
+                        $graphMsalPath = Join-Path $graphAuthModule.ModuleBase 'Dependencies' 'Core' 'Microsoft.Identity.Client.dll'
+                        $requiredMsalVersion = Get-METAssemblyFileVersion -Path $graphMsalPath
+                    }
+                    if ($requiredMsalVersion) {
+                        $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
+                        if ($conflict) {
+                            throw $conflict
+                        }
+                    }
+
+                    Write-Verbose 'Connecting to Microsoft Graph...'
+                    Connect-MgGraph @graphParams -ErrorAction Stop
+                }
+                else {
+                    Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
+                }
             }
-            else {
-                Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
+            catch {
+                Write-Warning "Failed to connect to Microsoft Graph: $($_.Exception.Message) Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references). Retry with: Connect-METSession -UseDeviceAuthentication"
             }
-        }
-        catch {
-            throw "Failed to connect to Microsoft Graph: $_"
         }
     }
 
