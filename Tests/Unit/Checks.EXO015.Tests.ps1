@@ -81,5 +81,11 @@ Describe 'MET-EXO015 External Sender Tag' {
             $results[0].Error | Should -Not -BeNullOrEmpty
             $results[0].Error | Should -Match 'Access Denied'
         }
+
+        It 'Recommendation references the known ErrorAction bug and documented permissions' {
+            $results = & $checkFile
+            $results[0].Recommendation | Should -Match 'ExchangeOnlineManagement bug'
+            $results[0].Recommendation | Should -Match 'View-Only Organization Management'
+        }
     }
 }

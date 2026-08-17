@@ -139,3 +139,40 @@ if (-not $reportingDisabled -and $reportsToMicrosoft) {
             -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
     }
 }
+
+# ── Check 4: Rule/Policy mailbox address consistency ──────────────────────────
+# Set-ReportSubmissionRule changes only the rule's SentTo; Microsoft's own docs
+# note the parallel *Addresses fields on the policy are not auto-updated, so the
+# two can silently drift onto different mailboxes for individual report types.
+if (-not $reportingDisabled -and $submissionMailbox) {
+    $addressMismatches = [System.Collections.Generic.List[string]]::new()
+
+    if ($junkToCustom -and $policy.ReportJunkAddresses -and (@($policy.ReportJunkAddresses)[0] -ne $submissionMailbox)) {
+        $addressMismatches.Add("Junk reports go to '$(@($policy.ReportJunkAddresses)[0])' instead of the rule's '$submissionMailbox'")
+    }
+    if ($notJunkToCustom -and $policy.ReportNotJunkAddresses -and (@($policy.ReportNotJunkAddresses)[0] -ne $submissionMailbox)) {
+        $addressMismatches.Add("Not Junk reports go to '$(@($policy.ReportNotJunkAddresses)[0])' instead of the rule's '$submissionMailbox'")
+    }
+    if ($phishToCustom -and $policy.ReportPhishAddresses -and (@($policy.ReportPhishAddresses)[0] -ne $submissionMailbox)) {
+        $addressMismatches.Add("Phishing reports go to '$(@($policy.ReportPhishAddresses)[0])' instead of the rule's '$submissionMailbox'")
+    }
+    if ($thirdPartyMode -and $policy.ThirdPartyReportAddresses -and (@($policy.ThirdPartyReportAddresses)[0] -ne $submissionMailbox)) {
+        $addressMismatches.Add("Third-party add-in reports go to '$(@($policy.ThirdPartyReportAddresses)[0])' instead of the rule's '$submissionMailbox'")
+    }
+
+    if ($addressMismatches.Count -gt 0) {
+        New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+            -Name 'User Reported Message Settings - Mailbox Address Consistency' `
+            -Result Warning -Severity Low -AffectedObject "Report Submission Policy ($submissionMailbox)" `
+            -Finding "The report submission rule and policy point at different mailboxes for at least one report type: $($addressMismatches -join '; '). This typically happens when Set-ReportSubmissionRule is used to change the reporting mailbox without also updating the matching *Addresses parameters on Set-ReportSubmissionPolicy." `
+            -Recommendation "Run Set-ReportSubmissionPolicy -Identity DefaultReportSubmissionPolicy -ReportJunkAddresses $submissionMailbox -ReportNotJunkAddresses $submissionMailbox -ReportPhishAddresses $submissionMailbox (add -ThirdPartyReportAddresses $submissionMailbox if using a non-Microsoft add-in) to bring the policy back in line with the rule." `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/set-reportsubmissionpolicy'
+    }
+    else {
+        New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+            -Name 'User Reported Message Settings - Mailbox Address Consistency' `
+            -Result Pass -Severity Low -AffectedObject "Report Submission Policy ($submissionMailbox)" `
+            -Finding "The report submission rule and policy agree on the reporting mailbox for every report type in use." `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/set-reportsubmissionpolicy'
+    }
+}
