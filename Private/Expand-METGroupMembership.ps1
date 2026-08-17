@@ -62,6 +62,7 @@ function Expand-METGroupMembership {
     # was not found via the Graph filter.  The shared $Visited set prevents cycles
     # when groups nest circularly.
     if (-not $graphSucceeded) {
+        $exoError = $null
         try {
             $members = Get-DistributionGroupMember -Identity $Identity -ResultSize Unlimited -ErrorAction Stop
             foreach ($m in $members) {
@@ -76,12 +77,26 @@ function Expand-METGroupMembership {
             }
         }
         catch {
-            Write-Verbose "Exchange group expansion failed for '$Identity': $_"
-            if ($null -ne $RetrievalErrors) {
-                $details = if ($graphError) { "Graph: $graphError; Exchange: $($_.ToString())" } else { $_.ToString() }
-                $RetrievalErrors.Add("Unable to expand group '$Identity'. $details")
+            $exoError = $_.ToString()
+            Write-Verbose "Exchange distribution group expansion failed for '$Identity': $_"
+
+            # Get-DistributionGroupMember only resolves distribution groups and
+            # mail-enabled security groups - Microsoft 365 Groups need the separate
+            # Get-UnifiedGroupLinks cmdlet, per Microsoft's own documented example.
+            try {
+                $links = Get-UnifiedGroupLinks -Identity $Identity -LinkType Members -ResultSize Unlimited -ErrorAction Stop
+                foreach ($link in $links) {
+                    if ($link.PrimarySmtpAddress) { $null = $addresses.Add($link.PrimarySmtpAddress) }
+                }
             }
-            return @()
+            catch {
+                Write-Verbose "Microsoft 365 Group expansion failed for '$Identity': $_"
+                if ($null -ne $RetrievalErrors) {
+                    $details = if ($graphError) { "Graph: $graphError; Exchange: $exoError; Microsoft 365 Group: $($_.ToString())" } else { "Exchange: $exoError; Microsoft 365 Group: $($_.ToString())" }
+                    $RetrievalErrors.Add("Unable to expand group '$Identity'. $details")
+                }
+                return @()
+            }
         }
     }
 

@@ -30,4 +30,34 @@ Describe 'Test-METPrerequisites' {
             $dnsCheck.Notes | Should -Match 'DNS-over-HTTPS'
         }
     }
+
+    Context 'Microsoft Graph modules are not installed' {
+        BeforeAll {
+            Mock Write-Host {}
+            Mock Write-Warning {}
+            Mock Get-Module {
+                switch ($Name) {
+                    'ExchangeOnlineManagement' { [PSCustomObject]@{ Version = [version]'3.0.0' } }
+                    'MicrosoftTeams'           { [PSCustomObject]@{ Version = [version]'6.0.0' } }
+                    'Pester'                   { [PSCustomObject]@{ Version = [version]'5.0.0' } }
+                }
+            } -ParameterFilter { $ListAvailable }
+        }
+
+        It 'marks Graph as optional rather than a required failure' {
+            $results = Test-METPrerequisites
+            $graph = @($results | Where-Object { $_.Component -like 'Microsoft.Graph.*' })
+
+            $graph.Count | Should -Be 2
+            $graph | ForEach-Object {
+                $_.Optional | Should -BeTrue
+                $_.Status | Should -Be 'Not installed (optional)'
+            }
+        }
+
+        It 'does not warn about unmet required prerequisites' {
+            Test-METPrerequisites | Out-Null
+            Should -Invoke Write-Warning -Times 0 -Exactly
+        }
+    }
 }

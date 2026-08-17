@@ -12,6 +12,28 @@ foreach ($listType in @('Sender','Url','FileHash')) {
     }
 }
 
+try {
+    $advancedDeliveryEntries = @(Get-TenantAllowBlockListItems -ListType Url -ListSubType AdvancedDelivery -ErrorAction Stop)
+    if ($advancedDeliveryEntries.Count -gt 0) {
+        New-METCheckResult -CheckId 'MET-EXO005' -Category EXO -Name 'Tenant Allow/Block List' `
+            -Result Info -Severity Informational `
+            -AffectedObject "Advanced Delivery URL Allow-List ($($advancedDeliveryEntries.Count) entries)" `
+            -Finding "Phishing-simulation URL allow entries: $(($advancedDeliveryEntries.Value) -join ', ')" `
+            -Recommendation 'These are phishing-simulation URL allows tied to the Advanced Delivery Policy (see MET-EXO014), not ordinary Tenant Allow/Block List hygiene violations - wildcards are normal, expected syntax for this subtype. Periodically review for continued relevance.' `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
+    }
+    else {
+        New-METCheckResult -CheckId 'MET-EXO005' -Category EXO -Name 'Tenant Allow/Block List' `
+            -Result Info -Severity Informational `
+            -AffectedObject 'Advanced Delivery URL Allow-List (0 entries)' `
+            -Finding 'No Advanced Delivery URL allow entries are configured' `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
+    }
+}
+catch {
+    Write-Verbose "Could not retrieve Advanced Delivery TABL entries: $_"
+}
+
 if ($allEntries.Count -eq 0) {
     New-METCheckResult -CheckId 'MET-EXO005' -Category EXO -Name 'Tenant Allow/Block List' `
         -Result Info -Severity Low -AffectedObject 'Tenant Allow/Block List' `

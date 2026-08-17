@@ -9,7 +9,7 @@
     function Resolve-METDnsName             { [CmdletBinding()] param([string]$Name,[string]$Type) }
     function Get-DkimSigningConfig           { [CmdletBinding()] param() }
     function Get-QuarantinePolicy            { [CmdletBinding()] param() }
-    function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType) }
+    function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }
     function Get-TransportRule               { [CmdletBinding()] param([string]$ResultSize) }
@@ -234,6 +234,81 @@ Describe 'MET-EXO004 Quarantine Policies' {
     }
 }
 
+Describe 'MET-EXO005 Tenant Allow/Block List' {
+    BeforeEach {
+        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO005-TenantAllowBlockList.ps1'
+    }
+
+    Context 'Advanced Delivery URL allow entries present alongside a well-maintained TABL' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'good@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'bad@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } {
+                @(
+                    [PSCustomObject]@{ Action = 'Allow'; Value = '*.fabrikam.com' }
+                    [PSCustomObject]@{ Action = 'Allow'; Value = '*.contoso-sim.com' }
+                )
+            }
+        }
+
+        It 'Reports Advanced Delivery entries as a separate Info result' {
+            $results = & $checkFile
+            $advResult = $results | Where-Object { $_.AffectedObject -match 'Advanced Delivery' }
+            $advResult | Should -Not -BeNullOrEmpty
+            $advResult.Result | Should -Be 'Info'
+            $advResult.Severity | Should -Be 'Informational'
+            $advResult.Finding | Should -Match 'fabrikam'
+            $advResult.ReferenceUrl | Should -Match 'advanced-delivery-policy-configure'
+        }
+
+        It 'Does not change the main TABL Pass verdict' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'Advanced Delivery lookup throws' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Url' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = '*.contoso.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { throw 'Access denied' }
+        }
+
+        It 'Still completes the main TABL logic and returns a Warning for the wildcard allow' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Warning'
+            $mainResult.Finding | Should -Match 'wildcard'
+        }
+
+        It 'Does not emit an Advanced Delivery result' {
+            $results = & $checkFile
+            $advResult = $results | Where-Object { $_.AffectedObject -match 'Advanced Delivery' }
+            $advResult | Should -BeNullOrEmpty
+        }
+    }
+}
+
 Describe 'MET-EXO006 Submission Policy' {
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO006-SubmissionPolicy.ps1'
@@ -280,6 +355,46 @@ Describe 'MET-EXO006 Submission Policy' {
             $mailboxResult | Should -Not -BeNullOrEmpty
             $mailboxResult.Result | Should -Be 'Warning'
             $mailboxResult.Finding | Should -Match 'mailbox'
+        }
+    }
+
+    Context 'Rule and policy addresses agree' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
+                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
+                    ReportJunkAddresses = 'secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+                }
+            }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = 'secops@contoso.com' } }
+        }
+        It 'Returns Pass for address consistency' {
+            $results = & $checkFile
+            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
+            $consistencyResult | Should -Not -BeNullOrEmpty
+            $consistencyResult.Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'Rule and policy addresses drift' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
+                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
+                    ReportJunkAddresses = 'old-secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+                }
+            }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = 'secops@contoso.com' } }
+        }
+        It 'Returns Warning identifying the mismatched report type and stale address' {
+            $results = & $checkFile
+            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
+            $consistencyResult | Should -Not -BeNullOrEmpty
+            $consistencyResult.Result | Should -Be 'Warning'
+            $consistencyResult.Finding | Should -Match 'Junk reports go to'
+            $consistencyResult.Finding | Should -Match 'old-secops@contoso.com'
         }
     }
 }

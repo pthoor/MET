@@ -159,18 +159,23 @@
         $errorItems = @($items | Where-Object { $_.Error })
 
         if ($failItems.Count -eq 0 -and $warnItems.Count -eq 0 -and $errorItems.Count -eq 0) {
-            # All pass / info / N/A - emit a single tidy pass result
-            $first   = $items[0]
+            # All pass / info / N/A - emit a single tidy summary result. Info-only
+            # checks (e.g. MET-MDO014's healthy case) are summarised the same way
+            # Pass results are, so no item is silently dropped.
+            $first     = $items[0]
             $passItems = @($items | Where-Object Result -eq 'Pass')
-            $passCount = $passItems.Count
-            $noun    = Get-METAggregationNoun -CheckId $first.CheckId
+            $infoItems = @($items | Where-Object Result -eq 'Info')
+            $noun      = Get-METAggregationNoun -CheckId $first.CheckId
 
-            if ($passCount -gt 0) {
-                $findingLines = $passItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
+            $summaryItems  = @($passItems) + @($infoItems)
+            $summaryResult = if ($passItems.Count -gt 0) { 'Pass' } else { 'Info' }
+
+            if ($summaryItems.Count -gt 0) {
+                $findingLines = $summaryItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
                 $aggregated.Add((New-METCheckResult `
                     -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
-                    -Result Pass -Severity $first.Severity `
-                    -AffectedObject "All $passCount $noun" `
+                    -Result $summaryResult -Severity $first.Severity `
+                    -AffectedObject "All $($summaryItems.Count) $noun" `
                     -Finding ($findingLines -join "`n") `
                     -Recommendation $first.Recommendation `
                     -ReferenceUrl $first.ReferenceUrl))
@@ -209,6 +214,7 @@ function Get-METAggregationNoun {
     switch -Regex ($CheckId) {
         'MET-EXO00[1-3]' { return 'domains' }
         'MET-EXO004'      { return 'quarantine policies' }
+        'MET-MDO014'      { return 'groups' }
         default            { return 'policies' }
     }
 }

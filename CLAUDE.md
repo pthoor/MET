@@ -110,11 +110,11 @@ MET/
 |---|---|
 | PowerShell | 7.4+ (tested on 7.4, 7.6) |
 | ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) - required |
-| Microsoft.Graph.Identity.SignIns / .Groups | 2.x - required |
+| Microsoft.Graph.Identity.SignIns / .Groups | 2.x - optional; a missing module or failed Graph connection is non-fatal, and group expansion degrades to Exchange Online cmdlets (see [Connection Requirements for New Checks](#connection-requirements-for-new-checks)) |
 | MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
 
-No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only - on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there.
+No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-only - on Linux/macOS every check runs except EXO001 (DMARC) and EXO003 (SPF), which need `Resolve-DnsName`; `Resolve-METDnsName` falls back to `dig`/`nslookup` there. Teams auth on Linux/macOS additionally needs `-UseDeviceAuthentication`: MicrosoftTeams 7.9.0+ defaults to WAM, which P/Invokes `kernel32.dll`. `Connect-METSession` passes `-DisableWAM` automatically off Windows.
 
 `RequiredModules` is deliberately empty in `MET.psd1` - declaring them there causes a hard import failure when a dependency is missing, which would prevent `Test-METPrerequisites` from running and guiding the user. Dependencies are checked at runtime instead.
 
@@ -393,6 +393,14 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 - Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name
 - `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` - opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
 
+### Connection Requirements for New Checks
+
+Every MDO/EXO check needs Exchange Online - it is always connected (hard requirement; `Connect-METSession` aborts if it fails). Teams-category checks are split: `MET-Teams001/002/004` actually call Exchange-hosted cmdlets (`Get-SafeLinksPolicy`, `Get-TeamsProtectionPolicy`), while `MET-Teams003/005/006/007/008` need the native `MicrosoftTeams` module (`Get-Cs*`) - both are proven to coexist safely with Exchange Online in one process.
+
+Microsoft Graph is different: its bundled MSAL build routinely conflicts with ExchangeOnlineManagement's in the same PowerShell process (a `Microsoft.Identity.Client`/`Microsoft.IdentityModel.Abstractions` version mismatch that has no reliable fix across currently-published module versions - not an environment or OS issue, just release-cadence drift between Microsoft's own PowerShell modules). `Connect-METSession` treats a Graph connection failure as non-fatal and continues without it, exactly like it already does for Teams. `Expand-METGroupMembership` is the only Graph call site in the codebase, and it degrades gracefully to Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution/mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups) when Graph is unavailable - which covers every group type EOP/MDO policies can actually target (dynamic-membership groups are not supported as policy recipient conditions at all, Graph or no Graph).
+
+When adding a new check: default to Exchange Online or native Teams cmdlets. Only add a direct Graph dependency if there is genuinely no Exchange Online equivalent for the data you need (e.g. Conditional Access, Entra role assignments) - and if you do, it must degrade non-fatally like `Expand-METGroupMembership` does, not abort the run.
+
 ---
 
 ## Check Inventory Detail
@@ -414,6 +422,7 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 | MET-MDO011 | User Tags | Tags in use; alert policies referencing tags exist |
 | MET-MDO012 | Safe Documents | `EnableSafeDocs` enabled; `AllowSafeDocsOpen` disabled (via `Get-AtpPolicyForO365`) |
 | MET-MDO013 | Policy Precedence Conflicts | Finds custom anti-spam, anti-malware, Anti-Phish, Safe Links, and Safe Attachments rules whose targeted recipients are also covered by a Standard/Strict preset; incomplete source data produces a failed check instead of a clean result |
+| MET-MDO014 | Group Reference Audit | Every group referenced by an enabled EOP/MDO rule's `SentToMemberOf`; reports member count per group, flags 0-member groups as a silent-inert-policy condition |
 
 ### EXO Checks
 
@@ -460,9 +469,9 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 
 ---
 
-## Current State (v0.6.0)
+## Current State (v0.7.0)
 
-All 37 checks are implemented across MDO (13), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0.
+All 38 checks are implemented across MDO (14), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0; v0.7.0 added MET-MDO014 (Group Reference Audit) and made Microsoft Graph an optional dependency.
 
 Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration

@@ -73,9 +73,9 @@ Describe 'Invoke-METTriage' {
             $filtered.Count | Should -Be ($all.Count - 1)
         }
 
-        It 'Covers all 37 checks across MDO, EXO, and Teams' {
+        It 'Covers all 38 checks across MDO, EXO, and Teams' {
             $list = Invoke-METTriage -ListChecks
-            $list.Count | Should -Be 37
+            $list.Count | Should -Be 38
         }
     }
 
