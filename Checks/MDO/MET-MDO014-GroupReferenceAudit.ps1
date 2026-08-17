@@ -24,7 +24,13 @@ if ($allMailboxes.Count -eq 0) {
     return
 }
 
-$groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
+if ($METContext -and $METContext.GroupMembers) {
+    $groupCache = $METContext.GroupMembers
+}
+else {
+    $groupCache = @{}
+    if ($METContext) { $METContext.GroupMembers = $groupCache }
+}
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 
 $sources = @(

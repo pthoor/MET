@@ -10,7 +10,7 @@ function Test-METSenderIpRangeIsBroad {
     param([Parameter(Mandatory)][string] $Entry)
 
     if ($Entry -match '^(?<ip>[\d.]+)/(?<prefix>\d{1,2})$') {
-        return ([int]$Matches['prefix'] -le 16)
+        return ([int]$Matches['prefix'] -lt 16)
     }
 
     if ($Entry -match '^(?<start>[\d.]+)\s*-\s*(?<end>[\d.]+)$') {
