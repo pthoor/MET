@@ -469,9 +469,9 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 
 ---
 
-## Current State (v0.6.0)
+## Current State (v0.7.0)
 
-All 38 checks are implemented across MDO (14), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0.
+All 38 checks are implemented across MDO (14), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0; v0.7.0 added MET-MDO014 (Group Reference Audit) and made Microsoft Graph an optional dependency.
 
 Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration
