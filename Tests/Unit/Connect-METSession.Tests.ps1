@@ -2,6 +2,8 @@ BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Public/Connect-METSession.ps1"
     . "$root/Private/Get-METCertificateByThumbprint.ps1"
+    . "$root/Private/Get-METAssemblyFileVersion.ps1"
+    . "$root/Private/Test-METAssemblyLoadConflict.ps1"
 
     # Stubs mirror the real cmdlets' parameter names so that splatting a
     # non-existent parameter fails binding instead of silently passing.
@@ -137,6 +139,41 @@ Describe 'Connect-METSession Teams leg' {
             } | Should -Not -Throw
 
             ($script:teamsWarnings -join ' ') | Should -Match 'UseDeviceAuthentication'
+        }
+    }
+}
+
+Describe 'Connect-METSession assembly conflict detection' {
+    BeforeEach {
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1'; ModuleBase = '/fake/ExchangeOnlineManagement/3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-ConnectionInformation { $null }
+        Mock Get-METAssemblyFileVersion { [version]'4.83.1.0' }
+        Mock Connect-ExchangeOnline {}
+    }
+
+    Context 'A conflicting MSAL version is already loaded in-process' {
+        It 'Throws an actionable error and never attempts Connect-ExchangeOnline' {
+            Mock Test-METAssemblyLoadConflict {
+                "A different version of Microsoft.Identity.Client (4.82.0.0, loaded from '/teams/Microsoft.Identity.Client.dll') is already active in this PowerShell session. Restart PowerShell, then run Connect-METSession again."
+            }
+
+            { Connect-METSession -SkipGraph -SkipTeams -UseDeviceAuthentication -ErrorAction Stop } |
+                Should -Throw -ExpectedMessage '*Restart PowerShell*'
+
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    Context 'No conflicting MSAL version is loaded' {
+        It 'Proceeds to call Connect-ExchangeOnline' {
+            Mock Test-METAssemblyLoadConflict { $null }
+
+            Connect-METSession -SkipGraph -SkipTeams -UseDeviceAuthentication
+
+            Should -Invoke Connect-ExchangeOnline -Times 1 -Exactly
         }
     }
 }

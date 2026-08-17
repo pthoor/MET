@@ -47,7 +47,11 @@
     # default AssemblyLoadContext. ExchangeOnlineManagement ships the newest
     # (4.83.1 vs Graph's 4.82.1), and .NET resolves a lower version request
     # against a higher loaded one but never the reverse. Connecting Graph first
-    # pins the older MSAL and Exchange then fails with 0x80131040.
+    # pins the older MSAL and Exchange then fails with 0x80131040. This only
+    # protects against a conflict this function causes itself - if the caller's
+    # session already loaded a conflicting MSAL build before ever calling
+    # Connect-METSession (e.g. a prior Import-Module MicrosoftTeams/Graph/Az),
+    # the check below surfaces that instead of the raw MSAL load failure.
     if (-not $SkipExchangeOnline) {
         $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
             Where-Object { $_.Version -ge [version]'3.0.0' } | Select-Object -First 1
@@ -89,21 +93,39 @@
             }
         }
 
-        try {
-            $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-                Where-Object { $_.State -eq 'Connected' } |
-                Select-Object -First 1
+        $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue |
+            Where-Object { $_.State -eq 'Connected' } |
+            Select-Object -First 1
 
-            if (-not $existing) {
+        if (-not $existing) {
+            # A different MSAL version already loaded in-process (e.g. from an
+            # earlier Import-Module MicrosoftTeams/Graph/Az in this session) can
+            # never be reconciled by connect order alone - .NET cannot unload or
+            # replace an assembly once loaded. Detect that case up front so the
+            # error names the real cause instead of surfacing MSAL's opaque
+            # 0x80131040 manifest-mismatch failure.
+            $requiredMsalVersion = $null
+            if ($exoModule.ModuleBase) {
+                $exoMsalPath = Join-Path $exoModule.ModuleBase 'netCore' 'Microsoft.Identity.Client.dll'
+                $requiredMsalVersion = Get-METAssemblyFileVersion -Path $exoMsalPath
+            }
+            if ($requiredMsalVersion) {
+                $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
+                if ($conflict) {
+                    throw "Failed to connect to Exchange Online: $conflict"
+                }
+            }
+
+            try {
                 Write-Verbose 'Connecting to Exchange Online...'
                 Connect-ExchangeOnline @exoParams
             }
-            else {
-                Write-Verbose "Exchange Online already connected as $($existing.UserPrincipalName)."
+            catch {
+                throw "Failed to connect to Exchange Online: $_`nOn Linux/macOS try: Connect-METSession -UseDeviceAuthentication -Verbose`nIf that still fails, try: Connect-METSession -DisableWAM -Verbose"
             }
         }
-        catch {
-            throw "Failed to connect to Exchange Online: $_`nOn Linux/macOS try: Connect-METSession -UseDeviceAuthentication -Verbose`nIf that still fails, try: Connect-METSession -DisableWAM -Verbose"
+        else {
+            Write-Verbose "Exchange Online already connected as $($existing.UserPrincipalName)."
         }
     }
 
