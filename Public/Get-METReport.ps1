@@ -861,8 +861,11 @@ function renderDonut() {
   const g = document.getElementById('donut-segments');
   if (!g) return;
   g.innerHTML = '';
-  const fail = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId); }).length;
-  const warn = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId); }).length;
+  // Error-tagged results are counted in the separate 'Error' bucket (sum-err) instead, which
+  // this function does not recompute - excluding !c.error here keeps sum-fail/sum-warn from
+  // double-counting them and drifting from the server-rendered initial summary.
+  const fail = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
+  const warn = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
   const pass = CHECKS.filter(function(c) { return c.result === 'Pass'; }).length;
   const na   = CHECKS.filter(function(c) { return c.result === 'NotApplicable'; }).length;
   const info = CHECKS.filter(function(c) { return c.result === 'Info'; }).length;

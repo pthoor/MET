@@ -484,6 +484,36 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
         }
     }
+
+    Context 'Graph already connected, but the requested tenant GUID cannot be resolved' {
+        It 'Fails closed - throws instead of silently allowing reuse of an unverified session' {
+            Mock Get-MgContext { [PSCustomObject]@{ TenantId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; Account = 'app@customerA' } }
+            Mock Resolve-METTenantGuid { $null } -ParameterFilter { $TenantId -eq 'contoso.onmicrosoft.com' }
+
+            { Connect-METSession -SkipExchangeOnline -SkipTeams `
+                    -AppId '11111111-1111-1111-1111-111111111111' `
+                    -TenantId 'contoso.onmicrosoft.com' `
+                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
+
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+        }
+    }
+
+    Context 'Teams already connected, but the requested tenant GUID cannot be resolved' {
+        It 'Fails closed - throws instead of silently allowing reuse of an unverified session' {
+            Mock Get-CsTenant { [PSCustomObject]@{ TenantId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' } }
+            Mock Resolve-METTenantGuid { $null } -ParameterFilter { $TenantId -eq 'contoso.onmicrosoft.com' }
+
+            { Connect-METSession -SkipExchangeOnline -SkipGraph `
+                    -AppId '11111111-1111-1111-1111-111111111111' `
+                    -TenantId 'contoso.onmicrosoft.com' `
+                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
+
+            Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
+        }
+    }
 }
 
 Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Interactive + DelegatedOrganization)' {
@@ -821,7 +851,7 @@ Describe 'Disconnect-METSession' {
         Mock Disconnect-ExchangeOnline {}
         Mock Get-MgContext { $null }
         Mock Disconnect-MgGraph {}
-        Mock Get-CsTenant { throw 'not connected' }
+        Mock Get-CsTenant { throw [System.Management.Automation.CommandNotFoundException]::new('Get-CsTenant is not recognized') }
         Mock Disconnect-MicrosoftTeams {}
 
         { Disconnect-METSession } | Should -Not -Throw
@@ -837,7 +867,7 @@ Describe 'Disconnect-METSession' {
         Mock Disconnect-ExchangeOnline {}
         Mock Get-MgContext { [PSCustomObject]@{ Account = 'admin@customera.onmicrosoft.com' } }
         Mock Disconnect-MgGraph { throw 'stuck session' }
-        Mock Get-CsTenant { throw 'not connected' }
+        Mock Get-CsTenant { throw [System.Management.Automation.CommandNotFoundException]::new('Get-CsTenant is not recognized') }
         Mock Disconnect-MicrosoftTeams {}
 
         Disconnect-METSession -WarningAction SilentlyContinue
@@ -853,11 +883,28 @@ Describe 'Disconnect-METSession' {
 
         Mock Get-ConnectionInformation { $null }
         Mock Get-MgContext { $null }
-        Mock Get-CsTenant { throw 'not connected' }
+        Mock Get-CsTenant { throw [System.Management.Automation.CommandNotFoundException]::new('Get-CsTenant is not recognized') }
 
         Disconnect-METSession
 
         $script:METConnection | Should -BeNullOrEmpty
         $script:METSessionInfo | Should -BeNullOrEmpty
+    }
+
+    It 'Treats an ambiguous Get-CsTenant probe failure as an indeterminate disconnect (not "not connected"), keeping tracking in place' {
+        $script:METConnection = @{ Mode = 'Interactive'; Org = 'customera.onmicrosoft.com' }
+        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive' }
+
+        Mock Get-ConnectionInformation { $null }
+        Mock Get-MgContext { $null }
+        Mock Get-CsTenant { throw 'Service temporarily unavailable' }
+        Mock Disconnect-MicrosoftTeams {}
+
+        $warnings = @(Disconnect-METSession -WarningAction Continue 3>&1)
+
+        Should -Invoke Disconnect-MicrosoftTeams -Times 0 -Exactly
+        ($warnings -join ' ') | Should -Match 'Microsoft Teams'
+        $script:METConnection | Should -Not -BeNullOrEmpty
+        $script:METSessionInfo | Should -Not -BeNullOrEmpty
     }
 }

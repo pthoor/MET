@@ -300,7 +300,14 @@ function Connect-METSession {
             # - a raw string compare against a domain name would mismatch on every call.
             if ($mgContext -and $requestedOrg) {
                 $expectedTenantGuid = Resolve-METTenantGuid -TenantId $requestedOrg
-                if ($expectedTenantGuid -and $mgContext.TenantId -ne $expectedTenantGuid) {
+                if (-not $expectedTenantGuid) {
+                    # Fail closed: an unresolvable tenant GUID (e.g. a transient OIDC discovery
+                    # outage) must not be treated as "no mismatch" - that would silently let a
+                    # stale Graph session from a different customer be reused unverified, exactly
+                    # the cross-customer leak this check exists to close.
+                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
+                }
+                if ($mgContext.TenantId -ne $expectedTenantGuid) {
                     throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
                 }
             }
@@ -377,7 +384,12 @@ function Connect-METSession {
                 # GUID even when the caller passed a domain name - see the Graph leg above for why.
                 if ($teamsConnection -and $requestedOrg) {
                     $expectedTenantGuid = Resolve-METTenantGuid -TenantId $requestedOrg
-                    if ($expectedTenantGuid -and $teamsConnection.TenantId -ne $expectedTenantGuid) {
+                    if (-not $expectedTenantGuid) {
+                        # Fail closed - see the identical Graph-leg comment above for why an
+                        # unresolvable GUID must not be treated as "no mismatch".
+                        throw "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
+                    }
+                    if ($teamsConnection.TenantId -ne $expectedTenantGuid) {
                         throw "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
                     }
                 }

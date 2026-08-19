@@ -71,6 +71,28 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Error | Should -Be 2
     }
 
+    It 'keeps the HTML report client-side recalculation from double-counting Error-tagged Fail/Warning results' {
+        $output = Join-Path $TestDrive 'reports-error-summary-html'
+        $results = @(
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams010'; Category = 'Teams'; Name = 'Fail with retrieval error'
+                Result = 'Fail'; Severity = 'Medium'; Score = 0; AffectedObject = 'Tenant'
+                Finding = 'could not retrieve'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = 'Get-CsExternalAccessPolicy threw'
+            }
+        )
+
+        $results | Get-METReport -Format HTML -OutputPath $output -TenantName 'contoso.com'
+        $folder = Get-ChildItem $output -Directory | Select-Object -First 1
+        $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
+
+        # renderDonut() recomputes sum-fail/sum-warn on every page load and every risk-acceptance
+        # toggle - it must exclude Error-tagged items the same way the server-rendered initial
+        # summary does, or those two counters silently drift out of sync with the 'Error' badge.
+        $html | Should -Match "result === 'Fail' && !isAccepted\(c\.checkId\) && !c\.error"
+        $html | Should -Match "result === 'Warning' && !isAccepted\(c\.checkId\) && !c\.error"
+    }
+
     It 'counts Info results in the summary and includes them in the console/JSON total' {
         $output = Join-Path $TestDrive 'reports-info-summary'
         $results = @(
