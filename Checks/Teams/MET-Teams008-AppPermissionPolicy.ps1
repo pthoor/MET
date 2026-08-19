@@ -20,12 +20,13 @@ if ($issues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams008' -Category Teams -Name 'App Permission Policy' `
         -Result Warning -Severity Medium -AffectedObject 'Teams App Permission Policies' `
         -Finding ($issues -join '; ') `
-        -Recommendation 'Third-party Teams apps carry delegated Graph permissions and are a growing OAuth-consent-phishing and supply-chain vector. Configure app permission policies in the Teams admin center (Teams apps > Permission policies) to use an explicit allowed-app list or blocked-app list rather than leaving any catalog unrestricted. Note: app permission policies must be created/modified in the admin center, not via PowerShell Set-/New- cmdlets.' `
+        -Recommendation 'Third-party Teams apps carry delegated Graph permissions and are a growing OAuth-consent-phishing and supply-chain vector. Configure app permission policies in the Teams admin center (Teams apps > Permission policies) to use an explicit allowed-app list or blocked-app list rather than leaving any catalog unrestricted. Note: app permission policies must be created/modified in the admin center, not via PowerShell Set-/New- cmdlets. If this tenant has migrated to App Centric Management (ACM) or Unified App Management (UAM), this policy may no longer be enforced - verify current app governance in the Teams admin center (admin.teams.microsoft.com) rather than relying solely on this check.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/microsoftteams/teams-app-permission-policies'
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams008' -Category Teams -Name 'App Permission Policy' `
         -Result Pass -Severity Medium -AffectedObject 'Teams App Permission Policies' `
         -Finding 'All Teams app permission policies restrict app catalogs to an explicit allow-list or block-list' `
+        -Recommendation 'If this tenant has migrated to App Centric Management (ACM) or Unified App Management (UAM), this policy may no longer be enforced - verify current app governance in the Teams admin center (admin.teams.microsoft.com) rather than relying solely on this check.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/microsoftteams/teams-app-permission-policies'
 }

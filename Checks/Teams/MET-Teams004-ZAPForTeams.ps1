@@ -56,11 +56,44 @@ if ($malwareIssue) { $issues.Add($malwareIssue) }
 $hcpIssue = Test-QuarantineTagPermission -TagName $teamsPolicy.HighConfidencePhishQuarantineTag -Label 'High-confidence phish'
 if ($hcpIssue) { $issues.Add($hcpIssue) }
 
+$warningIssues = [System.Collections.Generic.List[string]]::new()
+
+try {
+    $protectionRules = @(Get-TeamsProtectionPolicyRule -ErrorAction Stop)
+    $rulesWithExceptions = @($protectionRules | Where-Object {
+        $_.State -eq 'Enabled' -and (
+            @($_.ExceptIfSentTo | Where-Object { $_ }).Count -gt 0 -or
+            @($_.ExceptIfSentToMemberOf | Where-Object { $_ }).Count -gt 0 -or
+            @($_.ExceptIfRecipientDomainIs | Where-Object { $_ }).Count -gt 0
+        )
+    })
+    foreach ($rule in $rulesWithExceptions) {
+        $exceptedRecipients = @($rule.ExceptIfSentTo | Where-Object { $_ }).Count
+        $exceptedGroups = @($rule.ExceptIfSentToMemberOf | Where-Object { $_ }).Count
+        $exceptedDomains = @($rule.ExceptIfRecipientDomainIs | Where-Object { $_ }).Count
+        $exceptionParts = [System.Collections.Generic.List[string]]::new()
+        if ($exceptedRecipients -gt 0) { $exceptionParts.Add("$exceptedRecipients recipient(s)") }
+        if ($exceptedGroups -gt 0) { $exceptionParts.Add("$exceptedGroups group(s)") }
+        if ($exceptedDomains -gt 0) { $exceptionParts.Add("$exceptedDomains domain(s)") }
+        $warningIssues.Add("Teams protection rule '$($rule.Name)' excepts $($exceptionParts -join ', ') from Teams ZAP protection - excluded recipients do not receive retroactive removal of malicious messages")
+    }
+}
+catch {
+    Write-Verbose "Could not retrieve Teams protection policy rules - skipping rule exception check: $_"
+}
+
 if ($issues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
         -Result Fail -Severity High -AffectedObject 'Teams Protection Policy' `
-        -Finding ($issues -join '; ') `
+        -Finding (($issues + $warningIssues) -join '; ') `
         -Recommendation 'Enable ZAP for Teams: Set-TeamsProtectionPolicy -ZapEnabled $true. Ensure MalwareQuarantineTag and HighConfidencePhishQuarantineTag use AdminOnlyAccessPolicy or a custom policy with PermissionToRelease disabled.' `
+        -ReferenceUrl 'https://aka.ms/mdo-teams-zap'
+}
+elseif ($warningIssues.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
+        -Result Warning -Severity High -AffectedObject 'Teams Protection Policy' `
+        -Finding ($warningIssues -join '; ') `
+        -Recommendation 'Review Teams protection policy rule exceptions (ExceptIfSentTo, ExceptIfSentToMemberOf, ExceptIfRecipientDomainIs) and remove any that are not intentional - excluded recipients do not benefit from ZAP for Teams.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-zap'
 }
 else {

@@ -10,6 +10,13 @@ coverage.xml
 # NuGet packages from local Publish-Module testing
 *.nupkg
 
+# Certificates / keys (never commit private key material)
+*.pfx
+*.key
+*.pem
+*.cer
+*.crt
+
 # OS
 .DS_Store
 Thumbs.db

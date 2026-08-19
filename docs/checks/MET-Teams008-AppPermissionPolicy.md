@@ -31,6 +31,10 @@ Restricting each catalog to an explicit allow-list (or block-list, for organizat
 
 Third-party Teams apps carry delegated Graph permissions and are a growing OAuth-consent-phishing and supply-chain vector. Configure app permission policies in the Teams admin center (Teams apps > Permission policies) to use an explicit allowed-app list or blocked-app list rather than leaving any catalog unrestricted. Policy changes must be made in the admin center, not via PowerShell `Set-`/`New-` cmdlets.
 
+## Known limitation
+
+Microsoft's guidance states that `Get`/`Set`/`Remove-CsTeamsAppPermissionPolicy` are only applicable for tenants that have not migrated to App Centric Management (ACM) or Unified App Management (UAM). On a migrated tenant the cmdlet may still return policy data, but that policy no longer actually governs app access - this check can then report a misleadingly clean Pass. There is currently no confirmed cmdlet or Graph property to detect ACM/UAM migration status, so this check cannot detect that condition itself; both the Pass and Warning results carry a recommendation to verify current app governance in the Teams admin center directly.
+
 ## Reference
 
 - [Manage app permission policies in Microsoft Teams](https://learn.microsoft.com/en-us/microsoftteams/teams-app-permission-policies)

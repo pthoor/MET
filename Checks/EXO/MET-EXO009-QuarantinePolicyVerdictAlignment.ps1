@@ -1,6 +1,12 @@
-# Verifies that quarantine policies assigned to each verdict type enforce permissions
-# appropriate to the risk level of that verdict - regardless of policy name.
-# Catches tenants that built custom quarantine policies but assigned them to the wrong verdicts.
+# Verifies that quarantine policies assigned to Malware and High-Confidence Phish verdicts
+# prevent user self-release, the only two verdicts with a restrictive floor per Microsoft's
+# own Standard/Strict preset matrix (docs/gap-analysis-2026-08-quarantine-policies.md). Every
+# other verdict (Phish, Mailbox Intelligence Phish, Spoof, both impersonation types, spam
+# tiers, Bulk) uses a full-access quarantine policy even under Strict, so they are not
+# evaluated. Assignments sourced from preset-generated policies (Standard/Strict Preset
+# Security Policy*) are skipped entirely - their tags are guaranteed correct by Microsoft and
+# not admin-actionable. Custom policies are still checked against the actual
+# PermissionToRelease bit, not the tag's name.
 
 $policyPermissions = @{}
 try {
@@ -17,21 +23,12 @@ catch {
     return
 }
 
-# High   = PermissionToRelease must be $false → Fail
-# Medium = PermissionToRelease = $true → Warning
-# Low    = permissive policies are acceptable; skipped
-$verdictRisk = @{
-    'Malware'                    = 'High'
-    'Impersonated User'          = 'High'
-    'Impersonated Domain'        = 'High'
-    'High-Confidence Phish'      = 'High'
-    'Phish'                      = 'Medium'
-    'Mailbox Intelligence Phish' = 'Medium'
-    'Spoof'                      = 'Medium'
-    'High-Confidence Spam'       = 'Low'
-    'Spam'                       = 'Low'
-    'Bulk'                       = 'Low'
-}
+# Only these two verdicts have a restrictive floor (PermissionToRelease must be $false) in
+# Microsoft's own Default/Standard/Strict matrix. Every other verdict has no floor to enforce.
+$restrictedVerdicts = @(
+    'Malware'
+    'High-Confidence Phish'
+)
 
 $assignments = [System.Collections.Generic.List[hashtable]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
@@ -39,6 +36,7 @@ $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 # Anti-spam (EOP + MDO)
 try {
     foreach ($p in (Get-HostedContentFilterPolicy -ErrorAction Stop)) {
+        if (Test-METIsPresetSecurityPolicyName -Name $p.Name) { continue }
         $verdictMap = [ordered]@{
             HighConfidencePhishQuarantineTag = 'High-Confidence Phish'
             PhishQuarantineTag               = 'Phish'
@@ -61,6 +59,7 @@ catch {
 # Anti-malware
 try {
     foreach ($p in (Get-MalwareFilterPolicy -ErrorAction Stop)) {
+        if (Test-METIsPresetSecurityPolicyName -Name $p.Name) { continue }
         if ($p.QuarantineTag) {
             $null = $assignments.Add(@{ Source = $p.Name; Verdict = 'Malware'; Tag = $p.QuarantineTag })
         }
@@ -73,6 +72,7 @@ catch {
 # Anti-phish impersonation verdicts (MDO Plan 1+)
 try {
     foreach ($p in (Get-AntiPhishPolicy -ErrorAction Stop)) {
+        if (Test-METIsPresetSecurityPolicyName -Name $p.Name) { continue }
         $verdictMap = [ordered]@{
             TargetedUserQuarantineTag        = 'Impersonated User'
             TargetedDomainQuarantineTag      = 'Impersonated Domain'
@@ -94,6 +94,7 @@ catch {
 # Safe Attachments (MDO Plan 1+) - only Block action results in quarantine
 try {
     foreach ($p in (Get-SafeAttachmentPolicy -ErrorAction Stop | Where-Object { $_.Action -eq 'Block' })) {
+        if (Test-METIsPresetSecurityPolicyName -Name $p.Name) { continue }
         if ($p.QuarantineTag) {
             $null = $assignments.Add(@{ Source = $p.Name; Verdict = 'Malware'; Tag = $p.QuarantineTag })
         }
@@ -112,12 +113,10 @@ if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {
     return
 }
 
-$fails    = [System.Collections.Generic.List[string]]::new()
-$warnings = [System.Collections.Generic.List[string]]::new()
+$fails = [System.Collections.Generic.List[string]]::new()
 
 foreach ($a in $assignments) {
-    $risk = $verdictRisk[$a.Verdict]
-    if ($risk -eq 'Low') { continue }
+    if ($a.Verdict -notin $restrictedVerdicts) { continue }
 
     $qp = $policyPermissions[$a.Tag]
     if (-not $qp) {
@@ -126,9 +125,7 @@ foreach ($a in $assignments) {
     }
 
     if ($qp.EndUserQuarantinePermissions.PermissionToRelease) {
-        $msg = "Policy '$($a.Source)': $($a.Verdict) verdict uses '$($a.Tag)' which allows users to self-release quarantined messages"
-        if ($risk -eq 'High') { $null = $fails.Add($msg) }
-        else                   { $null = $warnings.Add($msg) }
+        $null = $fails.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses '$($a.Tag)' which allows users to self-release quarantined messages")
     }
 }
 
@@ -136,19 +133,12 @@ if ($fails.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
         -Result Fail -Severity High -AffectedObject 'Quarantine Tag Assignments' `
         -Finding ($fails -join '; ') `
-        -Recommendation 'For Malware, High-Confidence Phish, and impersonation verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
-        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
-}
-elseif ($warnings.Count -gt 0) {
-    New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
-        -Result Warning -Severity Medium -AffectedObject 'Quarantine Tag Assignments' `
-        -Finding ($warnings -join '; ') `
-        -Recommendation 'For Phish, Mailbox Intelligence, and Spoof verdicts, consider using a quarantine policy where PermissionToRelease is disabled so users cannot self-release without admin review.' `
+        -Recommendation 'For Malware and High-Confidence Phish verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
         -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
 }
 else {
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
         -Result Pass -Severity High -AffectedObject 'Quarantine Tag Assignments' `
-        -Finding 'All high and medium risk verdict types use quarantine policies that prevent user self-release' `
+        -Finding 'Malware and High-Confidence Phish verdicts use quarantine policies that prevent user self-release' `
         -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
 }

@@ -15,21 +15,34 @@ catch {
     Write-Verbose "Could not retrieve tenant federation configuration: $_"
 }
 
-# Check Teams meeting policy for anonymous join and lobby settings
+# Check Teams meeting policies for anonymous join and lobby settings. Every
+# policy instance is evaluated, not just Global, since per-user/group policy
+# assignments can silently apply weaker settings than the tenant default.
 try {
-    $meetingPolicies = Get-CsTeamsMeetingPolicy -ErrorAction Stop
-    $globalPolicy    = $meetingPolicies | Where-Object { $_.Identity -eq 'Global' } | Select-Object -First 1
+    $meetingPolicies = @(Get-CsTeamsMeetingPolicy -ErrorAction Stop)
 
-    if ($globalPolicy) {
-        if ($globalPolicy.AllowAnonymousUsersToJoinMeeting -eq $true) {
-            $issues.Add('Anonymous users are allowed to join meetings without being admitted from the lobby')
-        }
-        if ($globalPolicy.AutoAdmittedUsers -eq 'Everyone') {
-            $issues.Add("AutoAdmittedUsers is 'Everyone' - all users bypass the lobby; recommended: 'EveryoneInSameAndFederatedCompany' or stricter")
-        }
-        if ($globalPolicy.AllowExternalNonTrustedMeetingChat -eq $true) {
-            $issues.Add('External non-trusted participants are allowed to use meeting chat')
-        }
+    $anonymousJoinPolicies = @($meetingPolicies | Where-Object { $_.AllowAnonymousUsersToJoinMeeting -eq $true })
+    if ($anonymousJoinPolicies.Count -gt 0) {
+        $names = ($anonymousJoinPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("Anonymous users are allowed to join meetings without being admitted from the lobby in the following meeting policy/policies: $names")
+    }
+
+    $everyoneAdmittedPolicies = @($meetingPolicies | Where-Object { $_.AutoAdmittedUsers -eq 'Everyone' })
+    if ($everyoneAdmittedPolicies.Count -gt 0) {
+        $names = ($everyoneAdmittedPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("AutoAdmittedUsers is 'Everyone' in the following meeting policy/policies: $names - all users bypass the lobby; recommended: 'EveryoneInSameAndFederatedCompany' or stricter")
+    }
+
+    $externalChatPolicies = @($meetingPolicies | Where-Object { $_.AllowExternalNonTrustedMeetingChat -eq $true })
+    if ($externalChatPolicies.Count -gt 0) {
+        $names = ($externalChatPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("External non-trusted participants are allowed to use meeting chat in the following meeting policy/policies: $names")
+    }
+
+    $pstnLobbyBypassPolicies = @($meetingPolicies | Where-Object { $_.AllowPSTNUsersToBypassLobby -eq $true })
+    if ($pstnLobbyBypassPolicies.Count -gt 0) {
+        $names = ($pstnLobbyBypassPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("PSTN callers bypass the lobby in the following meeting policy/policies: $names - phone participants are automatically admitted, a meeting-invite-lure risk")
     }
 }
 catch {
@@ -51,7 +64,7 @@ catch {
 }
 
 if ($issues.Count -gt 0) {
-    $result = if ($issues | Where-Object { $_ -match 'Anonymous' -or $_ -match 'Everyone' }) { 'Fail' } else { 'Warning' }
+    $result = if ($issues | Where-Object { $_ -match 'Anonymous' -or $_ -match 'Everyone' -or $_ -match 'PSTN callers bypass the lobby' }) { 'Fail' } else { 'Warning' }
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
         -Result $result -Severity Medium -AffectedObject 'Teams Meeting Policies' `
         -Finding ($issues -join '; ') `
