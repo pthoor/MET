@@ -71,7 +71,7 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Error | Should -Be 2
     }
 
-    It 'keeps the HTML report client-side recalculation from double-counting Error-tagged Fail/Warning results' {
+    It 'keeps the HTML report client-side recalculation from double-counting Error-tagged results in any bucket' {
         $output = Join-Path $TestDrive 'reports-error-summary-html'
         $results = @(
             [PSCustomObject]@{
@@ -86,11 +86,17 @@ Describe 'Get-METReport structured metadata' {
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
 
-        # renderDonut() recomputes sum-fail/sum-warn on every page load and every risk-acceptance
-        # toggle - it must exclude Error-tagged items the same way the server-rendered initial
-        # summary does, or those two counters silently drift out of sync with the 'Error' badge.
+        # renderDonut() recomputes the summary counters and pie segments on every page load and
+        # every risk-acceptance toggle - every Result-based bucket (Fail/Warning/Pass/N-A/Info)
+        # must exclude Error-tagged items the same way the server-rendered initial summary does,
+        # with Error broken out as its own segment, or the counters/pie silently drift out of
+        # sync with the 'Error' badge.
         $html | Should -Match "result === 'Fail' && !isAccepted\(c\.checkId\) && !c\.error"
         $html | Should -Match "result === 'Warning' && !isAccepted\(c\.checkId\) && !c\.error"
+        $html | Should -Match "result === 'Pass' && !c\.error"
+        $html | Should -Match "result === 'NotApplicable' && !c\.error"
+        $html | Should -Match "result === 'Info' && !c\.error"
+        $html | Should -Match '!!c\.error'
     }
 
     It 'counts Info results in the summary and includes them in the console/JSON total' {

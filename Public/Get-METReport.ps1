@@ -861,24 +861,27 @@ function renderDonut() {
   const g = document.getElementById('donut-segments');
   if (!g) return;
   g.innerHTML = '';
-  // Error-tagged results are counted in the separate 'Error' bucket (sum-err) instead, which
-  // this function does not recompute - excluding !c.error here keeps sum-fail/sum-warn from
-  // double-counting them and drifting from the server-rendered initial summary.
-  const fail = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
-  const warn = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
-  const pass = CHECKS.filter(function(c) { return c.result === 'Pass'; }).length;
-  const na   = CHECKS.filter(function(c) { return c.result === 'NotApplicable'; }).length;
-  const info = CHECKS.filter(function(c) { return c.result === 'Info'; }).length;
-  const total = fail + warn + pass + na + info;
+  // Error is its own bucket, mutually exclusive with every Result-based bucket below - matches
+  // the server-rendered initial summary (Get-METReport.ps1's $summary hashtable). A result can
+  // carry both a Result and a populated Error field (e.g. Teams014 when Graph is unreachable);
+  // counting it under both would double-count it across the Error badge and its Result segment.
+  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
+  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
+  const pass  = CHECKS.filter(function(c) { return c.result === 'Pass' && !c.error; }).length;
+  const na    = CHECKS.filter(function(c) { return c.result === 'NotApplicable' && !c.error; }).length;
+  const info  = CHECKS.filter(function(c) { return c.result === 'Info' && !c.error; }).length;
+  const error = CHECKS.filter(function(c) { return !!c.error; }).length;
+  const total = fail + warn + pass + na + info + error;
   document.getElementById('sum-fail').textContent = fail;
   document.getElementById('sum-warn').textContent = warn;
   if (!total) return;
   const segs = [
-    { v: fail, color: 'var(--result-fail)' },
-    { v: warn, color: 'var(--result-warn)' },
-    { v: pass, color: 'var(--result-pass)' },
-    { v: na,   color: 'var(--result-na)'   },
-    { v: info, color: 'var(--result-na)'   }
+    { v: fail,  color: 'var(--result-fail)'   },
+    { v: warn,  color: 'var(--result-warn)'   },
+    { v: pass,  color: 'var(--result-pass)'   },
+    { v: na,    color: 'var(--result-na)'     },
+    { v: info,  color: 'var(--result-na)'     },
+    { v: error, color: 'var(--sev-critical)'  }
   ].filter(function(s) { return s.v > 0; });
   const r = 36, circ = 2 * Math.PI * r;
   let offset = 0;
