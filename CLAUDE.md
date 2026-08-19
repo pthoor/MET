@@ -28,6 +28,7 @@ MET/
 │   ├── Invoke-METTriage.ps1         # Main entry point - runs all or selected checks
 │   ├── Get-METReport.ps1            # Formats and exports results (console / JSON / HTML)
 │   ├── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
+│   ├── Disconnect-METSession.ps1    # Tears down all three legs; clears tenant-identity tracking
 │   └── Test-METPrerequisites.ps1    # Verifies required module versions before triage
 ├── Private/
 │   ├── New-METCheckResult.ps1       # Factory for the standard check result object
@@ -38,7 +39,12 @@ MET/
 │   ├── Resolve-METDnsName.ps1       # DNS lookup wrapper used by EXO email auth checks
 │   ├── Expand-METRuleRecipients.ps1 # Expands rule recipient conditions to mailbox lists
 │   ├── Expand-METGroupMembership.ps1 # Resolves distribution/security group members
-│   └── Find-METRuleContradictions.ps1 # Detects conflicting transport rule conditions
+│   ├── Find-METRuleContradictions.ps1 # Detects conflicting transport rule conditions
+│   ├── Get-METPresetSecurityPolicyTier.ps1 # Returns 'Strict'/'Standard'/$null for a filter/quarantine policy name
+│   ├── Test-METIsPresetSecurityPolicyName.ps1 # Bool wrapper over Get-METPresetSecurityPolicyTier - is this policy name preset-generated?
+│   ├── Test-METIsBuiltInQuarantinePolicyName.ps1 # Is this one of the 4 immutable built-in quarantine policies (not admin-editable)?
+│   ├── Get-METCertificateFromFile.ps1 # Loads an X509Certificate2 from a PFX file + SecureString password, for Graph/Teams cert-based auth on non-Windows
+│   └── Resolve-METTenantGuid.ps1    # Resolves a domain name or GUID to the tenant's GUID via unauthenticated OIDC discovery, for tenant-mismatch checks in Connect-METSession
 ├── Checks/
 │   ├── MDO/
 │   │   ├── MET-MDO001-SafeLinks.ps1
@@ -70,7 +76,8 @@ MET/
 │   │   ├── MET-EXO013-SpoofIntelligenceAllowList.ps1
 │   │   ├── MET-EXO014-AdvancedDeliveryPolicy.ps1
 │   │   ├── MET-EXO015-ExternalSenderTag.ps1
-│   │   └── MET-EXO016-ArcTrustedSealers.ps1
+│   │   ├── MET-EXO016-ArcTrustedSealers.ps1
+│   │   └── MET-EXO017-QuarantineNotificationCadence.ps1
 │   └── Teams/
 │       ├── MET-Teams001-SafeLinks.ps1
 │       ├── MET-Teams002-SafeAttachments.ps1
@@ -79,7 +86,12 @@ MET/
 │       ├── MET-Teams005-TeamsUserReporting.ps1
 │       ├── MET-Teams006-ExternalAccess.ps1
 │       ├── MET-Teams007-GuestConfiguration.ps1
-│       └── MET-Teams008-AppPermissionPolicy.ps1
+│       ├── MET-Teams008-AppPermissionPolicy.ps1
+│       ├── MET-Teams009-TrialTenantFederation.ps1
+│       ├── MET-Teams010-ExternalAccessPolicyDrift.ps1
+│       ├── MET-Teams011-SecOpsBlocklistAuthority.ps1
+│       ├── MET-Teams012-CallReporting.ps1
+│       └── MET-Teams014-CrossTenantAccess.ps1
 ├── Tests/
 │   ├── Unit/
 │   │   ├── New-METCheckResult.Tests.ps1
@@ -385,13 +397,18 @@ Schema documented at `docs/schema/MET-report-schema.json` (JSON Schema draft-07)
 
 ## Connect-METSession - Behaviour
 
-Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`. Detects existing sessions and skips reconnect. Supports:
+Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`. Detects existing sessions and skips reconnect - but only after verifying the existing session actually belongs to the requested tenant/org and auth mode; a mismatch throws (naming the actually-connected org) rather than silently proceeding against the wrong tenant. Supports:
 
-- Interactive (device code / browser)
-- Service principal with certificate (`-CertificateThumbprint`, `-AppId`, `-TenantId`)
+- Interactive (browser by default; `-UseDeviceAuthentication` as a documented headless-only fallback - see below)
+- Service principal with certificate: `-CertificateThumbprint` (Windows certificate store) or `-CertificatePath` + `-CertificatePassword` (any platform, including Linux/macOS/Codespaces - `-CertificateThumbprint` is Windows-only per Microsoft's own docs), plus `-AppId`, `-TenantId`
 - Managed Identity (`-ManagedIdentity`)
-- Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name
+- Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name. Threaded through to all three legs (EXO natively; Graph and Teams via their own `-TenantId` parameter, both of which accept a domain string for exactly this CSP/GDAP scenario - previously silently ignored for Graph/Teams, so a delegated-org run could authenticate against the operator's own home tenant instead of the customer's)
 - `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` - opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
+- `Disconnect-METSession` - tears down all three legs (each in its own try/catch), and clears the tenant-identity tracking used for the reuse check above. Run this before switching `-DelegatedOrganization` in the same PowerShell session.
+
+Device-code auth (`-UseDeviceAuthentication`) is a documented phishing vector (Storm-2372 and follow-on campaigns; Microsoft's own guidance is "block wherever possible, allow only where necessary") - `Connect-METSession` emits a `Write-Warning` whenever it's used, and none of the connection-failure retry messages suggest it as a first-line fix anymore; it's scoped to the genuinely headless case (no browser reachable at all).
+
+`Get-METReport`'s header (console/JSON/HTML) surfaces which auth mode/tenant/services were used for the run, read from module-scoped state `Connect-METSession` sets on success - lets a customer's SOC reconcile a sign-in they see in their own logs with a known MET run instead of triaging it as an incident.
 
 ### Connection Requirements for New Checks
 
@@ -431,12 +448,13 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 | MET-EXO001 | DMARC | DMARC record present; policy is `quarantine` or `reject` (not `none`); `rua` reporting configured |
 | MET-EXO002 | DKIM | DKIM signing enabled for all accepted domains; key length ≥ 2048 |
 | MET-EXO003 | SPF | SPF record present; not `+all`; within 10-lookup limit |
-| MET-EXO004 | Quarantine Policies | Default quarantine policies reviewed; user notification enabled; no `AdminOnlyAccessPolicy` on high-confidence phish |
+| MET-EXO004 | Quarantine Policies | Genuinely custom (non-built-in) quarantine policies only - flags `ESNEnabled = $false` combined with a granted end-user permission (a user given access to act on quarantined mail but never notified it exists). Excludes the 4 immutable built-ins (`AdminOnlyAccessPolicy`, `DefaultFullAccessPolicy`, `DefaultFullAccessWithNotificationPolicy`, `NotificationEnabledPolicy`) - a prior version flagged `AdminOnlyAccessPolicy`'s by-design "No access" as a misconfiguration on every tenant; fixed 2026-08-18 |
 | MET-EXO005 | Tenant Allow/Block List | Stale allow entries (>90 days); overly broad wildcard allows; allow count vs block ratio |
 | MET-EXO006 | User Reported Message Settings | Report button mode (built-in Microsoft vs. non-Microsoft add-in via `EnableThirdPartyAddress`); `EnableReportToMicrosoft`; SecOps mailbox routing for all three flows (Junk / Not Junk / Phishing via `ReportJunkToCustomizedAddress` etc.); user post-review notifications |
 | MET-EXO007 | Transport Rule Audit | Rules that bypass spam filtering (`SCLJunk=-1`) or disable safe links; informational listing |
-| MET-EXO008 | Quarantine Retention | `QuarantineRetentionPeriod` ≥ 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30) |
-| MET-EXO009 | Quarantine Policy Verdict Alignment | Cross-references every filter policy (anti-spam, anti-malware, anti-phish, Safe Attachments) with its assigned quarantine tag; verifies `PermissionToRelease = $false` for high-risk verdicts (Malware, High-Confidence Phish, impersonation) and warns for medium-risk (Phish, Spoof, Mailbox Intelligence) - catches custom quarantine policies that are too permissive for the verdict they protect |
+| MET-EXO008 | Quarantine Retention | `QuarantineRetentionPeriod` ≥ 30 days in default/custom anti-spam policies (default is 15). Preset (Standard/Strict) policies are recognized via `Test-METIsPresetSecurityPolicyName` and reported as fixed/non-configurable rather than given a `Set-*` recommendation that would error; also notes this same value governs anti-phish (spoof/impersonation) quarantine retention for the same recipient |
+| MET-EXO009 | Quarantine Policy Verdict Alignment | Cross-references every filter policy (anti-spam, anti-malware, anti-phish, Safe Attachments) with its assigned quarantine tag; verifies `PermissionToRelease = $false` only for the two verdicts Microsoft's own Standard/Strict presets actually restrict this way (Malware, High-Confidence Phish) - impersonation/spoof/phish were removed from the restricted set 2026-08-18 after confirming Microsoft's own Strict preset uses Full-access policies for those, which the prior model incorrectly flagged as a Fail/Warning on every tenant using Strict or Standard. Preset-generated policy objects are skipped entirely via `Test-METIsPresetSecurityPolicyName` since their tags are guaranteed correct |
+| MET-EXO017 | Quarantine Notification Cadence | `EndUserSpamNotificationFrequency` on the tenant-wide global quarantine policy (`DefaultGlobalTag`) - Info-only listing (4 hours / 1 day / 7 days); no Microsoft-recommended value exists |
 | MET-EXO010 | Direct Send | `Get-OrganizationConfig` → `RejectDirectSend` - unauthenticated senders can otherwise relay mail through the tenant's own domain without SMTP auth, a path actively abused to spoof internal senders |
 | MET-EXO011 | Mail Flow Connector Hygiene | `Get-InboundConnector` - flags enabled connectors with `RequireTls` off or no effective source IP/TLS certificate authentication binding; `SenderDomains` alone is not authentication |
 | MET-EXO012 | Mailbox Forwarding | `Get-EXOMailbox` `ForwardingSmtpAddress`/`ForwardingAddress`/`DeliverToMailboxAndForward` - surfaces mailboxes with forwarding configured, flagging "silent" forwarding (no local copy) as the higher-risk BEC persistence pattern; inbox-rule-based forwarding is out of scope (does not scale to `Get-InboxRule` per mailbox) |
@@ -449,14 +467,19 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 
 | ID | Name | What it checks |
 |---|---|---|
-| MET-Teams001 | Safe Links for Teams | `EnableSafeLinksForTeams` enabled in Safe Links policies covering Teams users |
-| MET-Teams002 | Safe Attachments for Teams | Global `EnableATPForSPOTeamsODB` enabled; `EnableSafeAttachmentsForTeams` enabled in at least one policy |
-| MET-Teams003 | Meeting Protection | External access settings; anonymous join policy; lobby bypass settings from a security perspective |
-| MET-Teams004 | ZAP for Teams | `TeamsProtectionPolicy.ZapEnabled`; malware and high-confidence phish quarantine tags set to `AdminOnlyAccessPolicy` |
-| MET-Teams005 | Teams User Reporting | `ReportTeamsMsgEnabled` in report submission policy; `AllowSecurityEndUserReporting` in Teams messaging policy |
-| MET-Teams006 | External Access / Federation Allow-List | `Get-CsTenantFederationConfiguration` - flags open federation (`AllowAllKnownDomains`) and `AllowTeamsConsumer`; distinct control plane from Teams003's meeting-level anonymous join |
+| MET-Teams001 | Safe Links for Teams | Effective-coverage model (like MET-MDO001): resolves the actual precedence-winning Safe Links policy per mailbox via `Resolve-METSafeLinksEffectivePolicy` (Strict preset > Standard preset > custom by priority > Built-In fallback) and flags recipients whose effective policy has `EnableSafeLinksForTeams` disabled - catches shadowing that a simple "does a Teams-enabled policy with an assigning rule exist" check cannot see |
+| MET-Teams002 | Safe Attachments for Teams | Global `EnableATPForSPOTeamsODB` on `Get-AtpPolicyForO365` - the sole documented toggle for SPO/OneDrive/Teams protection. (Previously also required a nonexistent per-policy `EnableSafeAttachmentsForTeams` property on `Get-SafeAttachmentPolicy`, which doesn't exist on that cmdlet and caused false Fails on every tenant - removed 2026-08-18) |
+| MET-Teams003 | Meeting Protection | External access settings; anonymous join policy; lobby bypass settings (`AllowPSTNUsersToBypassLobby`) from a security perspective, enumerated across all meeting policies (not just `Global`) |
+| MET-Teams004 | ZAP for Teams | `TeamsProtectionPolicy.ZapEnabled`; malware and high-confidence phish quarantine tags set to `AdminOnlyAccessPolicy`; also flags `TeamsProtectionPolicyRule` exceptions that narrow effective ZAP coverage |
+| MET-Teams005 | Teams User Reporting | `ReportChatMessageEnabled`/`ReportChatMessageToCustomizedAddressEnabled` in the report submission policy; `AllowSecurityEndUserReporting` in Teams messaging policy |
+| MET-Teams006 | External Access / Federation Allow-List | `Get-CsTenantFederationConfiguration` - flags open federation (`AllowAllKnownDomains`), `AllowTeamsConsumer`/`AllowTeamsConsumerInbound`/`RestrictTeamsConsumerToExternalUserProfiles`, and an empty `BlockedDomains` deny-list; distinct control plane from Teams003's meeting-level anonymous join |
 | MET-Teams007 | Guest Messaging/Calling Configuration | `Get-CsTeamsGuestMessagingConfiguration`/`Get-CsTeamsGuestCallingConfiguration` - flags guest-initiated 1:1 chat and private calling; distinct from federation (Teams006) and meeting join (Teams003) |
-| MET-Teams008 | App Permission Policy Exposure | `Get-CsTeamsAppPermissionPolicy` (read-only) - flags any `*CatalogAppsType` not restricted to an explicit `AllowedAppList`/`BlockedAppList`, detected by exclusion since Microsoft requires policy changes via the admin center, not PowerShell `Set-`/`New-` |
+| MET-Teams008 | App Permission Policy Exposure | `Get-CsTeamsAppPermissionPolicy` (read-only) - flags any `*CatalogAppsType` not restricted to an explicit `AllowedAppList`/`BlockedAppList`, detected by exclusion since Microsoft requires policy changes via the admin center, not PowerShell `Set-`/`New-`. Recommendation notes the policy may be inert on tenants migrated to App Centric Management (ACM) - no cmdlet exists yet to detect migration state itself |
+| MET-Teams009 | Trial Tenant Federation Exposure | `Get-CsTenantFederationConfiguration` → `ExternalAccessWithTrialTenants` (`Allowed`/`Blocked`) - disposable trial tenants are a low-effort first-contact vector distinct from Teams006's general federation allow-list |
+| MET-Teams010 | Per-User External Access Policy Drift | `Get-CsExternalAccessPolicy`, enumerated across all non-`Global` instances - flags `EnableFederationAccess`/`EnablePublicCloudAccess` re-opening access for a specific user set under an otherwise-restrictive tenant-wide federation baseline |
+| MET-Teams011 | SecOps Blocklist Authority & Blocked Entities | `SecurityTeamAllowBlockListDelegation` on `Get-CsTenantFederationConfiguration` (can SecOps block a malicious domain/user from the portal mid-incident) plus currently-blocked entities via `Get-CsTeamsExternalAccessConfiguration`; response-readiness, so `Disabled` is a Warning rather than a hard Fail |
+| MET-Teams012 | Call Reporting (Vishing Surface) | `Get-CsTeamsCallingPolicy` → `ReportCall`, enumerated across all policies - closest native control to helpdesk-vishing (Storm-1811/3AM-style) attacks over a Teams call |
+| MET-Teams014 | Cross-Tenant Guest & External Collaboration | Microsoft Graph `GET /policies/crossTenantAccessPolicy` + `/policies/authorizationPolicy` (`Policy.Read.All`, already in MET's default Graph scopes) - first check with a direct Graph dependency (not routed through `Expand-METGroupMembership`); degrades to `NotApplicable` non-fatally if Graph is unavailable |
 
 ---
 
@@ -469,15 +492,17 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 
 ---
 
-## Current State (v0.7.0)
+## Current State (v0.10.0)
 
-All 38 checks are implemented across MDO (14), EXO (16), and Teams (8), plus `Test-METPrerequisites` for pre-flight dependency checks. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history and `docs/gap-analysis-2026-08.md` for the research behind the 11 checks added in v0.6.0; v0.7.0 added MET-MDO014 (Group Reference Audit) and made Microsoft Graph an optional dependency.
+All 44 checks are implemented across MDO (14), EXO (17), and Teams (13), plus `Test-METPrerequisites` for pre-flight dependency checks and `Disconnect-METSession` for session teardown. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history - v0.6.0 added 11 checks across the MDO/EOP mail-flow stack and Teams; v0.8.0 added 5 new Teams checks (009-012, 014) plus 5 enhancements to existing Teams checks (001, 003, 004, 006, 008); v0.9.0 fixed two confirmed quarantine-check false positives; v0.10.0 fixed a confirmed cross-customer data leak in session reuse (no tenant/org verification before reusing a live EXO/Graph/Teams connection), alongside certificate-file auth for non-Windows and a scoped-down, research-grounded device-code auth posture (Microsoft's own current guidance: "block wherever possible, allow only where necessary").
 
 Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration
 - Azure Automation / GitHub Actions wrapper examples
 - Signed module release for PSGallery publication
-- Attack Simulation Training coverage and Secure Score correlation - see ROADMAP.md "Under Investigation" (each needs a new Graph scope/module dependency decision before becoming a committed check)
+- Attack Simulation Training coverage, Secure Score correlation, risky Teams app/bot catalog enumeration, and ACM migration-state detection - see ROADMAP.md "Under Investigation" (each needs a new Graph scope/module dependency decision, or an as-yet-unconfirmed detection method, before becoming a committed check)
+- AIR (Automated investigation and response) auto-remediation settings are documented as a manual review item in `README.md`, not a check - no supported PowerShell cmdlet or public Graph API exists to read or set them
+- `DisallowInfectedFileDownload` (SPO/OneDrive/Teams infected-file download blocking) and the SPO/OneDrive/Teams malware-detected alert policy are also documented as manual review items in `README.md`, not checks - both have a real cmdlet (`Get-SPOTenant`, `Get-ProtectionAlert`), but the former needs a whole new `Microsoft.Online.SharePoint.PowerShell`/PnP dependency and the latter needs a second `Connect-IPPSSession` leg plus Purview permissions beyond Security Reader; neither was judged worth the added dependency/auth surface for what each buys
 
 ---
 

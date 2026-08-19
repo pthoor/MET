@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.7.0'
+    ModuleVersion        = '0.10.0'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -17,6 +17,7 @@
     RootModule           = 'MET.psm1'
     FunctionsToExport    = @(
         'Connect-METSession'
+        'Disconnect-METSession'
         'Invoke-METTriage'
         'Get-METReport'
         'Test-METPrerequisites'

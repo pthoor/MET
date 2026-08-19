@@ -1,4 +1,4 @@
-﻿try {
+try {
     $policies = Get-QuarantinePolicy -ErrorAction Stop
 }
 catch {
@@ -10,33 +10,28 @@ catch {
     return
 }
 
-foreach ($policy in $policies) {
-    $issues = [System.Collections.Generic.List[string]]::new()
+$customPolicies = @($policies | Where-Object { -not (Test-METIsBuiltInQuarantinePolicyName -Name $_.Name) })
 
-    if ($policy.EndUserQuarantinePermissionsValue -eq 0) {
-        $issues.Add('End-user quarantine permissions are set to none - users cannot review or release quarantined messages')
-    }
+if ($customPolicies.Count -eq 0) {
+    New-METCheckResult -CheckId 'MET-EXO004' -Category EXO -Name 'Quarantine Policies' `
+        -Result Pass -Severity Medium -AffectedObject 'Quarantine Policies' `
+        -Finding 'No custom quarantine policies exist - only the 4 Microsoft built-in policies (AdminOnlyAccessPolicy, DefaultFullAccessPolicy, DefaultFullAccessWithNotificationPolicy, NotificationEnabledPolicy) are present, nothing to review' `
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
+    return
+}
 
-    if (-not $policy.QuarantineRetentionDays -or $policy.QuarantineRetentionDays -lt 15) {
-        $issues.Add("Quarantine retention is $($policy.QuarantineRetentionDays) days - recommended minimum is 15 days")
-    }
-
-    $isHighConfPhishPolicy = $policy.Name -match 'HighConfidencePhish|AdminOnlyAccess'
-    if ($isHighConfPhishPolicy -and $policy.EndUserQuarantinePermissionsValue -gt 0) {
-        $issues.Add('End-user self-release permissions are configured on a high-confidence phish quarantine policy - users should not be able to self-release phishing messages')
-    }
-
-    if ($issues.Count -gt 0) {
+foreach ($policy in $customPolicies) {
+    if (-not $policy.ESNEnabled -and $policy.EndUserQuarantinePermissionsValue -gt 0) {
         New-METCheckResult -CheckId 'MET-EXO004' -Category EXO -Name 'Quarantine Policies' `
             -Result Warning -Severity Medium -AffectedObject $policy.Name `
-            -Finding ($issues -join '; ') `
-            -Recommendation 'Configure end-user quarantine notifications with review (but not self-release) permissions for high-confidence phish. Ensure retention is at least 15 days.' `
+            -Finding 'End users are granted quarantine permissions (e.g. review, release, delete) but end-user spam notifications (ESN) are disabled, so they are never notified that anything is quarantined and have no way to know to use those permissions' `
+            -Recommendation 'Enable end-user spam notifications (ESNEnabled) on this quarantine policy so users are alerted when they have messages to review, or remove their end-user permissions if notifications are intentionally disabled.' `
             -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
     }
     else {
         New-METCheckResult -CheckId 'MET-EXO004' -Category EXO -Name 'Quarantine Policies' `
             -Result Pass -Severity Medium -AffectedObject $policy.Name `
-            -Finding 'Quarantine policy is appropriately configured' `
+            -Finding 'Notification settings are consistent with the permissions granted to end users' `
             -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
     }
 }

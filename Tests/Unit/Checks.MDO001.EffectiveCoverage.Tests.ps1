@@ -6,6 +6,7 @@ BeforeAll {
     . "$root/Private/Expand-METRuleRecipients.ps1"
     . "$root/Private/Resolve-METSafeLinksEffectivePolicy.ps1"
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
+    . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
     function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
     function Get-SafeLinksRule { [CmdletBinding()] param() }
@@ -71,8 +72,12 @@ Describe 'MET-MDO001 effective recipient coverage' {
         $results[0].Metadata.TotalRecipients | Should -Be 2
         ($results[0].Metadata.Policies | Where-Object PolicyName -eq 'Weak old policy').EffectiveRecipientCount | Should -Be 0
         $results[0].Finding | Should -Match 'Catch-all \(no inclusion conditions\)'
-        $results[0].Finding | Should -Match 'shadowed for all current recipients'
+        $results[0].Finding | Should -Match 'shadowed for all current subjects'
         $results[0].Finding | Should -Match 'Move the catch-all below specialized custom policies'
+        # Regression: zero affected recipients + a Warning-severity ordering observation must not
+        # produce a headline that falsely claims full compliance.
+        $results[0].Finding | Should -Match 'ordering issue worth reviewing'
+        $results[0].Finding | Should -Not -Match 'meets the baseline\.\r?\nPolicy coverage'
     }
 
     It 'fails only the recipient outside a compliant domain-scoped policy' {

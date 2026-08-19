@@ -6,6 +6,7 @@ BeforeAll {
     . "$root/Private/Expand-METRuleRecipients.ps1"
     . "$root/Private/Resolve-METAntiPhishEffectivePolicy.ps1"
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
+    . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
     function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
     function Get-AntiPhishRule { [CmdletBinding()] param() }

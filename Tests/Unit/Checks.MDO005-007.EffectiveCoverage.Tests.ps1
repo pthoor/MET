@@ -53,6 +53,10 @@ Describe 'MET-MDO005 anti-malware effective coverage' {
         $result.Result | Should -Be Warning
         ($result.Metadata.Policies | Where-Object PolicyName -eq weak).EffectiveRecipientCount | Should -Be 0
         $result.Metadata.OrderingObservations.Message | Should -Match 'higher-precedence custom catch-all policy'
+        # Regression: zero affected recipients + a Warning-severity ordering observation must not
+        # produce a headline that falsely claims full compliance (New-METEffectivePolicyCoverageResult).
+        $result.Finding | Should -Match 'ordering issue worth reviewing'
+        $result.Finding | Should -Not -Match 'meets the baseline\.\r?\nPolicy coverage'
     }
     It 'warns rather than passes when policy retrieval fails' {
         Mock Get-MalwareFilterRule { @() }; Mock Get-MalwareFilterPolicy { throw 'denied' }

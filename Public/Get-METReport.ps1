@@ -173,12 +173,35 @@
             )
         }
 
+        # Error is reported as its own bucket, mutually exclusive with the Result-based
+        # buckets below - a result can carry both a Result (e.g. NotApplicable, Fail) and
+        # a populated Error field (e.g. Teams014 when Graph is unreachable), and counting
+        # it under both would inflate the displayed total beyond the actual result count.
         $summary = @{
-            Pass          = ($allResults | Where-Object Result -eq 'Pass').Count
-            Fail          = ($allResults | Where-Object Result -eq 'Fail').Count
-            Warning       = ($allResults | Where-Object Result -eq 'Warning').Count
-            NotApplicable = ($allResults | Where-Object Result -eq 'NotApplicable').Count
+            Pass          = ($allResults | Where-Object { $_.Result -eq 'Pass' -and -not $_.Error }).Count
+            Fail          = ($allResults | Where-Object { $_.Result -eq 'Fail' -and -not $_.Error }).Count
+            Warning       = ($allResults | Where-Object { $_.Result -eq 'Warning' -and -not $_.Error }).Count
+            NotApplicable = ($allResults | Where-Object { $_.Result -eq 'NotApplicable' -and -not $_.Error }).Count
+            Info          = ($allResults | Where-Object { $_.Result -eq 'Info' -and -not $_.Error }).Count
             Error         = ($allResults | Where-Object { $_.Error }).Count
+        }
+
+        # Surfaces how this data was gathered - lets a customer's SOC reconcile a
+        # deviceCodeFlow (or any) sign-in they see in their own logs with a known,
+        # expected MET run instead of triaging it as a live incident. $null when
+        # Get-METReport is called without ever going through Connect-METSession
+        # (e.g. piping hand-built result objects, as the unit tests do).
+        $authInfoLine = $null
+        if ($script:METSessionInfo) {
+            $info = $script:METSessionInfo
+            $modeLabel = switch ($info.AuthMode) {
+                'ServicePrincipal' { 'Service Principal (certificate)' }
+                'ManagedIdentity'  { 'Managed Identity' }
+                default            { if ($info.DeviceCodeUsed) { 'Interactive (device code)' } else { 'Interactive' } }
+            }
+            $authInfoLine = $modeLabel
+            if ($info.TenantIdentity) { $authInfoLine += " - $($info.TenantIdentity)" }
+            if ($info.ServicesConnected -and $info.ServicesConnected.Count) { $authInfoLine += " - $($info.ServicesConnected -join ', ')" }
         }
 
         # ── Console ──────────────────────────────────────────────────────────
@@ -188,6 +211,7 @@
             Write-Host '  MET - Security Posture Scanner for MDO, EXO and Teams' -ForegroundColor Cyan
             if ($effectiveTenantName) { Write-Host "  Tenant: $effectiveTenantName" -ForegroundColor Gray }
             Write-Host "  Run:    $($runTimestampUtc.ToString('yyyy-MM-dd HH:mm')) UTC" -ForegroundColor Gray
+            if ($authInfoLine) { Write-Host "  Auth:   $authInfoLine" -ForegroundColor Gray }
             Write-Host '══════════════════════════════════════════════════════' -ForegroundColor Cyan
 
             $scoreColor = switch ($band) {
@@ -205,7 +229,7 @@
                 ForEach-Object { "$($_.Key): $($_.Value)" }) -join '   '
             if ($catLine) { Write-Host "  $catLine" -ForegroundColor Gray }
 
-            Write-Host "  Pass: $($summary.Pass)  Fail: $($summary.Fail)  Warning: $($summary.Warning)  N/A: $($summary.NotApplicable)  Error: $($summary.Error)"
+            Write-Host "  Pass: $($summary.Pass)  Fail: $($summary.Fail)  Warning: $($summary.Warning)  N/A: $($summary.NotApplicable)  Info: $($summary.Info)  Error: $($summary.Error)"
             Write-Host ''
 
             $actionable = $allResults | Where-Object { $_.Result -in 'Fail','Warning' } | Sort-Object Severity, CheckId
@@ -234,6 +258,14 @@
                 tenant         = $effectiveTenantName
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
+                authentication = if ($script:METSessionInfo) {
+                    [ordered]@{
+                        authMode          = $script:METSessionInfo.AuthMode
+                        deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
+                        tenantIdentity    = $script:METSessionInfo.TenantIdentity
+                        servicesConnected = @($script:METSessionInfo.ServicesConnected)
+                    }
+                } else { $null }
                 postureScore   = $overallScore
                 categoryScores = $categoryScores
                 summary        = $summary
@@ -419,6 +451,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .s-fail{color:var(--result-fail)}
 .s-warn{color:var(--result-warn)}
 .s-na{color:var(--result-na)}
+.s-info{color:var(--result-na)}
 .s-err{color:var(--sev-critical)}
 
 /* ── Toolbar ─────────────────────────────────────────────────────── */
@@ -584,7 +617,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div>
       <div class="header-title">MET - Security Posture Scanner for MDO, EXO and Teams</div>
       <div class="header-meta" id="header-meta">
-        $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion
+        $([System.Security.SecurityElement]::Escape($(if ($effectiveTenantName) { "Tenant: $effectiveTenantName  ·  " } else { '' })))Run: $runTimestamp  ·  MET v$METVersion$([System.Security.SecurityElement]::Escape($(if ($authInfoLine) { "  ·  Auth: $authInfoLine" } else { '' })))
       </div>
     </div>
   </div>
@@ -616,6 +649,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="summary-item"><span class="summary-count s-warn" id="sum-warn">$($summary.Warning)</span><span class="summary-label">Warning</span></div>
     <div class="summary-item"><span class="summary-count s-pass" id="sum-pass">$($summary.Pass)</span><span class="summary-label">Pass</span></div>
     <div class="summary-item"><span class="summary-count s-na" id="sum-na">$($summary.NotApplicable)</span><span class="summary-label">N/A</span></div>
+    <div class="summary-item"><span class="summary-count s-info" id="sum-info">$($summary.Info)</span><span class="summary-label">Info</span></div>
     <div class="summary-item"><span class="summary-count s-err" id="sum-err">$($summary.Error)</span><span class="summary-label">Error</span></div>
   </div>
 </div>
@@ -695,6 +729,8 @@ const CONTROLS_META = {
   'MET-MDO010': 'Priority account tags applied and a differentiated protection policy is active for those accounts.',
   'MET-MDO011': 'User tags are in use and alert policies referencing user tags exist.',
   'MET-MDO012': 'Safe Documents (EnableSafeDocs) enabled and AllowSafeDocsOpen disabled via AtpPolicyForO365.',
+  'MET-MDO013': 'Custom anti-spam/anti-malware/Anti-Phish/Safe Links/Safe Attachments rules whose recipients are also covered by a Standard/Strict preset - flags precedence conflicts.',
+  'MET-MDO014': 'Every group referenced by an enabled EOP/MDO rule\'s SentToMemberOf; reports member count and flags 0-member groups as silently inert.',
   'MET-EXO001': 'DMARC record present; policy is quarantine or reject (not none); rua reporting address configured.',
   'MET-EXO002': 'DKIM signing enabled for all accepted domains; key length is at least 2048 bits.',
   'MET-EXO003': 'SPF record present; no use of +all (pass-all); within the 10 DNS lookup limit.',
@@ -703,11 +739,28 @@ const CONTROLS_META = {
   'MET-EXO006': 'User submission mailbox configured and reporting to Microsoft enabled.',
   'MET-EXO007': 'Transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links - informational audit.',
   'MET-EXO008': 'QuarantineRetentionPeriod is at least 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30).',
+  'MET-EXO009': 'Cross-references filter policies with their assigned quarantine tag; verifies PermissionToRelease is false for Malware and High-Confidence Phish verdicts.',
+  'MET-EXO010': 'RejectDirectSend on the organization config - unauthenticated senders relaying mail through the tenant\'s own domain without SMTP auth.',
+  'MET-EXO011': 'Enabled inbound connectors with RequireTls off or no effective source-IP/TLS-certificate authentication binding.',
+  'MET-EXO012': 'Mailbox forwarding (ForwardingSmtpAddress/ForwardingAddress/DeliverToMailboxAndForward), flagging silent forwarding with no local copy as the higher-risk pattern.',
+  'MET-EXO013': 'Standing spoof-intelligence allow entries, distinguishing Internal vs. External spoof type.',
+  'MET-EXO014': 'Enforceable phishing-simulation and SecOps mailbox override rules - informational listing for periodic review.',
+  'MET-EXO015': 'The native Outlook "External" sender banner (Get-ExternalInOutlook) - a user-facing signal against lookalike-domain/BEC senders.',
+  'MET-EXO016': 'ARC trusted sealer domains (Get-ArcConfig) - informational listing of domains trusted to vouch for authentication results.',
+  'MET-EXO017': 'EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy - informational cadence listing.',
   'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
   'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
   'MET-Teams003': 'External access settings, anonymous join policy, and lobby bypass settings reviewed for security posture.',
   'MET-Teams004': 'TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy.',
-  'MET-Teams005': 'ReportTeamsMsgEnabled in submission policy and AllowSecurityEndUserReporting in Teams messaging policy.'
+  'MET-Teams005': 'ReportTeamsMsgEnabled in submission policy and AllowSecurityEndUserReporting in Teams messaging policy.',
+  'MET-Teams006': 'Tenant federation config - open AllowAllKnownDomains federation, Teams consumer/personal-account access, and an empty BlockedDomains deny-list.',
+  'MET-Teams007': 'Guest messaging/calling configuration - AllowUserChat and AllowPrivateCalling for guest accounts.',
+  'MET-Teams008': 'App permission policies not restricted to an explicit AllowedAppList/BlockedAppList for global/private/store catalog apps.',
+  'MET-Teams009': 'ExternalAccessWithTrialTenants on the tenant federation config - exposure to disposable trial-tenant federation.',
+  'MET-Teams010': 'Per-user CsExternalAccessPolicy instances re-opening federation/public-cloud access for specific users under a restrictive tenant baseline.',
+  'MET-Teams011': 'SecurityTeamAllowBlockListDelegation and currently-blocked entities - whether SecOps can block malicious domains/users mid-incident.',
+  'MET-Teams012': 'ReportCall on Teams calling policies - closest native control to helpdesk-vishing attacks over a Teams call.',
+  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.'
 };
 
 const CONTROLS_CATEGORIES = [
@@ -808,19 +861,27 @@ function renderDonut() {
   const g = document.getElementById('donut-segments');
   if (!g) return;
   g.innerHTML = '';
-  const fail = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId); }).length;
-  const warn = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId); }).length;
-  const pass = CHECKS.filter(function(c) { return c.result === 'Pass'; }).length;
-  const na   = CHECKS.filter(function(c) { return c.result === 'NotApplicable'; }).length;
-  const total = fail + warn + pass + na;
+  // Error is its own bucket, mutually exclusive with every Result-based bucket below - matches
+  // the server-rendered initial summary (Get-METReport.ps1's $summary hashtable). A result can
+  // carry both a Result and a populated Error field (e.g. Teams014 when Graph is unreachable);
+  // counting it under both would double-count it across the Error badge and its Result segment.
+  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
+  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
+  const pass  = CHECKS.filter(function(c) { return c.result === 'Pass' && !c.error; }).length;
+  const na    = CHECKS.filter(function(c) { return c.result === 'NotApplicable' && !c.error; }).length;
+  const info  = CHECKS.filter(function(c) { return c.result === 'Info' && !c.error; }).length;
+  const error = CHECKS.filter(function(c) { return !!c.error; }).length;
+  const total = fail + warn + pass + na + info + error;
   document.getElementById('sum-fail').textContent = fail;
   document.getElementById('sum-warn').textContent = warn;
   if (!total) return;
   const segs = [
-    { v: fail, color: 'var(--result-fail)' },
-    { v: warn, color: 'var(--result-warn)' },
-    { v: pass, color: 'var(--result-pass)' },
-    { v: na,   color: 'var(--result-na)'   }
+    { v: fail,  color: 'var(--result-fail)'   },
+    { v: warn,  color: 'var(--result-warn)'   },
+    { v: pass,  color: 'var(--result-pass)'   },
+    { v: na,    color: 'var(--result-na)'     },
+    { v: info,  color: 'var(--result-na)'     },
+    { v: error, color: 'var(--sev-critical)'  }
   ].filter(function(s) { return s.v > 0; });
   const r = 36, circ = 2 * Math.PI * r;
   let offset = 0;

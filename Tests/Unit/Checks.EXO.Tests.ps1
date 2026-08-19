@@ -2,6 +2,7 @@
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
+    . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
 
     # Stub EXO/DNS cmdlets
     function Get-AcceptedDomain              { [CmdletBinding()] param() }
@@ -184,13 +185,59 @@ Describe 'MET-EXO004 Quarantine Policies' {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO004-QuarantinePolicy.ps1'
     }
 
-    Context 'Policy with adequate permissions and retention' {
+    Context 'Only built-in policies present' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @(
+                    [PSCustomObject]@{
+                        Name                              = 'AdminOnlyAccessPolicy'
+                        EndUserQuarantinePermissionsValue = 0
+                        ESNEnabled                         = $false
+                    }
+                    [PSCustomObject]@{
+                        Name                              = 'DefaultFullAccessPolicy'
+                        EndUserQuarantinePermissionsValue = 39
+                        ESNEnabled                         = $false
+                    }
+                )
+            }
+        }
+        It 'Returns a single Pass result' {
+            $results = & $checkFile
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Pass'
+        }
+
+        It 'Does not flag AdminOnlyAccessPolicy for its by-design zero permissions value' {
+            $results = & $checkFile
+            ($results | Where-Object { $_.AffectedObject -eq 'AdminOnlyAccessPolicy' }) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Custom policy with permissions granted but notifications disabled' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                                = 'DefaultFullAccessPolicy'
-                    EndUserQuarantinePermissionsValue   = 23
-                    QuarantineRetentionDays             = 30
+                    Name                              = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissionsValue = 23
+                    ESNEnabled                         = $false
+                }
+            }
+        }
+        It 'Returns Warning' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'notif'
+        }
+    }
+
+    Context 'Custom policy with permissions granted and notifications enabled' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                              = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissionsValue = 23
+                    ESNEnabled                         = $true
                 }
             }
         }
@@ -200,36 +247,30 @@ Describe 'MET-EXO004 Quarantine Policies' {
         }
     }
 
-    Context 'Policy with zero end-user permissions' {
+    Context 'Custom policy with no permissions and notifications disabled' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                                = 'AdminOnly'
-                    EndUserQuarantinePermissionsValue   = 0
-                    QuarantineRetentionDays             = 30
+                    Name                              = 'ContosoNoAccessPolicy'
+                    EndUserQuarantinePermissionsValue = 0
+                    ESNEnabled                         = $false
                 }
             }
         }
-        It 'Returns Warning' {
+        It 'Returns Pass - no access and no notification is not a contradiction' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
+            $results[0].Result | Should -Be 'Pass'
         }
     }
 
-    Context 'Policy with low retention days' {
+    Context 'Get-QuarantinePolicy throws' {
         BeforeAll {
-            Mock Get-QuarantinePolicy {
-                [PSCustomObject]@{
-                    Name                                = 'ShortRetention'
-                    EndUserQuarantinePermissionsValue   = 23
-                    QuarantineRetentionDays             = 7
-                }
-            }
+            Mock Get-QuarantinePolicy { throw 'Access denied' }
         }
-        It 'Returns Warning and mentions retention' {
+        It 'Returns Fail with Error populated' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'retention'
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
 }

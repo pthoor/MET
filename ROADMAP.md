@@ -113,7 +113,7 @@ Status legend: ✅ Done · 🔄 In Progress · 🗓 Planned · ❓ Under Investi
 
 ## v0.6.0 - Gap-closing checks across MDO/EXO/Teams mail-flow protection ✅
 
-Gap analysis against Microsoft Learn (see `docs/gap-analysis-2026-08.md` for full research notes) found 11 concrete, checkable settings across the MDO/EOP mail-flow stack and Teams that the prior 26 checks didn't cover, plus 2 items needing further investigation before committing to a check ID. All 11 checks were implemented via parallel subagent dispatch (each check's `.ps1` + self-contained Pester test file + doc, no shared files touched, avoiding merge conflicts) and pass lint + the full 112-test suite with no regressions.
+Gap analysis against Microsoft Learn found 11 concrete, checkable settings across the MDO/EOP mail-flow stack and Teams that the prior 26 checks didn't cover, plus 2 items needing further investigation before committing to a check ID. All 11 checks were implemented via parallel subagent dispatch (each check's `.ps1` + self-contained Pester test file + doc, no shared files touched, avoiding merge conflicts) and pass lint + the full 112-test suite with no regressions.
 
 | Item | Status | Severity | Notes |
 |---|---|---|---|
@@ -161,12 +161,65 @@ Follow-on to v0.6.1's auth work. Connect order alone cannot fix every MSAL colli
 
 ---
 
+## v0.8.0 - Teams attack-surface hardening ✅
+
+Gap analysis triggered by an external check-suggestions draft against MET's 8 shipped Teams checks. Found 5 genuinely new, checkable settings plus 5 real gaps in existing checks (including one pre-existing blind spot: Teams003 only ever evaluated the `Global` meeting policy), and confirmed one item researched by the user (AIR auto-remediation) has no supported API surface at all and won't become a check. All 5 new checks + 5 enhancements implemented via parallel subagent dispatch (each on disjoint files); full suite passes 261/261 tests with zero lint errors, no regressions.
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Teams009 Trial Tenant Federation Exposure | ✅ | High | New check. `Get-CsTenantFederationConfiguration` → `ExternalAccessWithTrialTenants` (string enum `Allowed`/`Blocked`, not boolean - draft correctly flagged this as unconfirmed) |
+| Teams010 Per-User External Access Policy Drift | ✅ | Medium | New check. `Get-CsExternalAccessPolicy` enumerated across all non-Global instances. Only `EnableFederationAccess`/`EnablePublicCloudAccess` are Learn-confirmed properties; needs a live-tenant property dump before the Fail condition is finalized |
+| Teams011 SecOps Blocklist Authority & Blocked Entities | ✅ | Medium (Warning) | New check. `SecurityTeamAllowBlockListDelegation` on `Get-CsTenantFederationConfiguration` (draft guessed the wrong cmdlet for this) + `Get-CsTeamsExternalAccessConfiguration` for currently-blocked entities |
+| Teams012 Call Reporting (Vishing Surface) | ✅ | Medium | New check. `Get-CsTeamsCallingPolicy` → `ReportCall` (string, not boolean) |
+| Teams014 Cross-Tenant Guest & External Collaboration | ✅ | Medium | New check, first direct Graph call from a check body (not via `Expand-METGroupMembership`). `GET /policies/crossTenantAccessPolicy` + `/policies/authorizationPolicy`, confirmed to need only the already-requested `Policy.Read.All` scope. Must degrade to `NotApplicable` non-fatally if Graph is unavailable |
+| Enhancement: Teams001 Safe Links rule-targeting | ✅ | - | Verify a `Get-SafeLinksRule` actually assigns each policy with `EnableSafeLinksForTeams=$true` - a flagged-on policy with no assigning rule isn't applied |
+| Enhancement: Teams003 meeting policy enumeration | ✅ | - | Fixes a real gap: currently filters to `Identity -eq 'Global'` only, so custom meeting policies are invisible. Also adds `AllowPSTNUsersToBypassLobby` |
+| Enhancement: Teams004 ZAP rule scope | ✅ | - | Add `Get-TeamsProtectionPolicyRule` check so rule-level exceptions/exclusions aren't invisible to the existing policy-level ZAP check |
+| Enhancement: Teams006 federation properties | ✅ | - | Add `AllowTeamsConsumerInbound`, `RestrictTeamsConsumerToExternalUserProfiles`, and `BlockedDomains`-emptiness to the existing federation check |
+| Enhancement: Teams008 ACM caveat | ✅ | - | Doc-only `Recommendation` caveat that legacy app permission policies may be inert on ACM-migrated tenants - no cmdlet exists yet to detect migration state itself, so no code-logic change |
+| AIR auto-remediation - documented, not a check | ✅ | - | Confirmed no supported cmdlet or public Graph API exists to read/set AIR auto-remediation settings; adding a "Manual Review Items" section to README instead of a synthetic always-static check |
+
+---
+
+## v0.9.0 - Quarantine policy accuracy pass ✅
+
+Design conversation about quarantine checks not distinguishing Microsoft-managed preset (Standard/Strict) configuration from admin-managed custom configuration surfaced two confirmed false-positive bugs, not just a design gap. All 4 items implemented via parallel subagent dispatch; full suite passes 292/292 tests with zero lint errors, no regressions.
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Shared helper: preset/built-in policy name detection | ✅ | - | `Private/Test-METIsPresetSecurityPolicyName.ps1` - `Test-METIsPresetSecurityPolicyName` (Strict/Standard preset filter policies) and `Test-METIsBuiltInQuarantinePolicyName` (the 4 built-in quarantine policies), reused across EXO004/008/009 |
+| Fix: MET-EXO009 verdict risk model | ✅ | High | Confirmed bug: the old risk model flagged Microsoft's own Strict preset impersonation/phish/spoof quarantine tags as Fail/Warning, since those verdicts use Full-access policies even under Strict. Corrected to a fixed restricted set (Malware, High-Confidence Phish only) and skips preset-generated policy objects entirely |
+| Fix: MET-EXO004 false-positive on AdminOnlyAccessPolicy | ✅ | Medium | Confirmed bug: flagged every tenant's `AdminOnlyAccessPolicy` (No access, by design) as a misconfiguration on every run. Narrowed to reviewing genuinely custom quarantine policies for a notification/permission mismatch, excluding all 4 built-ins |
+| Enhancement: MET-EXO008 preset-aware retention | ✅ | - | Skips an actionable `Set-HostedContentFilterPolicy` recommendation against Standard/Strict preset policies (not editable, would error); notes that this same setting governs anti-phishing (spoof/impersonation) quarantine retention too |
+| New: MET-EXO017 Quarantine Notification Cadence | ✅ | Informational | `EndUserSpamNotificationFrequency` on the global quarantine policy (`DefaultGlobalTag`) - Info-only, no Microsoft-recommended value exists |
+
+---
+
+## v0.10.0 - Connect-METSession security hardening ✅
+
+A hardening proposal for `Connect-METSession` surfaced a confirmed cross-customer data leak path plus five supporting fixes. Every technical claim was independently verified against the actual code before acceptance (not taken on trust), and the device-code phishing risk claim was independently researched against current Microsoft guidance. Implemented and verified: full suite passes 315/315 unit + 16/16 integration tests with zero lint errors, no regressions (also caught and fixed a pre-existing stale integration test asserting a 38-check count instead of the current 44).
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Tenant-scoped session reuse | ✅ | Critical | Confirmed bug: all three legs (EXO/Graph/Teams) reuse any live connection with zero tenant/org comparison - the Teams leg even logs the connected tenant ID without ever checking it. A consultant running MET against two `-DelegatedOrganization` customers back-to-back in one session without disconnecting gets a report labeled customer B containing customer A's actual configuration |
+| New: `Disconnect-METSession` | ✅ | - | Per-leg try/catch teardown (EXO/Graph/Teams), added to `FunctionsToExport`. Ships with item 1 since its error message names this function |
+| Certificate-file auth (`-CertificatePath`/`-CertificatePassword`) | ✅ | - | `ServicePrincipal` set is X509Store/thumbprint-only today, which is Windows-only in practice - the actual reason device code became the Codespaces auth path. Makes the tightened device-code guidance (below) honest on Linux |
+| Scope device-code guidance down | ✅ | High | Confirmed: 4 failure paths currently suggest `-UseDeviceAuthentication` as the generic retry. Research confirmed Microsoft's own current guidance is *stronger* than the source proposal: "block wherever possible... allow only where necessary" (Storm-2372 and follow-on campaigns through April 2026 are live, not historical). Scope to a documented headless-only fallback, warn on use, never suggest as first-line retry |
+| Record auth method in the report | ✅ | - | Surfaces auth mode/tenant/connected services in the `Get-METReport` header, so a customer's SOC can reconcile a `deviceCodeFlow` sign-in with a known MET run instead of triaging it as an incident. Lowest urgency of the six, can defer if scope needs trimming |
+| Fix README/code contradiction | ✅ | - | README claims device auth is needed for any Linux/macOS + Teams 7.9+; code already auto-applies `-DisableWAM` off-Windows (`Connect-METSession.ps1:228`), which resolves the actual failure. Narrow the doc to the genuine case - no browser reachable at all - after re-testing in a Codespace with `-DisableWAM` alone |
+| Real-tenant validation of `-CertificatePath` | ✅ | Medium | Setting up cert-based auth end-to-end in a live Codespace surfaced two real `Connect-METSession` bugs the unit tests (all mocked) couldn't catch, both now fixed with regression tests: (1) a GUID `-TenantId` reaches `Connect-ExchangeOnline -Organization`, which rejects GUIDs outright - now fails fast with an actionable error before attempting to connect; (2) `-CertificatePath` was forwarded verbatim to the module's own `File.Exists()` validation, which - confirmed by decompiling `ExchangeOnlineManagement`'s `ValidateCertificatePath` method - never expands `~` or resolves a relative path; `Connect-METSession` now resolves it to an absolute path up front. Also corrected README's service-principal setup: it was missing the `Exchange.ManageAsApp` API permission (a separate, mandatory requirement from any RBAC role - its absence produces a generic `UnAuthorized` with no clue what's missing) and gave an `Add-RoleGroupMember -Identity 'Security Reader'` command that fails on tenants where that role group is centrally synced from the Entra ID `Security reader` directory role and not directly manageable via Exchange RBAC |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |
 |---|---|---|
 | Attack Simulation Training coverage | ❓ | Graph beta `securityReportsRoot/getAttackSimulationTrainingUserCoverage` (permission `AttackSimulation.Read.All`). Real gap - MDO's technical controls don't compensate for an untrained user base - but requires an additive Graph scope beyond MET's current `Identity.SignIns`/`Groups`, and the beta endpoint isn't GA. Needs a decision on whether to expand `Connect-METSession`'s Graph scope set before this becomes a committed check |
 | Secure Score correlation | ❓ | `Get-MgSecuritySecureScore` (Microsoft.Graph.Security - not currently a MET dependency). Informational cross-reference only, not a pass/fail check; lowest priority, would add a new module dependency for a "nice to have" dashboard signal |
+| Risky Teams app/bot catalog enumeration | ❓ | Graph `GET /appCatalogs/teamsApps` confirmed working, but needs `AppCatalog.Read.All` - not in MET's current Graph scope set. Same scope-expansion decision as Attack Simulation Training above |
+| ACM (App Centric Management) migration-state detection | ❓ | No confirmed cmdlet or Graph property reads whether a tenant has migrated to ACM, so Teams008 can't reliably distinguish a compliant legacy policy from an inert one. Revisit if Microsoft documents a detection surface |
+| Org-wide third-party app enablement / sideloading toggle | ❓ | No confirmed Graph endpoint for this specific org-wide toggle; it currently lives only in Teams admin center |
 
 ---
 

@@ -2,6 +2,7 @@ function New-METEffectivePolicyCoverageResult {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $CheckId,
+        [ValidateSet('MDO','EXO','Teams')] [string] $Category = 'MDO',
         [Parameter(Mandatory)] [string] $Name,
         [Parameter(Mandatory)] [string] $ProtectionType,
         [Parameter(Mandatory)] [ValidateSet('High','Medium','Low','Informational')] [string] $Severity,
@@ -43,7 +44,7 @@ function New-METEffectivePolicyCoverageResult {
     $orderingWarnings = @($orderingObservations | Where-Object Severity -eq 'Warning')
     $compliant = $Subjects.Count - $affected.Count
     $result = if (-not $complete) { 'Warning' } elseif ($affected.Count) { 'Fail' } elseif ($review.Count -or $orderingWarnings.Count) { 'Warning' } else { 'Pass' }
-    $headline = if (-not $complete) { "$ProtectionType effective coverage is incomplete for $($Subjects.Count) $SubjectLabel." } elseif ($affected.Count) { "$compliant of $($Subjects.Count) $SubjectLabel meet the $ProtectionType baseline; $($affected.Count) receive an effective policy below baseline." } elseif ($review.Count) { "All $($Subjects.Count) $SubjectLabel have effective $ProtectionType coverage, but $($review.Count) require configuration review." } else { "All $($Subjects.Count) $SubjectLabel receive an effective $ProtectionType policy that meets the baseline." }
+    $headline = if (-not $complete) { "$ProtectionType effective coverage is incomplete for $($Subjects.Count) $SubjectLabel." } elseif ($affected.Count) { "$compliant of $($Subjects.Count) $SubjectLabel meet the $ProtectionType baseline; $($affected.Count) receive an effective policy below baseline." } elseif ($review.Count) { "All $($Subjects.Count) $SubjectLabel have effective $ProtectionType coverage, but $($review.Count) require configuration review." } elseif ($orderingWarnings.Count) { "All $($Subjects.Count) $SubjectLabel receive an effective $ProtectionType policy that meets the baseline, but $($orderingWarnings.Count) polic$(if ($orderingWarnings.Count -eq 1) { 'y has' } else { 'ies have' }) an ordering issue worth reviewing - see policy ordering observations below." } else { "All $($Subjects.Count) $SubjectLabel receive an effective $ProtectionType policy that meets the baseline." }
     $finding = [System.Collections.Generic.List[string]]::new()
     $finding.Add($headline)
     if ($affected.Count) {
@@ -56,7 +57,7 @@ function New-METEffectivePolicyCoverageResult {
     if ($coverageRecommendations.Count) { $finding.Add("Coverage recommendations:`n$($coverageRecommendations -join "`n")") }
     $metadata = @{ DetailType='EffectivePolicyCoverage'; ProtectionType=$ProtectionType; TotalRecipients=$Subjects.Count; CompliantRecipients=$compliant; EffectiveRecipients=@($Resolution.RecipientAssignments).Count; AffectedRecipients=@($affected); ReviewRecipients=@($review); CoverageComplete=$complete; RetrievalErrors=@($RetrievalErrors); OrderingObservations=@($orderingObservations); CoverageRecommendations=@($coverageRecommendations); Policies=@($policyMetadata) }
 
-    New-METCheckResult -CheckId $CheckId -Category MDO -Name $Name -Result $result -Severity $Severity `
+    New-METCheckResult -CheckId $CheckId -Category $Category -Name $Name -Result $result -Severity $Severity `
         -AffectedObject "Tenant ($($Subjects.Count) $SubjectLabel)" -Finding ($finding -join "`n") `
         -Recommendation $Recommendation -ReferenceUrl $ReferenceUrl `
         -ErrorMessage $(if ($RetrievalErrors.Count) { $RetrievalErrors -join "`n" } else { $null }) -Metadata $metadata
