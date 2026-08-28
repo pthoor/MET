@@ -111,3 +111,74 @@ Describe 'MET-MDO007 outbound anti-spam effective coverage' {
         $result.Finding | Should -Match 'system-controlled'
     }
 }
+
+
+Describe 'MET-MDO005 common attachment filter file types' {
+    BeforeEach {
+        $script:METContext=$null
+        Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-MalwareFilterRule { @() }
+    }
+
+    Context 'The file type list covers every high-risk extension' {
+        It 'Returns Pass and reports no missing file types' {
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{Name='Default';IsDefault=$true;ZapEnabled=$true;EnableFileFilter=$true;FileTypeAction='Reject';QuarantineTag='AdminOnlyAccessPolicy';FileTypes=@('exe','com','scr','pif','cmd','bat','vbs','vbe','js','jse','wsf','wsh','hta','ps1','msi','lnk','jar','reg','cpl','dll','docm')}
+            }
+            $result=& "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.CheckId | Should -Be 'MET-MDO005'
+            $result.Severity | Should -Be 'High'
+            $result.Result | Should -Be 'Pass'
+            $result.Finding | Should -Not -Match 'high-risk file types'
+        }
+    }
+
+    Context 'The file type list omits high-risk extensions' {
+        It 'Names the missing extensions once, sorted, and normalises case and leading dots' {
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{Name='Default';IsDefault=$true;ZapEnabled=$true;EnableFileFilter=$true;FileTypeAction='Reject';QuarantineTag='AdminOnlyAccessPolicy';FileTypes=@('.EXE ','com','SCR','pif','cmd','bat','vbs','vbe','js','jse','wsf','wsh','ps1','msi','jar','reg','cpl','dll')}
+            }
+            $result=& "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'does not block high-risk file types: hta, lnk'
+            $result.Finding | Should -Not -Match 'high-risk file types.*exe'
+        }
+    }
+
+    Context 'The filter is enabled with an empty file type list' {
+        It 'Reports that the filter blocks nothing' {
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{Name='Default';IsDefault=$true;ZapEnabled=$true;EnableFileFilter=$true;FileTypeAction='Reject';QuarantineTag='AdminOnlyAccessPolicy';FileTypes=@()}
+            }
+            $result=& "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'file type list is empty'
+            $result.Finding | Should -Not -Match 'does not block high-risk file types'
+        }
+    }
+
+    Context 'The filter is disabled' {
+        It 'Does not duplicate the disabled-filter finding with a file type finding' {
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{Name='Default';IsDefault=$true;ZapEnabled=$true;EnableFileFilter=$false;FileTypeAction='Reject';QuarantineTag='AdminOnlyAccessPolicy';FileTypes=@()}
+            }
+            $result=& "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Finding | Should -Match 'Common attachment filter is disabled'
+            $result.Finding | Should -Not -Match 'file type list is empty'
+            $result.Finding | Should -Not -Match 'does not block high-risk file types'
+        }
+    }
+
+    Context 'The policy object does not expose FileTypes' {
+        It 'Does not assess the file type list' {
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{Name='Default';IsDefault=$true;ZapEnabled=$true;EnableFileFilter=$true;FileTypeAction='Reject';QuarantineTag='AdminOnlyAccessPolicy'}
+            }
+            $result=& "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Be 'Pass'
+            $result.Finding | Should -Not -Match 'file type list is empty'
+            $result.Finding | Should -Not -Match 'does not block high-risk file types'
+        }
+    }
+}

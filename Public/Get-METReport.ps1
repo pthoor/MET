@@ -748,6 +748,12 @@ const CONTROLS_META = {
   'MET-EXO015': 'The native Outlook "External" sender banner (Get-ExternalInOutlook) - a user-facing signal against lookalike-domain/BEC senders.',
   'MET-EXO016': 'ARC trusted sealer domains (Get-ArcConfig) - informational listing of domains trusted to vouch for authentication results.',
   'MET-EXO017': 'EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy - informational cadence listing.',
+  'MET-EXO018': 'Remote domain AutoForwardEnabled - whether automatic forwarding to external domains is permitted, the control plane behind inbox-rule exfiltration.',
+  'MET-EXO019': 'Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides - legacy SMTP AUTH is a basic-auth endpoint exempt from most conditional access.',
+  'MET-EXO020': 'Connection filter IPAllowList and EnableSafeList - allow-listed sources skip spam filtering and spoof intelligence entirely.',
+  'MET-EXO021': 'Organization-wide AuditDisabled - whether mailbox audit records exist to reconstruct what a compromised account accessed.',
+  'MET-EXO022': 'Sharing policies exposing calendar detail or contacts to all domains or anonymously - reconnaissance surface for internal-impersonation phishing.',
+  'MET-EXO023': 'UnifiedAuditLogIngestionEnabled - the tenant-wide record investigations are reconstructed from; retention is not asserted by this check.',
   'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
   'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
   'MET-Teams003': 'External access settings, anonymous join policy, and lobby bypass settings reviewed for security posture.',
@@ -760,7 +766,8 @@ const CONTROLS_META = {
   'MET-Teams010': 'Per-user CsExternalAccessPolicy instances re-opening federation/public-cloud access for specific users under a restrictive tenant baseline.',
   'MET-Teams011': 'SecurityTeamAllowBlockListDelegation and currently-blocked entities - whether SecOps can block malicious domains/users mid-incident.',
   'MET-Teams012': 'ReportCall on Teams calling policies - closest native control to helpdesk-vishing attacks over a Teams call.',
-  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.'
+  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.',
+  'MET-Teams015': 'AllowEmailIntoChannel on the Teams client configuration - channel email addresses accept external mail that bypasses the mailbox delivery path.'
 };
 
 const CONTROLS_CATEGORIES = [

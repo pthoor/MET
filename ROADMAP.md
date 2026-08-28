@@ -211,6 +211,26 @@ A hardening proposal for `Connect-METSession` surfaced a confirmed cross-custome
 
 ---
 
+## v0.11.0 - Mail-flow, auth-surface and audit coverage ✅
+
+Seven new checks and three enhancements to existing checks, closing gaps in control planes MET could previously see no state for at all. Every new check is standalone (own file, own self-contained test file, own docs page); no existing check's result, severity or wording was changed. Verified with zero lint findings and a full green suite.
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| EXO018 Remote Domain Automatic Forwarding | ✅ | High | The third forwarding control plane. MET already assessed the outbound spam policy's `AutoForwardingMode` (MDO007) and per-mailbox forwarding (EXO012), but never `Get-RemoteDomain`'s `AutoForwardEnabled` - so a tenant whose default `*` remote domain permits auto-forward to every external domain scored clean on forwarding. One result per remote domain; the wildcard domain is a Fail, a specific domain a Warning |
+| EXO019 SMTP Client Authentication | ✅ | High | Legacy SMTP AUTH is a basic-authentication endpoint largely exempt from conditional access and a standing password-spray target. Checks the tenant-wide switch, then - only when that is already closed - enumerates per-mailbox overrides that re-open it. The enumeration has its own try/catch and degrades to a Pass with the error surfaced, so a mailbox-enumeration failure can never abort the check |
+| EXO020 Connection Filter Policy Hygiene | ✅ | High | `IPAllowList` entries skip spam filtering *and* spoof intelligence, so an attacker relaying through any listed host inherits a trusted path into every mailbox. Broad IPv4 CIDR ranges are called out separately; unparseable, range-form and IPv6 entries are skipped rather than guessed at. `EnableSafeList` is a Warning because its contents cannot be enumerated from PowerShell and therefore cannot be reviewed |
+| EXO021 Mailbox Audit Logging | ✅ | Medium | `AuditDisabled` has an inverted sense (`$true` = auditing off), which is the obvious way to get this check backwards - a dedicated regression test asserts Fail only on `$true` and Pass only on `$false`. An absent property is Pass-with-assumption, since Microsoft's platform default is on |
+| EXO022 Calendar and Contact Sharing | ✅ | Medium | Calendar detail or contacts shared with `*`/`Anonymous` hands an attacker the org chart, meeting subjects, attendee lists and internal addresses that an internal-impersonation phish is built from. Free/busy-simple to `*` passes explicitly; disabled policies report Info rather than Pass |
+| EXO023 Unified Audit Log Ingestion | ✅ | High | Unlike EXO021, an absent property is a Fail rather than an assumed default, because ingestion has shipped switched off in some tenants. Retention duration is explicitly **not** asserted - it needs a Purview connection this module deliberately does not open - and is documented as a manual follow-up rather than silently implied |
+| Teams015 Teams Email Integration | ✅ | Medium | Channel email addresses accept mail from outside the organisation and deliver it into the channel rather than a mailbox, so Exchange transport rules and mailbox-level policy never apply - a delivery route that bypasses the mail path the rest of the module assesses. Warning rather than Fail, since the feature is legitimate and has a per-team sender restriction as the middle ground |
+| MDO005 enhancement: attachment filter contents | ✅ | - | The check asserted the common attachment filter was enabled but never looked inside it. A filter that is on with a list omitting the formats actually used to deliver payloads gives false assurance, so the extension list is now compared against a high-risk set and missing entries reported as one issue line |
+| MDO003 enhancement: partner domain impersonation | ✅ | - | Covered targeted users and the tenant's own accepted domains, but not explicitly-named external domains - which are the ones abused in invoice-redirection and payment-diversion fraud. Now reads `EnableTargetedDomainsProtection`/`TargetedDomainsToProtect` |
+| Teams003 enhancement: two meeting properties | ✅ | - | `AllowExternalParticipantGiveRequestControl` (the screen-control handoff used in remote-access social engineering) and `AllowAnonymousUsersToStartMeeting` (which defeats lobby controls that assume an organiser admits attendees), across all meeting policies |
+| HTML report test coverage | ✅ | - | The report had no automated coverage of its own markup or behaviour. Added string-level Pester assertions (self-contained/offline guarantee, injection safety in both the rendered-markup and embedded-JSON paths, unsafe-URI handling, empty and single-Info result sets) plus a browser-driven suite covering tab switching, live search, combined filters, the accept-risk flow and its persistence, and card expansion |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |

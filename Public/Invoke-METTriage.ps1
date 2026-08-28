@@ -214,6 +214,9 @@ function Get-METAggregationNoun {
     switch -Regex ($CheckId) {
         'MET-EXO00[1-3]' { return 'domains' }
         'MET-EXO004'      { return 'quarantine policies' }
+        'MET-EXO018'      { return 'remote domains' }
+        'MET-EXO020'      { return 'connection filter policies' }
+        'MET-EXO022'      { return 'sharing policies' }
         'MET-MDO014'      { return 'groups' }
         default            { return 'policies' }
     }

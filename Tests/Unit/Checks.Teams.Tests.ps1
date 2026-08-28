@@ -214,6 +214,126 @@ Describe 'MET-Teams003 Meeting Protection' {
             $results[0].Finding | Should -Match 'Could not retrieve Teams meeting policies'
         }
     }
+
+    Context 'A meeting policy lets external participants request screen control' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                @(
+                    [PSCustomObject]@{
+                        Identity                                   = 'Global'
+                        AllowAnonymousUsersToJoinMeeting           = $false
+                        AutoAdmittedUsers                          = 'EveryoneInSameAndFederatedCompany'
+                        AllowExternalNonTrustedMeetingChat         = $false
+                        AllowPSTNUsersToBypassLobby                = $false
+                        AllowExternalParticipantGiveRequestControl = $false
+                        AllowAnonymousUsersToStartMeeting          = $false
+                    },
+                    [PSCustomObject]@{
+                        Identity                                   = 'Tag:VendorMeetings'
+                        AllowAnonymousUsersToJoinMeeting           = $false
+                        AutoAdmittedUsers                          = 'EveryoneInSameAndFederatedCompany'
+                        AllowExternalNonTrustedMeetingChat         = $false
+                        AllowPSTNUsersToBypassLobby                = $false
+                        AllowExternalParticipantGiveRequestControl = $true
+                        AllowAnonymousUsersToStartMeeting          = $false
+                    }
+                )
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+        It 'Returns Warning and names the policy granting screen control' {
+            $results = & $checkFile
+            $results[0].CheckId | Should -Be 'MET-Teams003'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'control of a shared screen'
+            $results[0].Finding | Should -Match 'Tag:VendorMeetings'
+        }
+    }
+
+    Context 'A meeting policy lets anonymous users start meetings' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                [PSCustomObject]@{
+                    Identity                                   = 'Global'
+                    AllowAnonymousUsersToJoinMeeting           = $false
+                    AutoAdmittedUsers                          = 'EveryoneInSameAndFederatedCompany'
+                    AllowExternalNonTrustedMeetingChat         = $false
+                    AllowPSTNUsersToBypassLobby                = $false
+                    AllowExternalParticipantGiveRequestControl = $false
+                    AllowAnonymousUsersToStartMeeting          = $true
+                }
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+        It 'Returns Fail and explains that no organiser is required' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'start a meeting with no organiser present'
+        }
+    }
+
+    Context 'Both new properties are set to secure values' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                [PSCustomObject]@{
+                    Identity                                   = 'Global'
+                    AllowAnonymousUsersToJoinMeeting           = $false
+                    AutoAdmittedUsers                          = 'EveryoneInSameAndFederatedCompany'
+                    AllowExternalNonTrustedMeetingChat         = $false
+                    AllowPSTNUsersToBypassLobby                = $false
+                    AllowExternalParticipantGiveRequestControl = $false
+                    AllowAnonymousUsersToStartMeeting          = $false
+                }
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+        It 'Returns Pass' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'The meeting policy object omits the screen-control and anonymous-start properties' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                [PSCustomObject]@{
+                    Identity                           = 'Global'
+                    AllowAnonymousUsersToJoinMeeting   = $false
+                    AutoAdmittedUsers                  = 'EveryoneInSameAndFederatedCompany'
+                    AllowExternalNonTrustedMeetingChat = $false
+                    AllowPSTNUsersToBypassLobby        = $false
+                }
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+        It 'Treats the absent properties as not enabled' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'control of a shared screen'
+            $results[0].Finding | Should -Not -Match 'start a meeting with no organiser present'
+        }
+    }
 }
 
 Describe 'MET-Teams004 ZAP for Teams' {

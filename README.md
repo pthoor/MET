@@ -542,6 +542,12 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
 | MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
 | MET-EXO017 | Quarantine Notification Cadence | Informational | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
+| MET-EXO018 | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
+| MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable legacy SMTP AUTH |
+| MET-EXO020 | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
+| MET-EXO021 | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
+| MET-EXO022 | Calendar and Contact Sharing | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
+| MET-EXO023 | Unified Audit Log Ingestion | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
 
 ### Teams - Microsoft Teams Threat Protection
 
@@ -560,6 +566,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-Teams011 | SecOps Blocklist Authority | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
 | MET-Teams012 | Call Reporting | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
 | MET-Teams014 | Cross-Tenant Guest Access | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
+| MET-Teams015 | Teams Email Integration | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
 
 ---
 

@@ -77,7 +77,13 @@ MET/
 │   │   ├── MET-EXO014-AdvancedDeliveryPolicy.ps1
 │   │   ├── MET-EXO015-ExternalSenderTag.ps1
 │   │   ├── MET-EXO016-ArcTrustedSealers.ps1
-│   │   └── MET-EXO017-QuarantineNotificationCadence.ps1
+│   │   ├── MET-EXO017-QuarantineNotificationCadence.ps1
+│   │   ├── MET-EXO018-RemoteDomainForwarding.ps1
+│   │   ├── MET-EXO019-SmtpAuthentication.ps1
+│   │   ├── MET-EXO020-ConnectionFilterPolicy.ps1
+│   │   ├── MET-EXO021-MailboxAuditing.ps1
+│   │   ├── MET-EXO022-SharingPolicy.ps1
+│   │   └── MET-EXO023-UnifiedAuditLog.ps1
 │   └── Teams/
 │       ├── MET-Teams001-SafeLinks.ps1
 │       ├── MET-Teams002-SafeAttachments.ps1
@@ -91,7 +97,8 @@ MET/
 │       ├── MET-Teams010-ExternalAccessPolicyDrift.ps1
 │       ├── MET-Teams011-SecOpsBlocklistAuthority.ps1
 │       ├── MET-Teams012-CallReporting.ps1
-│       └── MET-Teams014-CrossTenantAccess.ps1
+│       ├── MET-Teams014-CrossTenantAccess.ps1
+│       └── MET-Teams015-EmailIntegration.ps1
 ├── Tests/
 │   ├── Unit/
 │   │   ├── New-METCheckResult.Tests.ps1
@@ -462,6 +469,12 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 | MET-EXO014 | Advanced Delivery Policy | `Get-ExoPhishSimOverrideRule` and `Get-ExoSecOpsOverrideRule` - surfaces enforceable phishing-simulation and SecOps mailbox override rules for periodic review (Info-only when retrieval succeeds) |
 | MET-EXO015 | External Sender Warning Tag | `Get-ExternalInOutlook` - the native Outlook "External" banner, a user-facing (not filter-level) signal against lookalike-domain/BEC senders |
 | MET-EXO016 | ARC Trusted Sealers | `Get-ArcConfig` → `ArcTrustedSealers` - Info-only listing of domains trusted to vouch for message authentication results via Authenticated Received Chain |
+| MET-EXO018 | Remote Domain Automatic Forwarding | `Get-RemoteDomain` → `AutoForwardEnabled`, one result per remote domain. The tenant-wide `*` domain with auto-forward on is a Fail (automatic forwarding permitted to every external domain); a specific domain is a Warning. Third and independent forwarding control plane alongside MET-MDO007 (`AutoForwardingMode`) and MET-EXO012 (per-mailbox) - all three must be closed |
+| MET-EXO019 | SMTP Client Authentication | `Get-TransportConfig` → `SmtpClientAuthenticationDisabled` tenant-wide; when that is already disabled, additionally enumerates per-mailbox re-enables via `Get-EXOCasMailbox` in its own try/catch, so an enumeration failure degrades to Pass-with-error-surfaced rather than aborting. Legacy SMTP AUTH is a basic-auth endpoint largely exempt from conditional access |
+| MET-EXO020 | Connection Filter Policy Hygiene | `Get-HostedConnectionFilterPolicy` → `IPAllowList` (Fail - allow-listed sources skip spam filtering *and* spoof intelligence), `EnableSafeList` (Warning - contents are not enumerable from PowerShell so they cannot be reviewed). Broad CIDR entries are called out separately; unparseable entries are skipped rather than guessed at |
+| MET-EXO021 | Mailbox Audit Logging | `Get-OrganizationConfig` → `AuditDisabled`. Note the inverted sense: `$true` means auditing is OFF. An absent property is Pass-with-assumption, since Microsoft's platform default is on |
+| MET-EXO022 | Calendar and Contact Sharing | `Get-SharingPolicy` → `Domains`, one result per policy. Warns on enabled policies sharing calendar *detail* or contacts with `*`/`Anonymous`; free/busy-simple to `*` passes explicitly. Disabled policies report Info, not Pass |
+| MET-EXO023 | Unified Audit Log Ingestion | `Get-AdminAuditLogConfig` → `UnifiedAuditLogIngestionEnabled`. Unlike EXO021 an absent property is a Fail, not an assumed default - ingestion has shipped off in some tenants. Retention duration is explicitly **not** asserted (it needs a Purview connection this module does not open) and is documented as a manual follow-up |
 
 ### Teams Checks
 
@@ -480,6 +493,7 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 | MET-Teams011 | SecOps Blocklist Authority & Blocked Entities | `SecurityTeamAllowBlockListDelegation` on `Get-CsTenantFederationConfiguration` (can SecOps block a malicious domain/user from the portal mid-incident) plus currently-blocked entities via `Get-CsTeamsExternalAccessConfiguration`; response-readiness, so `Disabled` is a Warning rather than a hard Fail |
 | MET-Teams012 | Call Reporting (Vishing Surface) | `Get-CsTeamsCallingPolicy` → `ReportCall`, enumerated across all policies - closest native control to helpdesk-vishing (Storm-1811/3AM-style) attacks over a Teams call |
 | MET-Teams014 | Cross-Tenant Guest & External Collaboration | Microsoft Graph `GET /policies/crossTenantAccessPolicy` + `/policies/authorizationPolicy` (`Policy.Read.All`, already in MET's default Graph scopes) - first check with a direct Graph dependency (not routed through `Expand-METGroupMembership`); degrades to `NotApplicable` non-fatally if Graph is unavailable |
+| MET-Teams015 | Teams Email Integration | `Get-CsTeamsClientConfiguration` → `AllowEmailIntoChannel` - channel email addresses accept mail from outside the organisation and deliver it into the channel rather than a mailbox, so Exchange transport rules and mailbox-level policy never apply to it. Warning rather than Fail (it is a legitimate feature); an absent property is also a Warning rather than a silent pass |
 
 ---
 
@@ -492,9 +506,9 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 
 ---
 
-## Current State (v0.10.0)
+## Current State (v0.11.0)
 
-All 44 checks are implemented across MDO (14), EXO (17), and Teams (13), plus `Test-METPrerequisites` for pre-flight dependency checks and `Disconnect-METSession` for session teardown. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history - v0.6.0 added 11 checks across the MDO/EOP mail-flow stack and Teams; v0.8.0 added 5 new Teams checks (009-012, 014) plus 5 enhancements to existing Teams checks (001, 003, 004, 006, 008); v0.9.0 fixed two confirmed quarantine-check false positives; v0.10.0 fixed a confirmed cross-customer data leak in session reuse (no tenant/org verification before reusing a live EXO/Graph/Teams connection), alongside certificate-file auth for non-Windows and a scoped-down, research-grounded device-code auth posture (Microsoft's own current guidance: "block wherever possible, allow only where necessary").
+All 51 checks are implemented across MDO (14), EXO (23), and Teams (14), plus `Test-METPrerequisites` for pre-flight dependency checks and `Disconnect-METSession` for session teardown. Console, JSON, and HTML report formats are all shipped. See `ROADMAP.md` for the full version history - v0.6.0 added 11 checks across the MDO/EOP mail-flow stack and Teams; v0.8.0 added 5 new Teams checks (009-012, 014) plus 5 enhancements to existing Teams checks (001, 003, 004, 006, 008); v0.9.0 fixed two confirmed quarantine-check false positives; v0.10.0 fixed a confirmed cross-customer data leak in session reuse (no tenant/org verification before reusing a live EXO/Graph/Teams connection), alongside certificate-file auth for non-Windows and a scoped-down, research-grounded device-code auth posture (Microsoft's own current guidance: "block wherever possible, allow only where necessary"). v0.11.0 added 7 checks (EXO018-EXO023, Teams015) closing gaps in control planes MET could previously see no state for - remote-domain auto-forwarding, legacy SMTP AUTH, connection-filter allow lists, mailbox and unified audit logging, calendar/contact sharing, and Teams channel email - plus 3 enhancements to existing checks (MDO003, MDO005, Teams003) and the first automated test coverage of the HTML report.
 
 Backlog (not yet started):
 - SARIF output for GitHub Code Scanning integration
