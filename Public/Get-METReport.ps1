@@ -1,4 +1,23 @@
-﻿function Get-METReport {
+﻿function Get-METModuleVersion {
+    [CmdletBinding()]
+    param()
+
+    $loaded = (Get-Module MET -ErrorAction SilentlyContinue)?.Version?.ToString()
+    if (-not [string]::IsNullOrWhiteSpace($loaded)) { return $loaded }
+
+    try {
+        $manifestPath = Join-Path $PSScriptRoot '..' 'MET.psd1'
+        $manifest = Import-PowerShellDataFile -Path $manifestPath -ErrorAction Stop
+        if (-not [string]::IsNullOrWhiteSpace($manifest.ModuleVersion)) { return [string]$manifest.ModuleVersion }
+    }
+    catch {
+        Write-Verbose "Could not resolve module version from the manifest: $($_.Exception.Message)"
+    }
+
+    return 'unknown'
+}
+
+function Get-METReport {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -252,7 +271,7 @@
 
         # ── JSON ─────────────────────────────────────────────────────────────
         if ($Format -in 'JSON','All') {
-            $METVersion = (Get-Module MET -ErrorAction SilentlyContinue)?.Version.ToString() ?? '0.2.0'
+            $METVersion = Get-METModuleVersion
 
             $jsonObj = [ordered]@{
                 tenant         = $effectiveTenantName
@@ -269,7 +288,7 @@
                 postureScore   = $overallScore
                 categoryScores = $categoryScores
                 summary        = $summary
-                checks         = $allResults | ForEach-Object {
+                checks         = @($allResults | ForEach-Object {
                     [ordered]@{
                         checkId        = $_.CheckId
                         category       = $_.Category
@@ -285,7 +304,7 @@
                         error          = $_.Error
                         metadata       = $_.Metadata
                     }
-                }
+                })
             }
 
             $json = $jsonObj | ConvertTo-Json -Depth 10
@@ -306,12 +325,12 @@
 
         # ── HTML ─────────────────────────────────────────────────────────────
         if ($Format -in 'HTML','All') {
-            $METVersion  = (Get-Module MET -ErrorAction SilentlyContinue)?.Version.ToString() ?? '0.2.0'
+            $METVersion  = Get-METModuleVersion
             $runTimestamp = $runTimestampUtc.ToString('yyyy-MM-dd HH:mm') + ' UTC'
             $tenantId     = if ($effectiveTenantName) { $effectiveTenantName } else { 'unknown' }
             $tenantIdJson = $tenantId | ConvertTo-Json -Compress
 
-            $checksJson = ($allResults | ForEach-Object {
+            $checksData = @($allResults | ForEach-Object {
                 [ordered]@{
                     checkId        = $_.CheckId
                     category       = $_.Category
@@ -327,7 +346,13 @@
                     error          = $_.Error
                     metadata       = $_.Metadata
                 }
-            }) | ConvertTo-Json -Depth 5 -Compress
+            })
+
+            $checksJson = if ($checksData.Count -eq 0) {
+                '[]'
+            } else {
+                $checksData | ConvertTo-Json -Depth 5 -Compress -AsArray
+            }
 
             # Escape every '<' so embedded JSON cannot break out of the <script> block.
             # A blacklist for the literal '</script>' string is insufficient: HTML also

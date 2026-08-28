@@ -651,6 +651,26 @@ $config.Output.Verbosity = 'Detailed'
 Invoke-Pester -Configuration $config
 ```
 
+The unit suite includes `Tests/Unit/Get-METReport.Html.Tests.ps1`, which asserts the
+generated HTML report is self-contained (no external script, stylesheet or CDN reference),
+escapes hostile text in both the rendered markup and the embedded JSON, never emits a live
+`href` for a `javascript:`/`data:` reference URL, and renders correctly for empty and
+single-result runs. No browser is needed for those.
+
+The interactive behaviour of the report - tab switching, live search, the severity/result
+filters, card expansion, and the accept-risk flow with its `localStorage` persistence - is
+covered by a separate browser-driven suite that is not part of the PowerShell run:
+
+```bash
+cd Tests/Html
+npm ci
+npx playwright test
+```
+
+It regenerates its fixtures by invoking `Get-METReport` from the working tree on every run,
+so it always tests the current generator rather than a checked-in HTML file. See
+`Tests/Html/README.md` for browser resolution and CI notes.
+
 ### Project structure
 
 ```
