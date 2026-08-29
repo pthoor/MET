@@ -9,7 +9,17 @@ const ROOT = path.join(__dirname, '.tmp');
 const PORT = Number(process.env.MET_HTML_PORT || 4173);
 
 const server = http.createServer((req, res) => {
-  const requested = decodeURIComponent((req.url || '/').split('?')[0]);
+  // decodeURIComponent throws URIError on malformed percent-encoding (e.g. /%E0%A4%A).
+  // Uncaught, that takes the whole fixture server down mid-suite.
+  let requested;
+  try {
+    requested = decodeURIComponent((req.url || '/').split('?')[0]);
+  }
+  catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad request');
+    return;
+  }
 
   // Playwright starts webServer as a plugin task, which runs before globalSetup - so the
   // readiness probe fires before any fixture exists. It must not depend on .tmp content.

@@ -130,10 +130,10 @@ Describe 'MET-EXO019 SMTP Client Authentication' {
             Mock Get-EXOCasMailbox { throw 'Insufficient permissions to read mailbox settings' }
         }
 
-        It 'Still returns Pass for the tenant-wide setting and degrades non-fatally' {
+        It 'Returns Warning, not Pass, because the override exposure is unverified' {
             $results = @(& $checkFile)
             $results.Count | Should -Be 1
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'High'
             $results[0].Finding | Should -Match 'Per-mailbox overrides could not be enumerated'
             $results[0].Error | Should -Match 'Insufficient permissions to read mailbox settings'

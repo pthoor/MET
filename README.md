@@ -543,7 +543,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
 | MET-EXO017 | Quarantine Notification Cadence | Informational | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
 | MET-EXO018 | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
-| MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable legacy SMTP AUTH |
+| MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
 | MET-EXO020 | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
 | MET-EXO021 | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
 | MET-EXO022 | Calendar and Contact Sharing | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
