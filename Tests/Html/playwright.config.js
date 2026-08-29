@@ -20,7 +20,7 @@ module.exports = defineConfig({
   },
   webServer: {
     command: 'node serve.js',
-    url: `http://127.0.0.1:${PORT}`,
+    url: `http://127.0.0.1:${PORT}/healthz`,
     cwd: __dirname,
     reuseExistingServer: !process.env.CI,
     stdout: 'ignore',

@@ -10,6 +10,15 @@ const PORT = Number(process.env.MET_HTML_PORT || 4173);
 
 const server = http.createServer((req, res) => {
   const requested = decodeURIComponent((req.url || '/').split('?')[0]);
+
+  // Playwright starts webServer as a plugin task, which runs before globalSetup - so the
+  // readiness probe fires before any fixture exists. It must not depend on .tmp content.
+  if (requested === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
+    return;
+  }
+
   const relative = requested === '/' ? '/report.html' : requested;
   const target = path.join(ROOT, path.normalize(relative).replace(/^(\.\.[/\\])+/, ''));
 
