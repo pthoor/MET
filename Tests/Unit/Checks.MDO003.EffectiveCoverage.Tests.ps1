@@ -112,3 +112,94 @@ Describe 'MET-MDO003 effective recipient coverage' {
         $result.Error | Should -Match 'policy access denied'
     }
 }
+
+
+Describe 'MET-MDO003 custom domain impersonation protection' {
+    BeforeEach {
+        $script:METContext = $null
+        $script:checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO003-AntiPhish.ps1'
+        Mock Get-EXOMailbox {
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+        }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-AntiPhishRule { @() }
+    }
+
+    Context 'Targeted domain protection is disabled' {
+        It 'Reports the missing external-domain coverage as a gap' {
+            Mock Get-AntiPhishPolicy {
+                $p = New-TestAntiPhishPolicy -Name 'Office365 AntiPhish Default' -Compliant $true -Default $true
+                $p | Add-Member -NotePropertyName EnableTargetedDomainsProtection -NotePropertyValue $false
+                $p | Add-Member -NotePropertyName TargetedDomainsToProtect -NotePropertyValue @('supplier.example')
+                $p
+            }
+
+            $result = & $script:checkFile
+
+            $result.CheckId | Should -Be 'MET-MDO003'
+            $result.Severity | Should -Be 'High'
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'covers no external domains'
+        }
+    }
+
+    Context 'Targeted domain protection is enabled with an empty domain list' {
+        It 'Reports the gap when the list is empty' {
+            Mock Get-AntiPhishPolicy {
+                $p = New-TestAntiPhishPolicy -Name 'Office365 AntiPhish Default' -Compliant $true -Default $true
+                $p | Add-Member -NotePropertyName EnableTargetedDomainsProtection -NotePropertyValue $true
+                $p | Add-Member -NotePropertyName TargetedDomainsToProtect -NotePropertyValue @()
+                $p
+            }
+
+            $result = & $script:checkFile
+
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'covers no external domains'
+        }
+
+        It 'Does not throw when the domain list is null' {
+            Mock Get-AntiPhishPolicy {
+                $p = New-TestAntiPhishPolicy -Name 'Office365 AntiPhish Default' -Compliant $true -Default $true
+                $p | Add-Member -NotePropertyName EnableTargetedDomainsProtection -NotePropertyValue $true
+                $p | Add-Member -NotePropertyName TargetedDomainsToProtect -NotePropertyValue $null
+                $p
+            }
+
+            $result = & $script:checkFile
+
+            $result.Result | Should -Be 'Fail'
+            $result.Error | Should -BeNullOrEmpty
+            $result.Finding | Should -Match 'covers no external domains'
+        }
+    }
+
+    Context 'Targeted domain protection names external domains' {
+        It 'Does not report a gap' {
+            Mock Get-AntiPhishPolicy {
+                $p = New-TestAntiPhishPolicy -Name 'Office365 AntiPhish Default' -Compliant $true -Default $true
+                $p | Add-Member -NotePropertyName EnableTargetedDomainsProtection -NotePropertyValue $true
+                $p | Add-Member -NotePropertyName TargetedDomainsToProtect -NotePropertyValue @('supplier.example','partner.example')
+                $p
+            }
+
+            $result = & $script:checkFile
+
+            $result.Result | Should -Be 'Pass'
+            $result.Finding | Should -Not -Match 'covers no external domains'
+        }
+    }
+
+    Context 'The policy object does not expose the targeted domain properties' {
+        It 'Does not assess custom domain impersonation protection' {
+            Mock Get-AntiPhishPolicy {
+                New-TestAntiPhishPolicy -Name 'Office365 AntiPhish Default' -Compliant $true -Default $true
+            }
+
+            $result = & $script:checkFile
+
+            $result.Result | Should -Be 'Pass'
+            $result.Finding | Should -Not -Match 'covers no external domains'
+        }
+    }
+}

@@ -59,6 +59,16 @@ $evaluate = {
         $issues.Add('Domain impersonation detections receive NoAction')
     }
 
+    if ($Policy.PSObject.Properties['EnableTargetedDomainsProtection']) {
+        $protectedDomains = @(@($Policy.TargetedDomainsToProtect) | Where-Object { $_ })
+        if (-not $Policy.EnableTargetedDomainsProtection -or $protectedDomains.Count -eq 0) {
+            $issues.Add('Custom domain impersonation protection covers no external domains; supplier and partner domains abused for invoice redirection and payment diversion are not covered by owned-domain protection')
+        }
+        else {
+            Write-Verbose "Custom domain impersonation protection covers $($protectedDomains.Count) external domain(s)."
+        }
+    }
+
     if ($null -ne $Policy.PhishThresholdLevel -and [int]$Policy.PhishThresholdLevel -lt 3) {
         $issues.Add("Phishing email threshold is $($Policy.PhishThresholdLevel); the Standard baseline is 3")
     }

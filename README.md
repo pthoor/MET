@@ -542,6 +542,12 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
 | MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
 | MET-EXO017 | Quarantine Notification Cadence | Informational | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
+| MET-EXO018 | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
+| MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
+| MET-EXO020 | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
+| MET-EXO021 | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
+| MET-EXO022 | Calendar and Contact Sharing | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
+| MET-EXO023 | Unified Audit Log Ingestion | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
 
 ### Teams - Microsoft Teams Threat Protection
 
@@ -560,6 +566,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-Teams011 | SecOps Blocklist Authority | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
 | MET-Teams012 | Call Reporting | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
 | MET-Teams014 | Cross-Tenant Guest Access | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
+| MET-Teams015 | Teams Email Integration | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
 
 ---
 
@@ -643,6 +650,26 @@ $config.Run.Path = './Tests/Unit'
 $config.Output.Verbosity = 'Detailed'
 Invoke-Pester -Configuration $config
 ```
+
+The unit suite includes `Tests/Unit/Get-METReport.Html.Tests.ps1`, which asserts the
+generated HTML report is self-contained (no external script, stylesheet or CDN reference),
+escapes hostile text in both the rendered markup and the embedded JSON, never emits a live
+`href` for a `javascript:`/`data:` reference URL, and renders correctly for empty and
+single-result runs. No browser is needed for those.
+
+The interactive behaviour of the report - tab switching, live search, the severity/result
+filters, card expansion, and the accept-risk flow with its `localStorage` persistence - is
+covered by a separate browser-driven suite that is not part of the PowerShell run:
+
+```bash
+cd Tests/Html
+npm ci
+npx playwright test
+```
+
+It regenerates its fixtures by invoking `Get-METReport` from the working tree on every run,
+so it always tests the current generator rather than a checked-in HTML file. See
+`Tests/Html/README.md` for browser resolution and CI notes.
 
 ### Project structure
 

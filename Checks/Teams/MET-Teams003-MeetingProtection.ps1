@@ -44,6 +44,18 @@ try {
         $names = ($pstnLobbyBypassPolicies | Select-Object -ExpandProperty Identity) -join ', '
         $issues.Add("PSTN callers bypass the lobby in the following meeting policy/policies: $names - phone participants are automatically admitted, a meeting-invite-lure risk")
     }
+
+    $giveControlPolicies = @($meetingPolicies | Where-Object { $_.AllowExternalParticipantGiveRequestControl -eq $true })
+    if ($giveControlPolicies.Count -gt 0) {
+        $names = ($giveControlPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("External participants can request and be granted control of a shared screen in the following meeting policy/policies: $names - the screen-control handoff used in helpdesk-impersonation and remote-access social engineering")
+    }
+
+    $anonymousStartPolicies = @($meetingPolicies | Where-Object { $_.AllowAnonymousUsersToStartMeeting -eq $true })
+    if ($anonymousStartPolicies.Count -gt 0) {
+        $names = ($anonymousStartPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $issues.Add("Anonymous (unauthenticated) participants can start a meeting with no organiser present in the following meeting policy/policies: $names - this defeats lobby controls that assume an organiser is there to admit attendees")
+    }
 }
 catch {
     $issues.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")

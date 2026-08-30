@@ -20,12 +20,15 @@ For each effective policy it verifies:
 - `EnableTargetedUserProtection` with `TargetedUsersToProtect` - explicit impersonation protection for named users
 - `TargetedUserProtectionAction` - action taken when enabled targeted-user impersonation detection matches
 - `EnableOrganizationDomainsProtection` and `TargetedDomainProtectionAction` - protection for owned-domain impersonation
+- `EnableTargetedDomainsProtection` with `TargetedDomainsToProtect` - impersonation protection for explicitly named external domains (suppliers, partners, customers)
 - `MailboxIntelligenceProtectionAction` - action taken for mailbox-intelligence impersonation
 - `PhishThresholdLevel` - phishing threshold meets the Standard baseline of 3
 
 ## Why it matters
 
 Business email compromise (BEC) attacks rely on impersonation. These settings collectively create defence-in-depth: mailbox intelligence catches subtle behavioural impersonation, safety tips surface visual warnings, and targeted user protection explicitly protects named high-value accounts such as executives.
+
+Owned-domain protection only covers the tenant's own accepted domains. Invoice-redirection and payment-diversion fraud is normally run from a lookalike of a *supplier or partner* domain, which is covered only when that domain is named in `TargetedDomainsToProtect`. A tenant that protects its own domains but no external ones therefore has no impersonation protection over exactly the sender identities its finance function trusts.
 
 ## Pass / Fail / Warning
 
@@ -35,6 +38,12 @@ Business email compromise (BEC) attacks rely on impersonation. These settings co
 | Fail | One or more mailboxes receive an effective policy below baseline |
 | Warning | Mailbox, rule, policy, group, or precedence retrieval is incomplete |
 | NotApplicable | No assessable mailboxes were found |
+
+Custom domain impersonation protection is reported as a gap when
+`EnableTargetedDomainsProtection` is off or `TargetedDomainsToProtect` is empty.
+When the list is populated its size is written to the verbose stream as
+confirmation rather than reported as a finding. A policy object that does not
+expose the property at all is not assessed for it.
 
 `TargetedUserProtectionAction = NoAction` is only reported when targeted-user
 protection is enabled and has protected users. If targeted-user protection is

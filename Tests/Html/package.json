@@ -1,0 +1,14 @@
+{
+  "name": "met-html-report-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright browser tests for the MET HTML report produced by Get-METReport -Format HTML.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

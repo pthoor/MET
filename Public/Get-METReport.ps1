@@ -1,4 +1,23 @@
-﻿function Get-METReport {
+﻿function Get-METModuleVersion {
+    [CmdletBinding()]
+    param()
+
+    $loaded = (Get-Module MET -ErrorAction SilentlyContinue)?.Version?.ToString()
+    if (-not [string]::IsNullOrWhiteSpace($loaded)) { return $loaded }
+
+    try {
+        $manifestPath = Join-Path $PSScriptRoot '..' 'MET.psd1'
+        $manifest = Import-PowerShellDataFile -Path $manifestPath -ErrorAction Stop
+        if (-not [string]::IsNullOrWhiteSpace($manifest.ModuleVersion)) { return [string]$manifest.ModuleVersion }
+    }
+    catch {
+        Write-Verbose "Could not resolve module version from the manifest: $($_.Exception.Message)"
+    }
+
+    return 'unknown'
+}
+
+function Get-METReport {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -252,7 +271,7 @@
 
         # ── JSON ─────────────────────────────────────────────────────────────
         if ($Format -in 'JSON','All') {
-            $METVersion = (Get-Module MET -ErrorAction SilentlyContinue)?.Version.ToString() ?? '0.2.0'
+            $METVersion = Get-METModuleVersion
 
             $jsonObj = [ordered]@{
                 tenant         = $effectiveTenantName
@@ -269,7 +288,7 @@
                 postureScore   = $overallScore
                 categoryScores = $categoryScores
                 summary        = $summary
-                checks         = $allResults | ForEach-Object {
+                checks         = @($allResults | ForEach-Object {
                     [ordered]@{
                         checkId        = $_.CheckId
                         category       = $_.Category
@@ -285,7 +304,7 @@
                         error          = $_.Error
                         metadata       = $_.Metadata
                     }
-                }
+                })
             }
 
             $json = $jsonObj | ConvertTo-Json -Depth 10
@@ -306,12 +325,12 @@
 
         # ── HTML ─────────────────────────────────────────────────────────────
         if ($Format -in 'HTML','All') {
-            $METVersion  = (Get-Module MET -ErrorAction SilentlyContinue)?.Version.ToString() ?? '0.2.0'
+            $METVersion  = Get-METModuleVersion
             $runTimestamp = $runTimestampUtc.ToString('yyyy-MM-dd HH:mm') + ' UTC'
             $tenantId     = if ($effectiveTenantName) { $effectiveTenantName } else { 'unknown' }
             $tenantIdJson = $tenantId | ConvertTo-Json -Compress
 
-            $checksJson = ($allResults | ForEach-Object {
+            $checksData = @($allResults | ForEach-Object {
                 [ordered]@{
                     checkId        = $_.CheckId
                     category       = $_.Category
@@ -327,7 +346,13 @@
                     error          = $_.Error
                     metadata       = $_.Metadata
                 }
-            }) | ConvertTo-Json -Depth 5 -Compress
+            })
+
+            $checksJson = if ($checksData.Count -eq 0) {
+                '[]'
+            } else {
+                $checksData | ConvertTo-Json -Depth 5 -Compress -AsArray
+            }
 
             # Escape every '<' so embedded JSON cannot break out of the <script> block.
             # A blacklist for the literal '</script>' string is insufficient: HTML also
@@ -748,6 +773,12 @@ const CONTROLS_META = {
   'MET-EXO015': 'The native Outlook "External" sender banner (Get-ExternalInOutlook) - a user-facing signal against lookalike-domain/BEC senders.',
   'MET-EXO016': 'ARC trusted sealer domains (Get-ArcConfig) - informational listing of domains trusted to vouch for authentication results.',
   'MET-EXO017': 'EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy - informational cadence listing.',
+  'MET-EXO018': 'Remote domain AutoForwardEnabled - whether automatic forwarding to external domains is permitted, the control plane behind inbox-rule exfiltration.',
+  'MET-EXO019': 'Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides - legacy SMTP AUTH is a basic-auth endpoint exempt from most conditional access.',
+  'MET-EXO020': 'Connection filter IPAllowList and EnableSafeList - allow-listed sources skip spam filtering and spoof intelligence entirely.',
+  'MET-EXO021': 'Organization-wide AuditDisabled - whether mailbox audit records exist to reconstruct what a compromised account accessed.',
+  'MET-EXO022': 'Sharing policies exposing calendar detail or contacts to all domains or anonymously - reconnaissance surface for internal-impersonation phishing.',
+  'MET-EXO023': 'UnifiedAuditLogIngestionEnabled - the tenant-wide record investigations are reconstructed from; retention is not asserted by this check.',
   'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
   'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
   'MET-Teams003': 'External access settings, anonymous join policy, and lobby bypass settings reviewed for security posture.',
@@ -760,7 +791,8 @@ const CONTROLS_META = {
   'MET-Teams010': 'Per-user CsExternalAccessPolicy instances re-opening federation/public-cloud access for specific users under a restrictive tenant baseline.',
   'MET-Teams011': 'SecurityTeamAllowBlockListDelegation and currently-blocked entities - whether SecOps can block malicious domains/users mid-incident.',
   'MET-Teams012': 'ReportCall on Teams calling policies - closest native control to helpdesk-vishing attacks over a Teams call.',
-  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.'
+  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.',
+  'MET-Teams015': 'AllowEmailIntoChannel on the Teams client configuration - channel email addresses accept external mail that bypasses the mailbox delivery path.'
 };
 
 const CONTROLS_CATEGORIES = [
