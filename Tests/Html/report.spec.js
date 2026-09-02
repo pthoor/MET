@@ -193,6 +193,26 @@ test.describe('card expansion', () => {
     await page.locator('#btn-collapse-all').click();
     await expect(page.locator('#cards-container .card .card-body.open')).toHaveCount(0);
   });
+
+  test('an accepted check that still carries an Error keeps the ERROR badge, not ACCEPTED', async ({ page }) => {
+    // Invoke-METTriage synthesizes a Fail+Error result for a check that crashed, so a crashed
+    // check CAN be risk-accepted through the normal Fail flow like any other finding - at which
+    // point it must not silently lose its ERROR badge and go back to looking like a resolved risk.
+    // Simulated here via localStorage (the mechanism Accept Risk itself writes to) since the
+    // fixture's only Error case, MET-Teams014, is NotApplicable and has no Accept Risk button.
+    await page.evaluate(() => {
+      localStorage.setItem('MET_accepted_contoso.onmicrosoft.com_MET-Teams014', 'Pre-existing acceptance');
+    });
+    await page.reload();
+    await page.locator('.tab[data-tab="Accepted"]').click();
+
+    const card = page.locator('.card[data-check-id="MET-Teams014"]');
+    await expect(card).toBeVisible();
+    await expect(card.locator('.result-badge')).toHaveText('ERROR');
+    await expect(card.locator('.result-badge')).toHaveClass(/rb-error/);
+    await card.locator('.card-header').click();
+    await expect(card.locator('.btn-undo')).toBeVisible();
+  });
 });
 
 test.describe('accept risk', () => {

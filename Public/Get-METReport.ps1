@@ -1071,9 +1071,12 @@ function createCard(check) {
   const isPass     = check.result === 'Pass';
   // A check can carry both a Result (e.g. NotApplicable) and a populated Error field when it
   // couldn't run - the badge must say ERROR so the card is findable, even though card.dataset.result
-  // (used by the result-filter dropdown and tab scoping below) stays the real Result value.
-  const resultDisplay = accepted ? 'Accepted' : (hasError ? 'Error' : check.result);
-  const rbClass    = 'rb-' + (accepted ? 'accepted' : (hasError ? 'error' : check.result.toLowerCase()));
+  // (used by the result-filter dropdown and tab scoping below) stays the real Result value. hasError
+  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METTriage's per-check catch)
+  // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
+  // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
+  const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);
+  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : check.result.toLowerCase()));
   const startOpen  = false;
 
   const card = document.createElement('div');
@@ -1277,8 +1280,9 @@ function renderControlsRef() {
     checks.forEach(function(c) {
       const accepted = isAccepted(c.checkId);
       const hasError = !!c.error;
-      const resultDisplay = accepted ? 'Accepted' : (hasError ? 'Error' : c.result);
-      const rbClass = 'rb-' + (accepted ? 'accepted' : (hasError ? 'error' : c.result.toLowerCase()));
+      // hasError wins over accepted - see the matching note in createCard().
+      const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
+      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : c.result.toLowerCase()));
       const desc = CONTROLS_META[c.checkId] || c.name;
       html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
