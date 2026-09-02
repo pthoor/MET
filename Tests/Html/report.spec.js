@@ -127,6 +127,16 @@ test.describe('search and filters', () => {
     expect((await visibleCardIds(page)).sort()).toEqual(['MET-EXO012', 'MET-MDO009', 'MET-Teams006']);
   });
 
+  test('the Error filter isolates checks that failed to run, excluding them from their own Result option', async ({ page }) => {
+    await page.locator('#result-filter').selectOption('Error');
+    expect(await visibleCardIds(page)).toEqual(['MET-Teams014']);
+
+    // MET-Teams014's underlying Result is NotApplicable, but it errored - it must not
+    // double up under the NotApplicable option too (Error is a mutually exclusive bucket).
+    await page.locator('#result-filter').selectOption('NotApplicable');
+    expect(await visibleCardIds(page)).toEqual([]);
+  });
+
   test('severity, result and search combine with AND logic', async ({ page }) => {
     await page.locator('#sev-filter').selectOption('High');
     await page.locator('#result-filter').selectOption('Fail');

@@ -317,7 +317,7 @@ Tab counts update in real-time as filters are applied.
 
 - Free-text search box - filters cards live on `CheckId`, `Name`, `AffectedObject`, `Finding` (case-insensitive, no submit button)
 - Severity filter dropdown: All / Critical / High / Medium / Low / Informational
-- Result filter dropdown: All / Fail / Warning / Pass / NotApplicable
+- Result filter dropdown: All / Fail / Warning / Pass / NotApplicable / Info / Error - Error is its own bucket (a check whose `Error` field is populated), mutually exclusive with the Result-based options even though the check still carries a Result value underneath
 - Filters and search combine (AND logic)
 - Result count shown: "Showing 7 of 27 checks"
 

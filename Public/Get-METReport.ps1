@@ -699,7 +699,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     </select>
     <select class="filter-select" id="result-filter">
       <option value="">All Results</option>
-      <option>Fail</option><option>Warning</option><option>Pass</option><option>NotApplicable</option><option>Info</option>
+      <option>Fail</option><option>Warning</option><option>Pass</option><option>NotApplicable</option><option>Info</option><option>Error</option>
     </select>
     <span class="result-count" id="result-count"></span>
     <button class="btn-collapse" id="btn-collapse-all" title="Collapse or expand all visible cards">Collapse All</button>
@@ -1361,6 +1361,7 @@ function applyFilters() {
   allCards.forEach(function(card) {
     const cat      = card.dataset.category;
     const result   = card.dataset.result;
+    const isErr    = card.dataset.error === '1';
     const sev      = card.dataset.sev;
     const sText    = card.dataset.search || '';
     const isAcc    = card.dataset.accepted === '1';
@@ -1379,7 +1380,9 @@ function applyFilters() {
 
     let show = inScope;
     if (show && sevFilter) show = sev === sevFilter;
-    if (show && resFilter) show = result === resFilter;
+    // Error is its own bucket, mutually exclusive with every Result-based option, matching the
+    // ERROR badge on the card itself and the summary/donut counts above.
+    if (show && resFilter) show = resFilter === 'Error' ? isErr : (result === resFilter && !isErr);
     if (show && search)    show = sText.includes(search);
 
     card.style.display = show ? '' : 'none';
@@ -1434,7 +1437,7 @@ document.getElementById('btn-collapse-all').addEventListener('click', function()
     if (header) header.setAttribute('aria-expanded', allExpanded);
     if (allExpanded) {
       const isFailWarn = ['Fail','Warning'].includes(card.dataset.result);
-      if (isFailWarn && !card.dataset.fixOpened) {
+      if ((isFailWarn || card.dataset.error === '1') && !card.dataset.fixOpened) {
         card.dataset.fixOpened = '1';
         const fixContent = card.querySelector('.fix-content');
         const fixChev    = card.querySelector('.fix-chevron');
