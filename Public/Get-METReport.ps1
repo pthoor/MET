@@ -538,6 +538,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .card[data-sev="Medium"]{border-left-color:var(--sev-medium)}
 .card[data-sev="Low"]{border-left-color:var(--sev-low)}
 .card[data-sev="Informational"]{border-left-color:var(--sev-info)}
+.card[data-error="1"]{border-left-color:var(--sev-critical)}
 .card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
 .card-header:hover{background:var(--surface2)}
 .card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
@@ -555,6 +556,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .rb-warning{background:var(--result-warn)}
 .rb-notapplicable,.rb-info{background:var(--result-na)}
 .rb-accepted{background:var(--result-accepted)}
+.rb-error{background:var(--sev-critical)}
 .card-chevron{font-size:11px;color:var(--text3);flex-shrink:0;transition:transform .2s}
 .card-chevron.open{transform:rotate(180deg)}
 .card-body{display:none;border-top:1px solid var(--border);padding:12px 14px;flex-direction:column;gap:10px}
@@ -1063,11 +1065,18 @@ function buildRecommendation(rec) {
 // ── Render a single card ─────────────────────────────────────────
 function createCard(check) {
   const accepted   = isAccepted(check.checkId);
+  const hasError   = !!check.error;
   const isFailWarn = ['Fail','Warning'].includes(check.result);
-  const showFix    = isFailWarn || !!check.error;
+  const showFix    = isFailWarn || hasError;
   const isPass     = check.result === 'Pass';
-  const resultDisplay = accepted ? 'Accepted' : check.result;
-  const rbClass    = 'rb-' + (accepted ? 'accepted' : check.result.toLowerCase());
+  // A check can carry both a Result (e.g. NotApplicable) and a populated Error field when it
+  // couldn't run - the badge must say ERROR so the card is findable, even though card.dataset.result
+  // (used by the result-filter dropdown and tab scoping below) stays the real Result value. hasError
+  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METTriage's per-check catch)
+  // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
+  // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
+  const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);
+  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : check.result.toLowerCase()));
   const startOpen  = false;
 
   const card = document.createElement('div');
@@ -1077,6 +1086,7 @@ function createCard(check) {
   card.dataset.result   = check.result;
   card.dataset.sev      = sevOf(check.severity);
   card.dataset.accepted = accepted ? '1' : '0';
+  card.dataset.error    = hasError ? '1' : '0';
   card.dataset.search   = [check.checkId, check.name, check.affectedObject, check.finding].join(' ').toLowerCase();
 
   const bodyOpen = startOpen ? ' open' : '';
@@ -1133,7 +1143,7 @@ function createCard(check) {
     const isOpen  = body.classList.toggle('open');
     chevron.classList.toggle('open', isOpen);
     this.setAttribute('aria-expanded', isOpen);
-    if (isOpen && isFailWarn && !card.dataset.fixOpened) {
+    if (isOpen && showFix && !card.dataset.fixOpened) {
       card.dataset.fixOpened = '1';
       const fixContent = card.querySelector('.fix-content');
       const fixChev    = card.querySelector('.fix-chevron');
@@ -1269,8 +1279,10 @@ function renderControlsRef() {
     html += '<table class="ctrl-table"><thead><tr><th>ID</th><th>Name</th><th>Severity</th><th>What It Checks</th><th>Result</th><th>Docs</th></tr></thead><tbody>';
     checks.forEach(function(c) {
       const accepted = isAccepted(c.checkId);
-      const resultDisplay = accepted ? 'Accepted' : c.result;
-      const rbClass = 'rb-' + (accepted ? 'accepted' : c.result.toLowerCase());
+      const hasError = !!c.error;
+      // hasError wins over accepted - see the matching note in createCard().
+      const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
+      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : c.result.toLowerCase()));
       const desc = CONTROLS_META[c.checkId] || c.name;
       html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
