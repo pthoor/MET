@@ -15,6 +15,7 @@
     function Get-SafeLinksPolicy               { [CmdletBinding()] param() }
     function Get-SafeLinksRule                 { [CmdletBinding()] param() }
     function Get-ATPProtectionPolicyRule       { [CmdletBinding()] param() }
+    function Get-EOPProtectionPolicyRule       { [CmdletBinding()] param() }
     function Get-EXOMailbox                    { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
     function Get-SafeAttachmentPolicy          { [CmdletBinding()] param() }
     function Get-SafeAttachmentRule            { [CmdletBinding()] param() }
@@ -32,6 +33,7 @@ Describe 'MET-MDO001 Safe Links' {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO001-SafeLinks.ps1'
         Mock Get-EXOMailbox { [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com' } }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
 
     Context 'When all Safe Links settings are correctly configured' {
@@ -171,6 +173,7 @@ Describe 'MET-MDO009 ZAP' {
         $script:METContext = $null
         Mock Get-EXOMailbox { [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' } }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
 
     Context 'ZAP fully enabled' {

@@ -1,3 +1,5 @@
+$ruleRetrievalError = $null
+
 try {
     $teamsPolicy = Get-TeamsProtectionPolicy -ErrorAction Stop
 }
@@ -79,7 +81,10 @@ try {
     }
 }
 catch {
+    # The exception data is what narrows effective ZAP coverage. Losing it silently and
+    # then reporting Pass would claim coverage that was never verified.
     Write-Verbose "Could not retrieve Teams protection policy rules - skipping rule exception check: $_"
+    $ruleRetrievalError = $_.ToString()
 }
 
 if ($issues.Count -gt 0) {
@@ -95,6 +100,13 @@ elseif ($warningIssues.Count -gt 0) {
         -Finding ($warningIssues -join '; ') `
         -Recommendation 'Review Teams protection policy rule exceptions (ExceptIfSentTo, ExceptIfSentToMemberOf, ExceptIfRecipientDomainIs) and remove any that are not intentional - excluded recipients do not benefit from ZAP for Teams.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-zap'
+}
+elseif ($ruleRetrievalError) {
+    New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
+        -Result Warning -Severity High -AffectedObject 'Teams Protection Policy' `
+        -Finding 'ZAP for Teams is enabled and quarantine policies do not allow user self-release, but the Teams protection policy rules could not be read, so any recipient exceptions narrowing ZAP coverage are unverified.' `
+        -Recommendation 'Rerun with a connected MicrosoftTeams session and Security Reader permissions, or review Get-TeamsProtectionPolicyRule exceptions manually.' `
+        -ReferenceUrl 'https://aka.ms/mdo-teams-zap' -ErrorMessage $ruleRetrievalError
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `

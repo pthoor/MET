@@ -464,9 +464,11 @@ Describe 'MET-Teams004 ZAP for Teams' {
             }
             Mock Get-TeamsProtectionPolicyRule { throw 'Teams protection policy rule retrieval unavailable' }
         }
-        It 'Does not fail purely because rules could not be retrieved' {
+        It 'Returns Warning, not Pass, because rule exceptions narrowing ZAP coverage went unverified' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'unverified'
+            $results[0].Error   | Should -Not -BeNullOrEmpty
         }
     }
 

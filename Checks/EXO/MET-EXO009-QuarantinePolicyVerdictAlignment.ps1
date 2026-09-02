@@ -102,6 +102,7 @@ try {
 }
 catch {
     Write-Verbose "MET-EXO009: Get-SafeAttachmentPolicy unavailable - may not be MDO licensed"
+    $null = $retrievalErrors.Add("Unable to retrieve Safe Attachments policies. $($_.ToString())")
 }
 
 if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {
@@ -135,6 +136,17 @@ if ($fails.Count -gt 0) {
         -Finding ($fails -join '; ') `
         -Recommendation 'For Malware and High-Confidence Phish verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
         -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
+}
+elseif ($retrievalErrors.Count -gt 0) {
+    # A partial retrieval failure must not score as a clean Pass. Some policy families
+    # were enumerated and some were not, so the verdicts carried by the missing ones
+    # went unassessed - the exact exposure this check exists to find.
+    New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
+        -Result Warning -Severity High -AffectedObject 'Quarantine Tag Assignments' `
+        -Finding "No self-release exposure was found in the filter policies that could be read, but one or more policy types could not be retrieved, so verdict alignment is only partially verified: $($retrievalErrors -join '; ')" `
+        -Recommendation 'Ensure the account has Security Reader or higher permissions across all filter policy types, then rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `

@@ -3,8 +3,13 @@
 # Check Teams external access settings via EXO/Graph
 try {
     $tenantConfig = Get-CsTenantFederationConfiguration -ErrorAction Stop
+    # Federation being disabled is the hardened end state - MET-Teams006 recommends
+    # Set-CsTenantFederationConfiguration -AllowFederatedUsers $false as its remediation.
+    # Adding it to $issues made the two checks penalise each other's recommended
+    # configuration, and turned the most locked-down tenant into a Warning. Usability
+    # commentary does not belong in the issue list of a posture check.
     if ($tenantConfig.AllowFederatedUsers -eq $false) {
-        $issues.Add('External access (federation) is fully disabled - may impact legitimate collaboration')
+        Write-Verbose 'MET-Teams003: Teams federation is fully disabled (hardened; see MET-Teams006).'
     }
     if ($tenantConfig.AllowPublicUsers -eq $true) {
         $issues.Add('Access from Skype consumer users is allowed - consider disabling if not needed')

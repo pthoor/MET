@@ -57,10 +57,18 @@ Describe 'MET-EXO002 DKIM' {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO002-DKIM.ps1'
     }
 
+    # Get-DkimSigningConfig reports key size per selector (Selector1KeySize /
+    # Selector2KeySize) and never as a flat KeySize property - KeySize exists only as an
+    # input parameter on New-/Rotate-DkimSigningConfig. These mocks previously invented a
+    # flat KeySize, so the key-length assertion passed in CI against a branch that could
+    # never fire against a real tenant.
     Context 'DKIM enabled with 2048-bit key and Valid status' {
         BeforeAll {
             Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 2048; Status = 'Valid' }
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'
+                    Selector1KeySize = 2048; Selector2KeySize = 2048
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
             }
         }
         It 'Returns Pass' {
@@ -72,7 +80,10 @@ Describe 'MET-EXO002 DKIM' {
     Context 'DKIM is disabled' {
         BeforeAll {
             Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $false; KeySize = 2048; Status = 'Valid' }
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $false; Status = 'Valid'
+                    Selector1KeySize = 2048; Selector2KeySize = 2048
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
             }
         }
         It 'Returns Fail' {
@@ -81,10 +92,13 @@ Describe 'MET-EXO002 DKIM' {
         }
     }
 
-    Context 'DKIM key is 1024-bit' {
+    Context 'The active selector still holds a 1024-bit key' {
         BeforeAll {
             Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 1024; Status = 'Valid' }
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'
+                    Selector1KeySize = 1024; Selector2KeySize = 1024
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
             }
         }
         It 'Returns Fail and mentions key size' {
@@ -94,16 +108,63 @@ Describe 'MET-EXO002 DKIM' {
         }
     }
 
+    Context 'A domain mid key-rotation has a 2048-bit active selector and a 1024-bit inactive one' {
+        BeforeAll {
+            Mock Get-DkimSigningConfig {
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'
+                    Selector1KeySize = 1024; Selector2KeySize = 2048
+                    SelectorBeforeRotateOnDate = 'selector2'; SelectorAfterRotateOnDate = 'selector1'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
+            }
+        }
+        It 'Passes on the active selector and notes the pending one rather than failing a correct rotation' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Match '2048-bit key on the active selector'
+            $results[0].Finding | Should -Match 'selector1 is 1024-bit'
+        }
+    }
+
+    Context 'Neither selector reports a key size' {
+        BeforeAll {
+            Mock Get-DkimSigningConfig {
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2' }
+            }
+        }
+        It 'Returns Warning rather than Pass, because the key length went unverified' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'could not be verified'
+        }
+    }
+
     Context 'DKIM status is not Valid' {
         BeforeAll {
             Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 2048; Status = 'CnameMissing' }
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'CnameMissing'
+                    Selector1KeySize = 2048; Selector2KeySize = 2048
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
             }
         }
-        It 'Returns Fail and mentions status' {
+        It 'Returns Fail and names the CNAME problem' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
-            $results[0].Finding | Should -Match 'CnameMissing'
+            $results[0].Finding | Should -Match 'CNAME records are not published'
+        }
+    }
+
+    Context 'DKIM has no keypair generated' {
+        BeforeAll {
+            Mock Get-DkimSigningConfig {
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $false; Status = 'NoDKIMKeys' }
+            }
+        }
+        It 'Reports the missing keypair rather than a CNAME problem' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'No DKIM keypair'
         }
     }
 

@@ -14,7 +14,7 @@ if ($allMailboxes.Count -eq 0) {
 $errors = [System.Collections.Generic.List[string]]::new()
 try { $rules = @(Get-HostedContentFilterRule -ErrorAction Stop) } catch { $rules=@(); $errors.Add("Unable to retrieve inbound anti-spam rules. $($_.ToString())") }
 try { $policies = @(Get-HostedContentFilterPolicy -ErrorAction Stop) } catch { $policies=@(); $errors.Add("Unable to retrieve inbound anti-spam policies. $($_.ToString())") }
-try { $presets = @(Get-ATPProtectionPolicyRule -ErrorAction Stop) } catch { $presets=@(); $errors.Add("Unable to retrieve preset policy rules. $($_.ToString())") }
+try { $presets = @(Get-EOPProtectionPolicyRule -ErrorAction Stop) } catch { $presets=@(); $errors.Add("Unable to retrieve preset policy rules. $($_.ToString())") }
 $groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
 $resolution = Resolve-METEffectivePolicy -Subjects $allMailboxes -GroupCache $groupCache -Rules $rules -Policies $policies -PresetRules $presets -IncludePresets -PolicyLinkProperty HostedContentFilterPolicy -ProtectionType 'inbound anti-spam' -RetrievalErrors $errors
 $evaluate = {

@@ -16,6 +16,7 @@ BeforeAll {
     function Get-HostedOutboundSpamFilterRule { [CmdletBinding()] param() }
     function Get-HostedOutboundSpamFilterPolicy { [CmdletBinding()] param() }
     function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
+    function Get-EOPProtectionPolicyRule { [CmdletBinding()] param() }
     function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
     function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
 
@@ -39,6 +40,7 @@ Describe 'MET-MDO005 anti-malware effective coverage' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'}; [PSCustomObject]@{PrimarySmtpAddress='b@other.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
     It 'does not require legacy admin notifications and ignores a shadowed weak policy' {
         $strong=New-Rule strong strong 0
@@ -70,6 +72,7 @@ Describe 'MET-MDO006 inbound anti-spam effective coverage' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@sub.contoso.com';RecipientTypeDetails='UserMailbox'}; [PSCustomObject]@{PrimarySmtpAddress='b@other.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
     It 'applies domain and catch-all policies by priority and reports only affected recipients' {
         $domain=New-Rule domain domain 0 @('contoso.com'); $domain | Add-Member HostedContentFilterPolicy domain
@@ -118,6 +121,7 @@ Describe 'MET-MDO005 common attachment filter file types' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
         Mock Get-MalwareFilterRule { @() }
     }
 
