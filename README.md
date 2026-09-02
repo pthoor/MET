@@ -252,6 +252,19 @@ This is expected on some machines and is safe to ignore - it is not specific to 
 
 `Connect-METSession` already treats this as non-fatal by design: Exchange Online and Teams connect normally, and `Expand-METGroupMembership` falls back to `Get-DistributionGroupMember`/`Get-UnifiedGroupLinks` for group expansion instead of Graph. The only effect is slightly reduced accuracy resolving nested/dynamic group membership, and `MET-Teams014` reporting `NotApplicable` instead of running. If you need Graph checks to actually run, the only reliable workaround is connecting Graph in its own PowerShell process rather than alongside Exchange Online.
 
+**The other direction - Exchange Online itself fails to connect - is a hard error, not a warning:**
+
+```
+Failed to connect to Exchange Online: An older version of Microsoft.Identity.Client (4.82.1.0, loaded from
+'.../Microsoft.Graph.Authentication/2.39.0/Dependencies/Core/Microsoft.Identity.Client.dll') is already active
+in this PowerShell session and cannot be reconciled with the newer version required here (4.83.1.0).
+```
+
+This happens because `Connect-METSession` connects Graph *first* - if Graph's own connection succeeds, its bundled MSAL build is now loaded for the rest of the process, and Exchange Online's newer required build can no longer load alongside it. .NET cannot unload or replace an assembly once loaded, so:
+
+- **Restart PowerShell** before retrying - a fresh process is the only way to clear the already-loaded assembly; changing flags in the same session will not undo it.
+- Then run `Connect-METSession -SkipGraph` so Graph's MSAL build is never loaded in the first place. This is the practical fix for a tenant with the version combination above (`ExchangeOnlineManagement 3.10.x` + `Microsoft.Graph.Authentication 2.39.0`), since no published version triple currently avoids the conflict - see ROADMAP.md "Under Investigation" for the full version matrix.
+
 #### Teams sign-in on Linux/macOS
 
 MicrosoftTeams **7.9.0** (July 2026) made Web Account Manager (WAM) the default authentication broker for `Connect-MicrosoftTeams`. WAM is Windows-only - it calls into `kernel32.dll` - so on Linux and macOS the default interactive sign-in fails before any network request:

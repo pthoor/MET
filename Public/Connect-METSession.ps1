@@ -112,16 +112,155 @@ function Connect-METSession {
 
     $servicesConnected = [System.Collections.Generic.List[string]]::new()
 
-    # Exchange Online must connect first. Each module carries its own
-    # Microsoft.Identity.Client (MSAL) build, only one of which can occupy the
-    # default AssemblyLoadContext. ExchangeOnlineManagement ships the newest
-    # (4.83.1 vs Graph's 4.82.1), and .NET resolves a lower version request
-    # against a higher loaded one but never the reverse. Connecting Graph first
-    # pins the older MSAL and Exchange then fails with 0x80131040. This only
-    # protects against a conflict this function causes itself - if the caller's
-    # session already loaded a conflicting MSAL build before ever calling
-    # Connect-METSession (e.g. a prior Import-Module MicrosoftTeams/Graph/Az),
-    # the check below surfaces that instead of the raw MSAL load failure.
+    # Microsoft Graph must connect first, and Exchange Online is forced to -DisableWAM when
+    # it does (below). This reverses the EXO-first order used before v0.11.0; revert once
+    # Microsoft ships a fix upstream - see ROADMAP.md "Under Investigation" for status.
+    #
+    # Root cause, confirmed by a controlled 4-combination test using the same EXO 3.10.1 /
+    # Graph 2.39.0 versions this module targets (microsoftgraph/msgraph-sdk-powershell#3576):
+    # Microsoft.Graph.Authentication does not load its own bundled Microsoft.Identity.Client
+    # (MSAL) core when a different version is already resident in-process - it silently binds
+    # to whatever is there instead. ExchangeOnlineManagement loads its own copy regardless of
+    # what is resident. So whichever module connects SECOND determines the failure mode:
+    #   - Graph second: binds to EXO's already-loaded MSAL build and throws
+    #     MissingMethodException on an API surface it was not compiled against (in every
+    #     auth mode tested - interactive and device code both fail identically).
+    #   - EXO second: loads its own MSAL copy fine alongside Graph's, UNLESS both modules'
+    #     interactive flows also instantiate the Windows broker (WAM) - then the two broker
+    #     instances collide over a shared native interop layer with a NullReferenceException
+    #     in RuntimeBroker..ctor.
+    # Connecting Graph first avoids the MissingMethodException entirely. Forcing -DisableWAM
+    # on the EXO leg (below) avoids the broker collision - independently confirmed by a
+    # community report on the same issue tracker using EXO 3.10/Graph 2.38
+    # (microsoftgraph/msgraph-sdk-powershell#3394#issuecomment-4787492595): "Running
+    # Connect-ExchangeOnline -DisableWAM allows Exchange to connect after a Graph connection
+    # is established." Not yet validated by this project against a live tenant - treat as
+    # experimental until confirmed.
+    if (-not $SkipGraph) {
+        $graphModuleMissing = @(
+            'Microsoft.Graph.Identity.SignIns'
+            'Microsoft.Graph.Groups'
+        ) | Where-Object { -not (Get-Module -ListAvailable -Name $_ | Where-Object { $_.Version -ge [version]'2.0.0' }) }
+
+        if ($graphModuleMissing) {
+            Write-Warning "Optional Graph module(s) not installed: $($graphModuleMissing -join ', '). Group-membership expansion will fall back to Exchange Online cmdlets. Install with: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
+        }
+        else {
+            $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
+
+            if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
+                $graphParams['UseDeviceCode'] = $true
+            }
+
+            if ($DelegatedOrganization -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
+                # Connect-MgGraph's UserParameterSet accepts -TenantId for exactly this
+                # (CSP/GDAP delegated-admin) scenario - previously this was silently ignored
+                # for Graph, so a delegated-org run could authenticate against the operator's
+                # own home tenant instead of the customer's.
+                $graphParams['TenantId'] = $DelegatedOrganization
+            }
+
+            # Certificate loading happens before the try/catch below so it must be guarded
+            # separately - otherwise a bad -CertificatePath/-CertificatePassword throws
+            # uncaught and aborts the whole Connect-METSession call (including the Exchange
+            # Online and Teams legs, which run after this one), contradicting the "a failed
+            # Graph connection is non-fatal" design every other failure path here follows.
+            $graphCertLoadError = $null
+            switch ($PSCmdlet.ParameterSetName) {
+                'ServicePrincipal' {
+                    $graphParams = @{
+                        ClientId  = $AppId
+                        TenantId  = $TenantId
+                        NoWelcome = $true
+                    }
+                    if ($CertificatePath) {
+                        try {
+                            $graphParams['Certificate'] = Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
+                        }
+                        catch {
+                            $graphCertLoadError = $_.Exception.Message
+                        }
+                    }
+                    else {
+                        $graphParams['CertificateThumbprint'] = $CertificateThumbprint
+                    }
+                }
+                'ManagedIdentity' {
+                    $graphParams = @{ Identity = $true; NoWelcome = $true }
+                }
+            }
+
+            $mgContext = Get-MgContext -ErrorAction SilentlyContinue
+
+            # Deliberately outside the try/catch below: a tenant mismatch must hard-stop, not
+            # get silently downgraded to the same Write-Warning-and-continue path used for an
+            # ordinary connection failure - that path exists so Graph's optional/degrading
+            # design doesn't abort the whole session, but a wrong-tenant reuse is a correctness
+            # bug, not an availability one, and should never be swallowed into a warning.
+            # Checked whenever $requestedOrg is known (ServicePrincipal, or Interactive with
+            # -DelegatedOrganization) rather than only for ServicePrincipal - a stale Graph
+            # session left over from a botched Disconnect-METSession is just as much a
+            # cross-customer leak risk in the Interactive+DelegatedOrganization/MSSP case.
+            # Get-MgContext always returns a GUID (even when the caller passed a domain name),
+            # so $requestedOrg is resolved to a GUID via Resolve-METTenantGuid before comparing
+            # - a raw string compare against a domain name would mismatch on every call.
+            if ($mgContext -and $requestedOrg) {
+                $expectedTenantGuid = Resolve-METTenantGuid -TenantId $requestedOrg
+                if (-not $expectedTenantGuid) {
+                    # Fail closed: an unresolvable tenant GUID (e.g. a transient OIDC discovery
+                    # outage) must not be treated as "no mismatch" - that would silently let a
+                    # stale Graph session from a different customer be reused unverified, exactly
+                    # the cross-customer leak this check exists to close.
+                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
+                }
+                if ($mgContext.TenantId -ne $expectedTenantGuid) {
+                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
+                }
+            }
+
+            if ($graphCertLoadError) {
+                Write-Warning "Failed to connect to Microsoft Graph: $graphCertLoadError Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references)."
+            }
+            else {
+                try {
+                    if (-not $mgContext) {
+                        # A different MSAL version already loaded in-process (e.g. a manual
+                        # Connect-ExchangeOnline/Import-Module already run before this call, in
+                        # this same session) cannot be reconciled by .NET at runtime. Detect it
+                        # up front so the warning names the real cause instead of surfacing
+                        # MSAL's opaque MissingMethodException/manifest-mismatch failure. Graph
+                        # connecting here as the first leg of this same call does not trigger
+                        # this - see the comment at the top of this function.
+                        $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+                            Sort-Object Version -Descending | Select-Object -First 1
+                        $requiredMsalVersion = $null
+                        if ($graphAuthModule.ModuleBase) {
+                            $graphMsalPath = Join-Path $graphAuthModule.ModuleBase 'Dependencies' 'Core' 'Microsoft.Identity.Client.dll'
+                            $requiredMsalVersion = Get-METAssemblyFileVersion -Path $graphMsalPath
+                        }
+                        if ($requiredMsalVersion) {
+                            $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
+                            if ($conflict) {
+                                throw $conflict
+                            }
+                        }
+
+                        Write-Verbose 'Connecting to Microsoft Graph...'
+                        Connect-MgGraph @graphParams -ErrorAction Stop
+                        $servicesConnected.Add('Graph')
+                    }
+                    else {
+                        $servicesConnected.Add('Graph')
+                        Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
+                    }
+                }
+                catch {
+                    Write-Warning "Failed to connect to Microsoft Graph: $($_.Exception.Message) Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references). Retry with: Connect-METSession -CertificatePath <path> -CertificatePassword <securestring> for unattended use, or -DisableWAM for interactive use."
+                }
+            }
+        }
+    }
+
     if (-not $SkipExchangeOnline) {
         $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
             Where-Object { $_.Version -ge [version]'3.0.0' } | Select-Object -First 1
@@ -140,7 +279,16 @@ function Connect-METSession {
             $exoParams['UserPrincipalName'] = $UserPrincipalName
         }
 
-        if ($DisableWAM) {
+        # Graph connects first now (see comment above), which can leave its own WAM broker
+        # component already instantiated. If this leg's own interactive sign-in also tries to
+        # use WAM, the two broker instances collide in native interop with a
+        # NullReferenceException in RuntimeBroker..ctor (confirmed:
+        # microsoftgraph/msgraph-sdk-powershell#3576). -DisableWAM here avoids instantiating
+        # that broker, so it is forced automatically whenever Graph is also being connected
+        # (confirmed as a working combination in a community report on the same issue tracker:
+        # microsoftgraph/msgraph-sdk-powershell#3394#issuecomment-4787492595). Explicit
+        # -DisableWAM still applies when -SkipGraph is set.
+        if ($DisableWAM -or ($PSCmdlet.ParameterSetName -eq 'Interactive' -and -not $SkipGraph)) {
             $exoParams['DisableWAM'] = $true
         }
 
@@ -195,12 +343,14 @@ function Connect-METSession {
         }
 
         if (-not $existing) {
-            # A different MSAL version already loaded in-process (e.g. from an
-            # earlier Import-Module MicrosoftTeams/Graph/Az in this session) can
-            # never be reconciled by connect order alone - .NET cannot unload or
-            # replace an assembly once loaded. Detect that case up front so the
-            # error names the real cause instead of surfacing MSAL's opaque
-            # 0x80131040 manifest-mismatch failure.
+            # A different MSAL version already loaded in-process (e.g. from an earlier
+            # Import-Module MicrosoftTeams/Az in this session, or a manual Connect-ExchangeOnline
+            # already run before this call) can never be reconciled by connect order alone -
+            # .NET cannot unload or replace an assembly once loaded. Detect that case up front so
+            # the error names the real cause instead of surfacing MSAL's opaque 0x80131040
+            # manifest-mismatch failure. Graph connecting first as part of this same call does not
+            # trigger this - confirmed testing (see the comment at the top of this function) shows
+            # Exchange Online loads its own MSAL copy fine alongside Graph's already-resident one.
             $requiredMsalVersion = $null
             if ($exoModule.ModuleBase) {
                 $exoMsalPath = Join-Path $exoModule.ModuleBase 'netCore' 'Microsoft.Identity.Client.dll'
@@ -209,7 +359,12 @@ function Connect-METSession {
             if ($requiredMsalVersion) {
                 $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
                 if ($conflict) {
-                    throw "Failed to connect to Exchange Online: $conflict"
+                    # The most common source of this specific conflict is Connect-METSession's own
+                    # Graph leg, which runs first (see the comment at the top of this function) and
+                    # loads Microsoft.Graph.Authentication's bundled MSAL build into the process before
+                    # Exchange Online gets a chance to load its own. -SkipGraph prevents that load from
+                    # happening at all, rather than trying to reconcile it after the fact.
+                    throw "Failed to connect to Exchange Online: $conflict If Microsoft Graph connected earlier in this call (the default order), retry in a fresh PowerShell session with Connect-METSession -SkipGraph to avoid loading its older MSAL build in the first place."
                 }
             }
 

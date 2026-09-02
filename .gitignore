@@ -25,3 +25,6 @@ Thumbs.db
 # Editor
 .vscode/
 *.log
+
+# Local-only connection helpers (may reference cert paths / secrets)
+*.local.ps1
