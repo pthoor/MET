@@ -314,3 +314,53 @@ test.describe('offline self-containment', () => {
     expect(external, `unexpected sub-resource requests: ${external.join(', ')}`).toEqual([]);
   });
 });
+
+// Injection safety at the DOM level. A string-level assertion cannot prove this: the
+// payload legitimately appears inside the embedded CHECKS JSON, and the question is
+// only ever whether the renderer turns it into markup. Scheme validation on a
+// reference URL is not enough on its own - new URL() accepts quotes and angle
+// brackets in a path, so an https: URL can still close an href attribute.
+test.describe('injection safety', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/report-hostile.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+  });
+
+  test('no payload from any check field becomes a live element', async ({ page }) => {
+    await page.locator('#btn-collapse-all').click();
+    await expect(page.locator('img')).toHaveCount(0);
+    await expect(page.locator('[onerror]')).toHaveCount(0);
+  });
+
+  test('no injected handler executes, on any tab', async ({ page }) => {
+    for (const tab of ['all', 'mdo', 'exo', 'teams', 'controls']) {
+      const locator = page.locator(`.tab[data-tab="${tab}"]`);
+      if (await locator.count()) await locator.click();
+    }
+    const flags = await page.evaluate(() =>
+      Object.keys(window).filter((key) => key.startsWith('__xss'))
+    );
+    expect(flags).toEqual([]);
+  });
+
+  test('a hostile reference URL is escaped rather than emitted raw', async ({ page }) => {
+    const hrefs = await page
+      .locator('a.btn-docs')
+      .evaluateAll((anchors) => anchors.map((a) => a.getAttribute('href')));
+    for (const href of hrefs) {
+      expect(href).not.toContain('<img');
+      expect(href).not.toContain('"');
+    }
+  });
+
+  test('an unrecognised Result or Severity still renders a visible badge', async ({ page }) => {
+    // Breakout payloads reduce to the 'unknown' class; without a base background the
+    // badge would render white-on-white and the finding would be invisible.
+    const badges = page.locator('#cards-container .sev-pill');
+    await expect(badges.first()).toBeVisible();
+    const background = await badges
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(background).not.toBe('rgba(0, 0, 0, 0)');
+  });
+});

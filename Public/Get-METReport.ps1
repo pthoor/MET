@@ -1,4 +1,4 @@
-﻿function Get-METModuleVersion {
+function Get-METModuleVersion {
     [CmdletBinding()]
     param()
 
@@ -81,7 +81,7 @@ function Get-METReport {
             $weightedSum = 0
             $weightTotal = 0
             foreach ($r in $scorable) {
-                $w = Get-METCheckWeight -Severity $r.Severity
+                $w = Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $r.Severity)
                 $weightedSum += $r.Score * $w
                 $weightTotal += $w * 100
             }
@@ -110,7 +110,7 @@ function Get-METReport {
             if ($catResults) {
                 $ws = 0; $wt = 0
                 foreach ($r in $catResults) {
-                    $w = Get-METCheckWeight -Severity $r.Severity
+                    $w = Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $r.Severity)
                     $ws += $r.Score * $w
                     $wt += $w * 100
                 }
@@ -300,7 +300,7 @@ function Get-METReport {
                         finding        = $_.Finding
                         recommendation = $_.Recommendation
                         referenceUrl   = $_.ReferenceUrl
-                        timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                        timestamp      = if ($_.Timestamp) { $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null }
                         error          = $_.Error
                         metadata       = $_.Metadata
                     }
@@ -342,7 +342,7 @@ function Get-METReport {
                     finding        = $_.Finding
                     recommendation = $_.Recommendation
                     referenceUrl   = $_.ReferenceUrl
-                    timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                    timestamp      = if ($_.Timestamp) { $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null }
                     error          = $_.Error
                     metadata       = $_.Metadata
                 }
@@ -466,7 +466,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .cat-meter-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .cat-meter-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .cat-meter-bar{height:100%;border-radius:3px;transition:width .4s ease,background .3s}
-.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
+.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--text3)}
 .cat-meter-val{text-align:right;font-weight:700;color:var(--text2)}
 .score-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;padding-left:16px;border-left:1px solid var(--border)}
 .summary-item{display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -542,7 +542,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
 .card-header:hover{background:var(--surface2)}
 .card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
-.sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
+.sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--sev-info)}
 .sev-critical{background:var(--sev-critical)}
 .sev-high{background:var(--sev-high)}
 .sev-medium{background:var(--sev-medium)}
@@ -550,7 +550,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .sev-informational{background:var(--sev-info)}
 .card-id{font-size:12px;font-family:monospace;color:var(--text2);flex-shrink:0}
 .card-name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.result-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff}
+.result-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff;background:var(--result-na)}
 .rb-pass{background:var(--result-pass)}
 .rb-fail{background:var(--result-fail)}
 .rb-warning{background:var(--result-warn)}
@@ -932,9 +932,21 @@ function renderDonut() {
 }
 
 // ── Escape HTML ──────────────────────────────────────────────────
+// Only null/undefined collapse to empty. A falsy-but-real value (0, false) must
+// still render - a policy at Priority 0 is the highest-precedence policy, and
+// blanking that cell hides exactly the row an operator is looking for.
 function esc(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// CSS class fragments are built from check-supplied Result/Severity/Category values
+// and interpolated into class="..." attributes. Lowercasing alone is not a defence -
+// every character needed to break out of an attribute survives it. Reduce to the
+// character set a class name can legitimately contain; anything else becomes
+// 'unknown', which the stylesheet renders with a visible neutral fallback.
+function slug(s) {
+  const out = String(s === null || s === undefined ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  return out || 'unknown';
 }
 // Format finding text into a structured bullet list.
 // Multi-policy findings arrive as "PolicyName: issue1; issue2\nPolicyName2: issue3".
@@ -1018,9 +1030,13 @@ function fmtEffectivePolicyCoverage(check) {
       '<th>Effective recipients</th><th>Configuration</th><th>Current impact</th><th>Ordering observations</th><th>Issues</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
+// Validating the scheme is not enough: the return value is interpolated into an
+// href="..." attribute, and new URL() accepts quotes and angle brackets in a path,
+// so an https: URL can still break out of the attribute and inject markup. The
+// validated URL must be HTML-escaped before it reaches the attribute.
 function safeHref(url) {
   if (!url) return '#';
-  try { const u = new URL(url); return (u.protocol === 'https:' || u.protocol === 'http:') ? url : '#'; }
+  try { const u = new URL(url); return (u.protocol === 'https:' || u.protocol === 'http:') ? esc(u.href) : '#'; }
   catch { return '#'; }
 }
 
@@ -1076,7 +1092,7 @@ function createCard(check) {
   // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
   // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
   const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);
-  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : check.result.toLowerCase()));
+  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(check.result)));
   const startOpen  = false;
 
   const card = document.createElement('div');
@@ -1120,8 +1136,8 @@ function createCard(check) {
 
   card.innerHTML =
     '<div class="card-header" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
-      '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
-      '<span class="card-cat-chip cat-' + check.category.toLowerCase() + '">' + esc(check.category) + '</span>' +
+      '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+      '<span class="card-cat-chip cat-' + slug(check.category) + '">' + esc(check.category) + '</span>' +
       '<span class="card-id">' + esc(check.checkId) + '</span>' +
       '<span class="card-name">' + esc(check.name) + '</span>' +
       '<span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span>' +
@@ -1215,7 +1231,7 @@ function renderTop5() {
     return;
   }
   top5.forEach(function(check, i) {
-    const rbClass = 'rb-' + check.result.toLowerCase();
+    const rbClass = 'rb-' + slug(check.result);
     const row = document.createElement('div');
     row.className = 'top5-row';
     row.innerHTML =
@@ -1227,7 +1243,7 @@ function renderTop5() {
       '<div class="top5-finding">' + fmtFinding(check.finding) + '</div>' +
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
         '<span class="result-badge ' + rbClass + '">' + esc(check.result.toUpperCase()) + '</span>' +
-        '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+        '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '</div>';
     row.addEventListener('click', function() {
       const card = cardMap[check.checkId];
@@ -1282,12 +1298,12 @@ function renderControlsRef() {
       const hasError = !!c.error;
       // hasError wins over accepted - see the matching note in createCard().
       const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
-      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : c.result.toLowerCase()));
+      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(c.result)));
       const desc = CONTROLS_META[c.checkId] || c.name;
       html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
-      html += '<td><span class="sev-pill sev-' + sevOf(c.severity).toLowerCase() + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
+      html += '<td><span class="sev-pill sev-' + slug(sevOf(c.severity)) + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
       html += '<td class="ctrl-desc">' + esc(desc) + '</td>';
       html += '<td><span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span></td>';
       html += '<td>' + (c.referenceUrl ? '<a class="ctrl-doc-link" href="' + safeHref(c.referenceUrl) + '" target="_blank" rel="noopener">&#x1F4D6;</a>' : '') + '</td>';

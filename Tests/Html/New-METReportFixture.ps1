@@ -18,7 +18,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile')]
     [string] $Scenario = 'Rich'
 )
 
@@ -51,6 +51,30 @@ function New-FixtureResult {
 
 $fixtures = switch ($Scenario) {
     'Empty' { @() }
+
+    # Every field a check can populate, carrying a payload crafted for the sink it
+    # reaches: an https URL that closes the href attribute, and enum values that close
+    # a class attribute. Both survive scheme validation and .toLowerCase() respectively.
+    'Hostile' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Href breakout <img src=n1 onerror="window.__xssName=1">' `
+                -Result 'Fail' -Severity 'High' -Score 0 `
+                -AffectedObject 'Policy "><img src=n2 onerror="window.__xssAffected=1">' `
+                -Finding 'Finding "><img src=n3 onerror="window.__xssFinding=1">' `
+                -Recommendation 'Recommendation "><img src=n4 onerror="window.__xssRec=1">' `
+                -ReferenceUrl 'https://x.example/"><img src=n5 onerror="window.__xssHref=1">'
+
+            New-FixtureResult -CheckId 'MET-EXO001' -Category 'EXO"><img src=n6 onerror="window.__xssCat=1">' `
+                -Name 'Class breakout' -Result 'Warning' -Severity 'Medium"><img src=n7 onerror="window.__xssSev=1">' `
+                -Score 50 -AffectedObject 'Domain' -Finding 'Class attribute payload' `
+                -Recommendation 'none' -ReferenceUrl 'https://aka.ms/dmarc'
+
+            New-FixtureResult -CheckId 'MET-Teams003' -Category 'Teams' -Name 'Errored with payload' `
+                -Result 'NotApplicable' -Severity 'Low' -Score $null -AffectedObject 'Teams' `
+                -Finding 'Check could not run' `
+                -ErrorText 'Error "><img src=n8 onerror="window.__xssError=1">'
+        )
+    }
 
     'Single' {
         @(

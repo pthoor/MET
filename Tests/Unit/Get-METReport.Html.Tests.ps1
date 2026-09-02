@@ -236,6 +236,58 @@ Describe 'Get-METReport HTML reference URL handling' {
         $script:linkHtml | Should -Match "href=""' \+ safeHref\(check\.referenceUrl\)"
         $script:linkHtml | Should -Match "href=""' \+ safeHref\(c\.referenceUrl\)"
     }
+
+    # Scheme validation alone is not enough: safeHref's return value is interpolated
+    # into an href="..." attribute, and new URL() accepts quotes and angle brackets in
+    # a path. An https: URL could therefore close the attribute and inject markup - the
+    # javascript:/data: tests above pass while that hole is wide open.
+    It 'escapes the validated URL rather than returning the raw string' {
+        $script:linkHtml | Should -Match "esc\(u\.href\)"
+        $script:linkHtml | Should -Not -Match "u\.protocol === 'http:'\) \? url :"
+    }
+
+    It 'carries an attribute-breakout URL only as inert JSON data, never as markup' {
+        # The payload legitimately appears inside the embedded CHECKS JSON island - that
+        # is data, not markup. What must never happen is it reaching the document as a
+        # literal element, which is asserted at the DOM level in Tests/Html/report.spec.js.
+        $breakout = @(
+            New-METTestResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Attribute breakout' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Policy' -Finding 'bad link' `
+                -Recommendation 'fix it' `
+                -ReferenceUrl 'https://x.example/"><img src=q onerror="window.__XSS=1">'
+        )
+        $html = Get-METTestHtml -Results $breakout -Folder (Join-Path $TestDrive 'breakout')
+
+        # Every '<' in the embedded payload is unicode-escaped, so no tag can be parsed
+        # out of it regardless of what the string contains.
+        $html | Should -Not -Match '(?i)<img\s'
+        $html | Should -Match '\\u003Cimg'
+    }
+}
+
+Describe 'Get-METReport HTML class attribute safety' {
+    # Result/Severity/Category are interpolated into class="..." attributes. Lowercasing
+    # them is not a defence - every character needed to break out of an attribute
+    # survives .toLowerCase().
+    BeforeAll {
+        $hostile = @(
+            New-METTestResult -CheckId 'MET-MDO001' -Category 'MDO"><img src=c onerror="window.__XC=1">' `
+                -Name 'Class breakout' -Result 'Fail' -Severity 'High' -Score 0 `
+                -AffectedObject 'Policy' -Finding 'f' -Recommendation 'r' -ReferenceUrl 'https://aka.ms/x'
+        )
+        $script:classHtml = Get-METTestHtml -Results $hostile -Folder (Join-Path $TestDrive 'classes')
+    }
+
+    It 'builds class fragments through the slug allow-list' {
+        $script:classHtml | Should -Match "function slug\("
+        $script:classHtml | Should -Match "replace\(/\[\^a-z0-9-\]/g, ''\)"
+    }
+
+    It 'does not interpolate raw enum values into class attributes' {
+        $script:classHtml | Should -Not -Match "cat-' \+ check\.category\.toLowerCase\(\)"
+        $script:classHtml | Should -Not -Match "sev-' \+ sevOf\(check\.severity\)\.toLowerCase\(\)"
+        $script:classHtml | Should -Not -Match "'rb-' \+ check\.result\.toLowerCase\(\)"
+    }
 }
 
 Describe 'Get-METReport HTML degenerate result sets' {

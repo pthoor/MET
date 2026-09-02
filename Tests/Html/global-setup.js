@@ -10,6 +10,7 @@ const SCENARIOS = [
   { scenario: 'Rich', file: 'report.html' },
   { scenario: 'Single', file: 'report-single.html' },
   { scenario: 'Empty', file: 'report-empty.html' },
+  { scenario: 'Hostile', file: 'report-hostile.html' },
 ];
 
 function pwshExecutable() {
