@@ -119,13 +119,18 @@
                 Name           = $file.BaseName
                 Result         = 'Fail'
                 Severity       = 'High'
-                Score          = $null
+                # Must be 0, not $null. Get-METReport only scores results with a
+                # non-null Score, so a null here silently removes every crashed
+                # check from the posture index - a run where half the checks threw
+                # would report a perfect score above a table of its own failures.
+                Score          = 0
                 AffectedObject = 'N/A'
                 Finding        = 'Check script failed to execute'
                 Recommendation = ''
                 ReferenceUrl   = ''
                 Timestamp      = [datetime]::UtcNow
                 Error          = $_.ToString()
+                Metadata       = $null
             }
             if ($PassThru) { Write-Output $errResult } else { $results.Add($errResult) }
         }
@@ -174,7 +179,7 @@
                 $findingLines = $summaryItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
                 $aggregated.Add((New-METCheckResult `
                     -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
-                    -Result $summaryResult -Severity $first.Severity `
+                    -Result $summaryResult -Severity (Get-METWorstSeverity -Severity ($summaryItems | ForEach-Object { $_.Severity })) `
                     -AffectedObject "All $($summaryItems.Count) $noun" `
                     -Finding ($findingLines -join "`n") `
                     -Recommendation $first.Recommendation `
@@ -191,12 +196,21 @@
         $first       = $items[0]
         $noun        = Get-METAggregationNoun -CheckId $first.CheckId
 
+        # Severity must come from the noteworthy items, not from $items[0]. Checks that
+        # emit one result per domain/policy routinely emit an Informational or
+        # NotApplicable result first - MET-EXO001 does exactly this for the tenant's
+        # .mail.onmicrosoft.com routing domain. Inheriting that severity stamps the
+        # aggregate Informational, whose scoring weight is 0, which removes the finding
+        # from both the numerator and the denominator of the posture score: a real DMARC
+        # failure would disappear from the score entirely.
+        $worstSeverity = Get-METWorstSeverity -Severity ($badItems | ForEach-Object { $_.Severity })
+
         $findingLines = $badItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
         $errorMessage = @($errorItems | ForEach-Object Error | Where-Object { $_ }) -join "`n"
 
         $aggregated.Add((New-METCheckResult `
             -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
-            -Result $worstResult -Severity $first.Severity `
+            -Result $worstResult -Severity $worstSeverity `
             -AffectedObject "$($badItems.Count) of $($items.Count) $noun" `
             -Finding ($findingLines -join "`n") `
             -Recommendation $first.Recommendation `

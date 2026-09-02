@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METWorstSeverity.ps1"
     . "$root/Private/Expand-METGroupMembership.ps1"
     . "$root/Private/Get-METAssessableMailboxes.ps1"
     . "$root/Public/Invoke-METTriage.ps1"
