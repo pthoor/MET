@@ -26,5 +26,6 @@ Thumbs.db
 .vscode/
 *.log
 
-# Local-only connection helpers (may reference cert paths / secrets)
+# Local-only files (may reference cert paths / secrets, or unpatched-vulnerability notes)
 *.local.ps1
+*.local.md

@@ -99,6 +99,14 @@ function Connect-METSession {
         throw "Connect-METSession already established a session in this PowerShell process for '$previousIdentity'. Requesting '$newIdentity' now would reuse that connection's Exchange Online/Graph/Teams sessions without actually switching tenant or auth mode. Run Disconnect-METSession first, then reconnect to the new organization."
     }
 
+    # Assembly conflict diagnostics must only consider assemblies that were already
+    # resident when this connection attempt began. Graph intentionally runs before
+    # Exchange Online below; re-reading the AppDomain after Graph connects would
+    # misclassify Graph's own MSAL assembly as pre-existing session contamination and
+    # block Exchange Online before its loader gets a chance to apply its supported
+    # side-by-side behavior.
+    $initialLoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies()
+
     # User.Read.All is deliberately not requested: the only Graph call sites are
     # Expand-METGroupMembership.ps1 (Get-MgGroup/Get-MgGroupTransitiveMember, covered by
     # Group.Read.All) and MET-Teams014 (Get-MgPolicyCrossTenantAccessPolicyDefault/
@@ -239,7 +247,7 @@ function Connect-METSession {
                             $requiredMsalVersion = Get-METAssemblyFileVersion -Path $graphMsalPath
                         }
                         if ($requiredMsalVersion) {
-                            $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
+                            $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion -LoadedAssemblies $initialLoadedAssemblies
                             if ($conflict) {
                                 throw $conflict
                             }
@@ -357,14 +365,9 @@ function Connect-METSession {
                 $requiredMsalVersion = Get-METAssemblyFileVersion -Path $exoMsalPath
             }
             if ($requiredMsalVersion) {
-                $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
+                $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion -LoadedAssemblies $initialLoadedAssemblies
                 if ($conflict) {
-                    # The most common source of this specific conflict is Connect-METSession's own
-                    # Graph leg, which runs first (see the comment at the top of this function) and
-                    # loads Microsoft.Graph.Authentication's bundled MSAL build into the process before
-                    # Exchange Online gets a chance to load its own. -SkipGraph prevents that load from
-                    # happening at all, rather than trying to reconcile it after the fact.
-                    throw "Failed to connect to Exchange Online: $conflict If Microsoft Graph connected earlier in this call (the default order), retry in a fresh PowerShell session with Connect-METSession -SkipGraph to avoid loading its older MSAL build in the first place."
+                    throw "Failed to connect to Exchange Online: $conflict Retry in a fresh PowerShell session and run Connect-METSession before importing or connecting any other Microsoft 365 module."
                 }
             }
 
@@ -382,129 +385,6 @@ function Connect-METSession {
         else {
             $servicesConnected.Add('ExchangeOnline')
             Write-Verbose "Exchange Online already connected as $($existing.UserPrincipalName)."
-        }
-    }
-
-    if (-not $SkipGraph) {
-        $graphModuleMissing = @(
-            'Microsoft.Graph.Identity.SignIns'
-            'Microsoft.Graph.Groups'
-        ) | Where-Object { -not (Get-Module -ListAvailable -Name $_ | Where-Object { $_.Version -ge [version]'2.0.0' }) }
-
-        if ($graphModuleMissing) {
-            Write-Warning "Optional Graph module(s) not installed: $($graphModuleMissing -join ', '). Group-membership expansion will fall back to Exchange Online cmdlets. Install with: Install-Module '$($graphModuleMissing[0])' -Scope CurrentUser"
-        }
-        else {
-            $graphParams = @{ Scopes = $graphScopes; NoWelcome = $true }
-
-            if ($UseDeviceAuthentication -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
-                $graphParams['UseDeviceCode'] = $true
-            }
-
-            if ($DelegatedOrganization -and $PSCmdlet.ParameterSetName -eq 'Interactive') {
-                # Connect-MgGraph's UserParameterSet accepts -TenantId for exactly this
-                # (CSP/GDAP delegated-admin) scenario - previously this was silently ignored
-                # for Graph, so a delegated-org run could authenticate against the operator's
-                # own home tenant instead of the customer's.
-                $graphParams['TenantId'] = $DelegatedOrganization
-            }
-
-            # Certificate loading happens before the try/catch below so it must be guarded
-            # separately - otherwise a bad -CertificatePath/-CertificatePassword throws
-            # uncaught and aborts the whole Connect-METSession call (including the Teams leg,
-            # which runs after this one), contradicting the "a failed Graph connection is
-            # non-fatal" design every other failure path here follows.
-            $graphCertLoadError = $null
-            switch ($PSCmdlet.ParameterSetName) {
-                'ServicePrincipal' {
-                    $graphParams = @{
-                        ClientId  = $AppId
-                        TenantId  = $TenantId
-                        NoWelcome = $true
-                    }
-                    if ($CertificatePath) {
-                        try {
-                            $graphParams['Certificate'] = Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
-                        }
-                        catch {
-                            $graphCertLoadError = $_.Exception.Message
-                        }
-                    }
-                    else {
-                        $graphParams['CertificateThumbprint'] = $CertificateThumbprint
-                    }
-                }
-                'ManagedIdentity' {
-                    $graphParams = @{ Identity = $true; NoWelcome = $true }
-                }
-            }
-
-            $mgContext = Get-MgContext -ErrorAction SilentlyContinue
-
-            # Deliberately outside the try/catch below: a tenant mismatch must hard-stop, not
-            # get silently downgraded to the same Write-Warning-and-continue path used for an
-            # ordinary connection failure - that path exists so Graph's optional/degrading
-            # design doesn't abort the whole session, but a wrong-tenant reuse is a correctness
-            # bug, not an availability one, and should never be swallowed into a warning.
-            # Checked whenever $requestedOrg is known (ServicePrincipal, or Interactive with
-            # -DelegatedOrganization) rather than only for ServicePrincipal - a stale Graph
-            # session left over from a botched Disconnect-METSession is just as much a
-            # cross-customer leak risk in the Interactive+DelegatedOrganization/MSSP case.
-            # Get-MgContext always returns a GUID (even when the caller passed a domain name),
-            # so $requestedOrg is resolved to a GUID via Resolve-METTenantGuid before comparing
-            # - a raw string compare against a domain name would mismatch on every call.
-            if ($mgContext -and $requestedOrg) {
-                $expectedTenantGuid = Resolve-METTenantGuid -TenantId $requestedOrg
-                if (-not $expectedTenantGuid) {
-                    # Fail closed: an unresolvable tenant GUID (e.g. a transient OIDC discovery
-                    # outage) must not be treated as "no mismatch" - that would silently let a
-                    # stale Graph session from a different customer be reused unverified, exactly
-                    # the cross-customer leak this check exists to close.
-                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
-                }
-                if ($mgContext.TenantId -ne $expectedTenantGuid) {
-                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
-                }
-            }
-
-            if ($graphCertLoadError) {
-                Write-Warning "Failed to connect to Microsoft Graph: $graphCertLoadError Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references)."
-            }
-            else {
-                try {
-                    if (-not $mgContext) {
-                        # A different MSAL version already loaded in-process (most often by
-                        # ExchangeOnlineManagement connecting first, per the comment at the top
-                        # of this function) cannot be reconciled by .NET at runtime. Detect it
-                        # up front so the warning names the real cause instead of surfacing
-                        # MSAL's opaque MissingMethodException/manifest-mismatch failure.
-                        $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
-                            Sort-Object Version -Descending | Select-Object -First 1
-                        $requiredMsalVersion = $null
-                        if ($graphAuthModule.ModuleBase) {
-                            $graphMsalPath = Join-Path $graphAuthModule.ModuleBase 'Dependencies' 'Core' 'Microsoft.Identity.Client.dll'
-                            $requiredMsalVersion = Get-METAssemblyFileVersion -Path $graphMsalPath
-                        }
-                        if ($requiredMsalVersion) {
-                            $conflict = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion $requiredMsalVersion
-                            if ($conflict) {
-                                throw $conflict
-                            }
-                        }
-
-                        Write-Verbose 'Connecting to Microsoft Graph...'
-                        Connect-MgGraph @graphParams -ErrorAction Stop
-                        $servicesConnected.Add('Graph')
-                    }
-                    else {
-                        $servicesConnected.Add('Graph')
-                        Write-Verbose "Microsoft Graph already connected as $($mgContext.Account)."
-                    }
-                }
-                catch {
-                    Write-Warning "Failed to connect to Microsoft Graph: $($_.Exception.Message) Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references). Retry with: Connect-METSession -CertificatePath <path> -CertificatePassword <securestring> for unattended use, or -DisableWAM for interactive use."
-                }
-            }
         }
     }
 

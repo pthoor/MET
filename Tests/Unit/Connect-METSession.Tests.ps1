@@ -322,7 +322,7 @@ Describe 'Connect-METSession connection ordering' {
         $script:METSessionInfo = $null
     }
 
-    It 'Connects Exchange Online before Microsoft Graph' {
+    It 'Connects Microsoft Graph before Exchange Online' {
         # A List mutated via .Add() avoids the mock-scope assignment problem:
         # reference semantics mean no cross-scope variable assignment is needed.
         $order = [System.Collections.Generic.List[string]]::new()
@@ -343,8 +343,106 @@ Describe 'Connect-METSession connection ordering' {
         Connect-METSession -SkipTeams -UseDeviceAuthentication
 
         $order.Count | Should -Be 2
-        $order[0] | Should -Be 'ExchangeOnline'
-        $order[1] | Should -Be 'Graph'
+        $order[0] | Should -Be 'Graph'
+        $order[1] | Should -Be 'ExchangeOnline'
+    }
+
+    It 'Connects each service exactly once' {
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
+        } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+        Mock Get-MgContext { $null }
+        Mock Get-ConnectionInformation { $null }
+        Mock Connect-MgGraph { }
+        Mock Connect-ExchangeOnline { }
+
+        Connect-METSession -SkipTeams -UseDeviceAuthentication
+
+        Should -Invoke Connect-MgGraph -Times 1 -Exactly
+        Should -Invoke Connect-ExchangeOnline -Times 1 -Exactly
+        @($script:METSessionInfo.ServicesConnected | Where-Object { $_ -eq 'Graph' }).Count | Should -Be 1
+    }
+
+    It 'Does not treat MSAL loaded by its own Graph leg as a pre-existing EXO conflict' {
+        $assemblyName = "MET.GraphLeg.$([guid]::NewGuid().ToString('N'))"
+        $capturedSnapshots = [System.Collections.Generic.List[object]]::new()
+
+        Mock Get-Module {
+            [PSCustomObject]@{
+                Name       = 'ExchangeOnlineManagement'
+                Version    = [version]'3.10.1'
+                ModuleBase = '/fake/ExchangeOnlineManagement/3.10.1'
+            }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-Module {
+            [PSCustomObject]@{
+                Name       = $Name
+                Version    = [version]'2.39.0'
+                ModuleBase = "/fake/$Name/2.39.0"
+            }
+        } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+        Mock Get-MgContext { $null }
+        Mock Get-ConnectionInformation { $null }
+        Mock Get-METAssemblyFileVersion {
+            if ($Path -like '*ExchangeOnlineManagement*') { return [version]'4.83.1.0' }
+            return [version]'4.82.1.0'
+        }
+        Mock Test-METAssemblyLoadConflict {
+            $capturedSnapshots.Add([object]@($LoadedAssemblies))
+            return $null
+        }
+        Mock Connect-MgGraph {
+            $dynamicName = [System.Reflection.AssemblyName]::new($assemblyName)
+            $null = [System.Reflection.Emit.AssemblyBuilder]::DefineDynamicAssembly(
+                $dynamicName,
+                [System.Reflection.Emit.AssemblyBuilderAccess]::Run
+            )
+        }
+        Mock Connect-ExchangeOnline { }
+
+        { Connect-METSession -SkipTeams -UseDeviceAuthentication } | Should -Not -Throw
+        Should -Invoke Connect-ExchangeOnline -Times 1 -Exactly
+        $capturedSnapshots.Count | Should -Be 2
+        @($capturedSnapshots[1] | ForEach-Object { $_.GetName().Name }) | Should -Not -Contain $assemblyName
+    }
+
+    It 'Forces -DisableWAM on the Exchange Online leg when Graph is also connecting' {
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
+        } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+
+        Mock Get-MgContext { $null }
+        Mock Get-ConnectionInformation { $null }
+        Mock Connect-MgGraph { }
+        Mock Connect-ExchangeOnline { }
+
+        Connect-METSession -SkipTeams -UseDeviceAuthentication
+
+        Should -Invoke Connect-ExchangeOnline -Times 1 -Exactly -ParameterFilter { $DisableWAM -eq $true }
+    }
+
+    It 'Does not force -DisableWAM on the Exchange Online leg when -SkipGraph is set' {
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+
+        Mock Get-ConnectionInformation { $null }
+        Mock Connect-ExchangeOnline { }
+
+        Connect-METSession -SkipGraph -SkipTeams -UseDeviceAuthentication
+
+        Should -Invoke Connect-ExchangeOnline -Times 1 -Exactly -ParameterFilter { -not $DisableWAM }
     }
 }
 

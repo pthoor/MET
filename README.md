@@ -248,11 +248,11 @@ WARNING: Failed to connect to Microsoft Graph: ClientCertificateCredential authe
 '!0 Microsoft.Identity.Client.BaseAbstractApplicationBuilder`1.WithLogging(Microsoft.IdentityModel.Abstractions.IIdentityLogger, Boolean)'.
 ```
 
-This is expected on some machines and is safe to ignore - it is not specific to certificate/CI auth, and every admin running `Connect-METSession` interactively can hit it too. `ExchangeOnlineManagement` and `Microsoft.Graph.*` each bundle their own version of `Microsoft.Identity.Client` (MSAL); whichever one loads into the PowerShell process first "wins" for the whole session, and the other module ends up calling a method signature that doesn't exist in that loaded version. This is release-cadence drift between Microsoft's own modules, not a MET bug or a misconfiguration, and there is no currently-published combination of module versions that reliably avoids it.
+This can occur when another Microsoft 365 module loaded an incompatible MSAL build before MET started, and it is not specific to certificate/CI auth. `ExchangeOnlineManagement`, `Microsoft.Graph.*`, and `MicrosoftTeams` each bundle their own version of `Microsoft.Identity.Client` (MSAL), and some load orders make a module call a method signature that does not exist in the resident build. This is release-cadence drift between Microsoft's own modules, not a tenant misconfiguration.
 
-`Connect-METSession` already treats this as non-fatal by design: Exchange Online and Teams connect normally, and `Expand-METGroupMembership` falls back to `Get-DistributionGroupMember`/`Get-UnifiedGroupLinks` for group expansion instead of Graph. The only effect is slightly reduced accuracy resolving nested/dynamic group membership, and `MET-Teams014` reporting `NotApplicable` instead of running. If you need Graph checks to actually run, the only reliable workaround is connecting Graph in its own PowerShell process rather than alongside Exchange Online.
+`Connect-METSession` mitigates the known Graph/EXO interactive collision by connecting Graph first and forcing `-DisableWAM` on the following EXO leg. If Graph still fails, MET treats it as non-fatal: group expansion falls back to Exchange Online cmdlets and `MET-Teams014` reports `NotApplicable`. Subprocess isolation remains the planned fallback if Microsoft's three-module MSAL packaging cannot be made reliable in one process across supported versions.
 
-**The other direction - Exchange Online itself fails to connect - is a hard error, not a warning:**
+**A pre-existing older MSAL assembly can prevent Exchange Online from connecting:**
 
 ```
 Failed to connect to Exchange Online: An older version of Microsoft.Identity.Client (4.82.1.0, loaded from
@@ -260,10 +260,10 @@ Failed to connect to Exchange Online: An older version of Microsoft.Identity.Cli
 in this PowerShell session and cannot be reconciled with the newer version required here (4.83.1.0).
 ```
 
-This happens because `Connect-METSession` connects Graph *first* - if Graph's own connection succeeds, its bundled MSAL build is now loaded for the rest of the process, and Exchange Online's newer required build can no longer load alongside it. .NET cannot unload or replace an assembly once loaded, so:
+This diagnostic only considers assemblies that were already resident when `Connect-METSession` began. It does not treat the MSAL assembly loaded deliberately by this invocation's Graph leg as pre-existing contamination; Graph connects first and Exchange Online is then called with `-DisableWAM` for interactive authentication. If another Microsoft 365 module loaded an incompatible older MSAL before `Connect-METSession` started, .NET cannot unload or replace it, so:
 
 - **Restart PowerShell** before retrying - a fresh process is the only way to clear the already-loaded assembly; changing flags in the same session will not undo it.
-- Then run `Connect-METSession -SkipGraph` so Graph's MSAL build is never loaded in the first place. This is the practical fix for a tenant with the version combination above (`ExchangeOnlineManagement 3.10.x` + `Microsoft.Graph.Authentication 2.39.0`), since no published version triple currently avoids the conflict - see ROADMAP.md "Under Investigation" for the full version matrix.
+- Run `Connect-METSession` before importing or connecting Exchange Online, Graph, Teams, Az, or another module that bundles MSAL. If the three-way module combination still fails, use `-SkipGraph` or `-SkipTeams` as a degraded-mode workaround and see ROADMAP.md "Under Investigation" for the version matrix and subprocess-isolation plan.
 
 #### Teams sign-in on Linux/macOS
 
