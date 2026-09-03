@@ -338,6 +338,7 @@ function Get-METReport {
             if ($OutputPath) {
                 $dest = $resolvedJsonPath
 
+                New-METRestrictedFile -Path $dest
                 $json | Set-Content -Path $dest -Encoding UTF8
                 Write-Verbose "JSON report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
@@ -1587,6 +1588,7 @@ document.getElementById('btn-collapse-all').textContent = 'Expand All';
             if ($OutputPath) {
                 $dest = $resolvedHtmlPath
 
+                New-METRestrictedFile -Path $dest
                 $html | Set-Content -Path $dest -Encoding UTF8
                 Write-Verbose "HTML report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
