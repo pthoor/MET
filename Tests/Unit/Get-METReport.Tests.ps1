@@ -91,8 +91,8 @@ Describe 'Get-METReport structured metadata' {
         # must exclude Error-tagged items the same way the server-rendered initial summary does,
         # with Error broken out as its own segment, or the counters/pie silently drift out of
         # sync with the 'Error' badge.
-        $html | Should -Match "result === 'Fail' && !isAccepted\(c\.checkId\) && !c\.error"
-        $html | Should -Match "result === 'Warning' && !isAccepted\(c\.checkId\) && !c\.error"
+        $html | Should -Match "result === 'Fail' && !isAccepted\(resultKey\(c\)\) && !c\.error"
+        $html | Should -Match "result === 'Warning' && !isAccepted\(resultKey\(c\)\) && !c\.error"
         $html | Should -Match "result === 'Pass' && !c\.error"
         $html | Should -Match "result === 'NotApplicable' && !c\.error"
         $html | Should -Match "result === 'Info' && !c\.error"

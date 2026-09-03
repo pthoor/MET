@@ -11,6 +11,7 @@ const SCENARIOS = [
   { scenario: 'Single', file: 'report-single.html' },
   { scenario: 'Empty', file: 'report-empty.html' },
   { scenario: 'Hostile', file: 'report-hostile.html' },
+  { scenario: 'RepeatedCheckId', file: 'report-repeated-checkid.html' },
 ];
 
 function pwshExecutable() {

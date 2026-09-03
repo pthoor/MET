@@ -210,8 +210,12 @@ test.describe('card expansion', () => {
     // point it must not silently lose its ERROR badge and go back to looking like a resolved risk.
     // Simulated here via localStorage (the mechanism Accept Risk itself writes to) since the
     // fixture's only Error case, MET-Teams014, is NotApplicable and has no Accept Risk button.
+    // Keyed on resultKey (checkId + '|' + affectedObject) per A-5, not on the bare CheckId.
     await page.evaluate(() => {
-      localStorage.setItem('MET_accepted_contoso.onmicrosoft.com_MET-Teams014', 'Pre-existing acceptance');
+      localStorage.setItem(
+        'MET_accepted_contoso.onmicrosoft.com_MET-Teams014|Cross-tenant access policy',
+        'Pre-existing acceptance'
+      );
     });
     await page.reload();
     await page.locator('.tab[data-tab="Accepted"]').click();

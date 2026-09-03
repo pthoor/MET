@@ -830,6 +830,17 @@ const CONTROLS_CATEGORIES = [
   { id: 'Teams', label: 'Microsoft Teams Protection',         cls: 'cat-teams' }
 ];
 
+// ── Result identity ──────────────────────────────────────────────
+// Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one per
+// domain/policy/mailbox). CheckId alone is not a unique identity for a result, so every
+// acceptance helper, cardMap, and click target below is keyed on resultKey(check) instead.
+// Two results CAN still legitimately share both checkId and affectedObject (e.g. a check
+// emitting several findings about the same object) - that residual collision is accepted
+// deliberately rather than disambiguated with a render-time index, because an index is not
+// stable across page loads (result order can shift between runs) and this key must survive
+// a reload for the accepted state to mean anything.
+function resultKey(c){ return c.checkId + '|' + (c.affectedObject || ''); }
+
 // ── localStorage helpers ─────────────────────────────────────────
 // Some browsers (notably Safari) throw a SecurityError accessing localStorage
 // on file:// pages. Fall back to an in-memory store so the report still
@@ -844,11 +855,14 @@ function lsSet(key, val) {
 function lsRemove(key) {
   try { localStorage.removeItem(key); } catch (e) { delete memStore[key]; }
 }
-function lsKey(checkId){ return 'MET_accepted_' + TENANT_ID + '_' + checkId; }
-function isAccepted(checkId){ return !!lsGet(lsKey(checkId)); }
-function getJustification(checkId){ return lsGet(lsKey(checkId)); }
-function setAccepted(checkId, justification){ lsSet(lsKey(checkId), justification || 'Accepted'); }
-function clearAccepted(checkId){ lsRemove(lsKey(checkId)); }
+// Deliberately NOT migrated from the legacy 'MET_accepted_<tenant>_<checkId>' scheme - those
+// entries are already collided (this is the bug A-5 fixes), so migrating would propagate a
+// wrong acceptance state into the new per-result scheme. Existing acceptances are dropped.
+function lsKey(key){ return 'MET_accepted_' + TENANT_ID + '_' + key; }
+function isAccepted(key){ return !!lsGet(lsKey(key)); }
+function getJustification(key){ return lsGet(lsKey(key)); }
+function setAccepted(key, justification){ lsSet(lsKey(key), justification || 'Accepted'); }
+function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
 function bandOf(score) {
@@ -859,7 +873,7 @@ function weightedScore(checks) {
   checks.forEach(function(c) {
     if (!['Pass','Fail','Warning'].includes(c.result)) return;
     if (c.score === null || c.score === undefined) return;
-    if (isAccepted(c.checkId)) return;
+    if (isAccepted(resultKey(c))) return;
     const w = SEV_WEIGHT[c.severity] || 0;
     wSum  += c.score * w;
     wTotal += w * 100;
@@ -926,8 +940,8 @@ function renderDonut() {
   // the server-rendered initial summary (Get-METReport.ps1's $summary hashtable). A result can
   // carry both a Result and a populated Error field (e.g. Teams014 when Graph is unreachable);
   // counting it under both would double-count it across the Error badge and its Result segment.
-  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
-  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
+  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(resultKey(c)) && !c.error; }).length;
+  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(resultKey(c)) && !c.error; }).length;
   const pass  = CHECKS.filter(function(c) { return c.result === 'Pass' && !c.error; }).length;
   const na    = CHECKS.filter(function(c) { return c.result === 'NotApplicable' && !c.error; }).length;
   const info  = CHECKS.filter(function(c) { return c.result === 'Info' && !c.error; }).length;
@@ -1107,7 +1121,8 @@ function buildRecommendation(rec) {
 
 // ── Render a single card ─────────────────────────────────────────
 function createCard(check) {
-  const accepted   = isAccepted(check.checkId);
+  const key        = resultKey(check);
+  const accepted   = isAccepted(key);
   const hasError   = !!check.error;
   const isFailWarn = ['Fail','Warning'].includes(check.result);
   const showFix    = isFailWarn || hasError;
@@ -1124,7 +1139,8 @@ function createCard(check) {
 
   const card = document.createElement('div');
   card.className = 'card';
-  card.dataset.checkId  = check.checkId;
+  card.dataset.checkId   = check.checkId;
+  card.dataset.resultKey = key;
   card.dataset.category = check.category;
   card.dataset.result   = check.result;
   card.dataset.sev      = sevOf(check.severity);
@@ -1139,12 +1155,12 @@ function createCard(check) {
     actionsHtml += '<a class="btn-docs" href="' + safeHref(check.referenceUrl) + '" target="_blank" rel="noopener">&#x1F4D6; Microsoft Docs</a>';
   }
   if (['Fail','Warning'].includes(check.result) && !accepted) {
-    actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '">&#x2713; Accept Risk</button>';
+    actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">&#x2713; Accept Risk</button>';
   }
   if (accepted) {
-    const just = esc(getJustification(check.checkId));
+    const just = esc(getJustification(key));
     actionsHtml += '<span style="font-size:12px;color:var(--result-accepted)">Accepted: ' + just + '</span>';
-    actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '">Undo acceptance</button>';
+    actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">Undo acceptance</button>';
   }
 
   const errorHtml = check.error
@@ -1235,12 +1251,12 @@ const cardMap = {};
 sortedChecks.forEach(function(check) {
   const card = createCard(check);
   container.appendChild(card);
-  cardMap[check.checkId] = card;
+  cardMap[resultKey(check)] = card;
 });
 
 // ── Top 5 ────────────────────────────────────────────────────────
 function renderTop5() {
-  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(c.checkId); });
+  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)); });
   const resOrder   = {Fail:0, Warning:1};
   const top5 = actionable.slice().sort(function(a,b) {
     const rDiff = (resOrder[a.result] ?? 9) - (resOrder[b.result] ?? 9);
@@ -1258,9 +1274,11 @@ function renderTop5() {
     return;
   }
   top5.forEach(function(check, i) {
+    const key = resultKey(check);
     const rbClass = 'rb-' + slug(check.result);
     const row = document.createElement('div');
     row.className = 'top5-row';
+    row.dataset.resultKey = key;
     row.innerHTML =
       '<div class="top5-rank">' + (i+1) + '</div>' +
       '<div>' +
@@ -1273,7 +1291,7 @@ function renderTop5() {
         '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '</div>';
     row.addEventListener('click', function() {
-      const card = cardMap[check.checkId];
+      const card = cardMap[key];
       if (!card) return;
       const body = card.querySelector('.card-body');
       const chev = card.querySelector('.card-chevron');
@@ -1321,13 +1339,14 @@ function renderControlsRef() {
     html += '<div class="ctrl-section-header"><span class="cat-badge ' + cat.cls + '">' + esc(cat.id) + '</span><span>' + esc(cat.label) + '</span></div>';
     html += '<table class="ctrl-table"><thead><tr><th>ID</th><th>Name</th><th>Severity</th><th>What It Checks</th><th>Result</th><th>Docs</th></tr></thead><tbody>';
     checks.forEach(function(c) {
-      const accepted = isAccepted(c.checkId);
+      const key = resultKey(c);
+      const accepted = isAccepted(key);
       const hasError = !!c.error;
       // hasError wins over accepted - see the matching note in createCard().
       const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
       const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(c.result)));
       const desc = CONTROLS_META[c.checkId] || c.name;
-      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
+      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
       html += '<td><span class="sev-pill sev-' + slug(sevOf(c.severity)) + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
@@ -1347,9 +1366,9 @@ function renderControlsRef() {
 
   el.querySelectorAll('.ctrl-row').forEach(function(row) {
     row.addEventListener('click', function() {
-      const checkId = this.dataset.checkid;
+      const key = this.dataset.resultKey;
       switchToTab('All');
-      const card = cardMap[checkId];
+      const card = cardMap[key];
       if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     });
   });
@@ -1494,13 +1513,17 @@ document.getElementById('btn-collapse-all').addEventListener('click', function()
 });
 
 // ── Accept risk ──────────────────────────────────────────────────
-let pendingCheckId = null;
+let pendingKey = null;
 
 document.addEventListener('click', function(e) {
   const acceptBtn = e.target.closest('.btn-accept');
   if (acceptBtn) {
-    pendingCheckId = acceptBtn.dataset.checkid;
-    document.getElementById('modal-desc').textContent = 'Accepting risk for ' + pendingCheckId + '. Provide a business justification.';
+    pendingKey = acceptBtn.dataset.resultKey;
+    const pendingCheck = CHECKS.find(function(c){ return resultKey(c) === pendingKey; });
+    const label = pendingCheck
+      ? pendingCheck.checkId + (pendingCheck.affectedObject ? ' (' + pendingCheck.affectedObject + ')' : '')
+      : acceptBtn.dataset.checkid;
+    document.getElementById('modal-desc').textContent = 'Accepting risk for ' + label + '. Provide a business justification.';
     document.getElementById('modal-text').value = '';
     document.getElementById('modal-confirm').disabled = true;
     document.getElementById('modal-overlay').classList.add('open');
@@ -1509,9 +1532,9 @@ document.addEventListener('click', function(e) {
 
   const undoBtn = e.target.closest('.btn-undo');
   if (undoBtn) {
-    const checkId = undoBtn.dataset.checkid;
-    clearAccepted(checkId);
-    rebuildCard(checkId);
+    const key = undoBtn.dataset.resultKey;
+    clearAccepted(key);
+    rebuildCard(key);
     updateTabCounts();
     recalcScore();
     renderTop5();
@@ -1525,34 +1548,34 @@ document.getElementById('modal-text').addEventListener('input', function() {
 
 document.getElementById('modal-cancel').addEventListener('click', function() {
   document.getElementById('modal-overlay').classList.remove('open');
-  pendingCheckId = null;
+  pendingKey = null;
 });
 
 document.getElementById('modal-confirm').addEventListener('click', function() {
-  if (!pendingCheckId) return;
+  if (!pendingKey) return;
   const just = document.getElementById('modal-text').value.trim();
-  setAccepted(pendingCheckId, just);
+  setAccepted(pendingKey, just);
   document.getElementById('modal-overlay').classList.remove('open');
-  rebuildCard(pendingCheckId);
+  rebuildCard(pendingKey);
   updateTabCounts();
   recalcScore();
   renderTop5();
   applyFilters();
-  pendingCheckId = null;
+  pendingKey = null;
 });
 
 document.getElementById('modal-overlay').addEventListener('click', function(e) {
   if (e.target === this) { document.getElementById('modal-cancel').click(); }
 });
 
-function rebuildCard(checkId) {
-  const check = CHECKS.find(function(c){ return c.checkId === checkId; });
+function rebuildCard(key) {
+  const check = CHECKS.find(function(c){ return resultKey(c) === key; });
   if (!check) return;
-  const oldCard = cardMap[checkId];
+  const oldCard = cardMap[key];
   if (!oldCard) return;
   const newCard = createCard(check);
   oldCard.parentNode.replaceChild(newCard, oldCard);
-  cardMap[checkId] = newCard;
+  cardMap[key] = newCard;
   const idx = allCards.indexOf(oldCard);
   if (idx !== -1) allCards[idx] = newCard;
 }

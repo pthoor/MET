@@ -8,9 +8,11 @@
     committed - the generated file lives under Tests/Html/.tmp/ which is git-ignored.
 
 .PARAMETER Scenario
-    Rich   - a nine-check result set spanning MDO/EXO/Teams and every Result value.
-    Single - a single check (exercises the one-element JSON serialisation path).
-    Empty  - no checks at all.
+    Rich           - a nine-check result set spanning MDO/EXO/Teams and every Result value.
+    Single         - a single check (exercises the one-element JSON serialisation path).
+    Empty          - no checks at all.
+    RepeatedCheckId - three MET-EXO004 results with distinct AffectedObject values, all Fail
+                       (A-5: risk acceptance keyed on the result, not the CheckId).
 #>
 [CmdletBinding()]
 param(
@@ -18,7 +20,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId')]
     [string] $Scenario = 'Rich'
 )
 
@@ -73,6 +75,28 @@ $fixtures = switch ($Scenario) {
                 -Result 'NotApplicable' -Severity 'Low' -Score $null -AffectedObject 'Teams' `
                 -Finding 'Check could not run' `
                 -ErrorText 'Error "><img src=n8 onerror="window.__xssError=1">'
+        )
+    }
+
+    'RepeatedCheckId' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy A' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy B' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy C' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
         )
     }
 
