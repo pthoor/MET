@@ -203,7 +203,8 @@
                     -AffectedObject "All $($summaryItems.Count) $noun" `
                     -Finding ($findingLines -join "`n") `
                     -Recommendation $first.Recommendation `
-                    -ReferenceUrl $first.ReferenceUrl))
+                    -ReferenceUrl $first.ReferenceUrl `
+                    -Metadata $first.Metadata))
             } else {
                 $aggregated.Add($items[0])
             }
@@ -235,7 +236,8 @@
             -Finding ($findingLines -join "`n") `
             -Recommendation $first.Recommendation `
             -ReferenceUrl $first.ReferenceUrl `
-            -ErrorMessage $errorMessage))
+            -ErrorMessage $errorMessage `
+            -Metadata $first.Metadata))
     }
 
     return $aggregated.ToArray()

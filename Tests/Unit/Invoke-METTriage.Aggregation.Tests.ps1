@@ -65,4 +65,36 @@ Describe 'Invoke-METTriage default aggregation' {
             @($results | ForEach-Object AffectedObject) | Should -Contain 'Legal DL'
         }
     }
+
+    Context 'A-1: tenant provenance survives aggregation' {
+        BeforeEach {
+            Mock Get-AcceptedDomain {
+                @([PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' })
+            }
+        }
+
+        It 'Stamps METRunTenant on the all-info summary aggregate (both groups healthy)' {
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
+
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Metadata | Should -Not -BeNullOrEmpty
+            $results[0].Metadata['METRunTenant'] | Should -Be 'contoso.com'
+        }
+
+        It 'Stamps METRunTenant on the fail/warn aggregate (one group empty)' {
+            Mock Get-DistributionGroupMember {
+                param([string]$Identity, [string]$ResultSize)
+                if ($Identity -eq 'Legal DL') { return @() }
+                @([PSCustomObject]@{ RecipientType = 'MailUser'; PrimarySmtpAddress = 'alice@contoso.com' })
+            }
+
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
+
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Metadata | Should -Not -BeNullOrEmpty
+            $results[0].Metadata['METRunTenant'] | Should -Be 'contoso.com'
+        }
+    }
 }
