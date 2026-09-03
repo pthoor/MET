@@ -15,7 +15,9 @@ function New-METRestrictedFile {
             $acl.SetAccessRuleProtection($true, $false)
             foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRule($rule) | Out-Null }
             $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-            foreach ($who in @($identity, 'BUILTIN\Administrators')) {
+            $adminsSid = [System.Security.Principal.SecurityIdentifier]::new(
+                [System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+            foreach ($who in @($identity, $adminsSid)) {
                 $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
                         $who, 'FullControl', 'None', 'None', 'Allow'))
             }
