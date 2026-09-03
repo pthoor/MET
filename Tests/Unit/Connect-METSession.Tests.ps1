@@ -908,3 +908,62 @@ Describe 'Disconnect-METSession' {
         $script:METSessionInfo | Should -Not -BeNullOrEmpty
     }
 }
+
+Describe 'Connect-METSession concurrent session verification (A-2)' {
+    BeforeEach {
+        $script:METConnection = $null
+        $script:METSessionInfo = $null
+        Mock Get-Module {
+            [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1'; ModuleBase = '/fake/ExchangeOnlineManagement/3.10.1' }
+        } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+        Mock Get-METAssemblyFileVersion { [version]'4.83.1.0' }
+        Mock Test-METAssemblyLoadConflict { $null }
+        Mock Connect-ExchangeOnline {}
+    }
+
+    Context 'Two connected sessions belonging to different organizations' {
+        It 'Refuses to reuse, naming both organizations' {
+            Mock Get-ConnectionInformation {
+                @(
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-a.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-b.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                )
+            }
+
+            { Connect-METSession -DelegatedOrganization 'customer-a.onmicrosoft.com' -SkipGraph -SkipTeams -ErrorAction Stop } |
+                Should -Throw -ExpectedMessage '*customer-a.onmicrosoft.com*customer-b.onmicrosoft.com*'
+
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    Context 'Two connected sessions for the same matching organization' {
+        It 'Reuses without reconnecting' {
+            Mock Get-ConnectionInformation {
+                @(
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-a.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-a.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                )
+            }
+
+            { Connect-METSession -DelegatedOrganization 'customer-a.onmicrosoft.com' -SkipGraph -SkipTeams -ErrorAction Stop } | Should -Not -Throw
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    Context 'The requested org matches the second session but not the first' {
+        It 'Still refuses - a matching session elsewhere in the list is not sufficient' {
+            Mock Get-ConnectionInformation {
+                @(
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-b.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                    [PSCustomObject]@{ State = 'Connected'; Organization = 'customer-a.onmicrosoft.com'; DelegatedOrganization = $null; UserPrincipalName = 'ops@mssp.com' }
+                )
+            }
+
+            { Connect-METSession -DelegatedOrganization 'customer-a.onmicrosoft.com' -SkipGraph -SkipTeams -ErrorAction Stop } |
+                Should -Throw -ExpectedMessage '*customer-b.onmicrosoft.com*'
+
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+}

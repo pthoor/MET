@@ -183,9 +183,29 @@ function Connect-METSession {
             }
         }
 
-        $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-            Where-Object { $_.State -eq 'Connected' } |
-            Select-Object -First 1
+        # Exchange Online supports concurrent sessions in one process. Checking only the
+        # first connected session (the prior Select-Object -First 1) meant a process holding
+        # two live connections for different customers passed this guard whenever the first
+        # one happened to match the requested org, leaving the other customer's session live
+        # and cmdlet routing between them ambiguous - the same class of cross-customer leak
+        # the mismatch/app-only checks below exist to close, just missed for the concurrent
+        # case. Refusal here is unconditional on more than one distinct org being connected,
+        # regardless of whether either matches $requestedOrg: two customers' sessions live in
+        # one process is itself the unsafe state. Sessions with no resolvable org (both
+        # Organization and DelegatedOrganization empty) are excluded from the distinct-org set
+        # rather than counted as a distinct value, so they can't spuriously trip this guard.
+        $connectedSessions = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+            Where-Object { $_.State -eq 'Connected' })
+
+        $distinctOrgs = @($connectedSessions | ForEach-Object {
+            if ($_.DelegatedOrganization) { $_.DelegatedOrganization } else { $_.Organization }
+        } | Where-Object { $_ } | Sort-Object -Unique)
+
+        if ($distinctOrgs.Count -gt 1) {
+            throw "Exchange Online has $($connectedSessions.Count) live connections belonging to more than one organization ($($distinctOrgs -join ', ')). Cmdlet routing between them is ambiguous. Run Disconnect-METSession first, then reconnect to the correct organization."
+        }
+
+        $existing = $connectedSessions | Select-Object -First 1
 
         if ($existing) {
             # Reusing a live connection without checking whose tenant it belongs to is a
