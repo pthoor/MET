@@ -46,6 +46,7 @@ function Get-METReport {
 
     end {
       $effectiveTenantName = $TenantName
+      $provenanceDisagreesWithLiveSession = $false
       if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
         $provenanceTenant = $allResults |
           ForEach-Object {
@@ -73,6 +74,7 @@ function Get-METReport {
         if (-not [string]::IsNullOrWhiteSpace($provenanceTenant)) {
           $effectiveTenantName = $provenanceTenant
           if (-not [string]::IsNullOrWhiteSpace($liveTenant) -and $liveTenant -ne $provenanceTenant) {
+            $provenanceDisagreesWithLiveSession = $true
             Write-Warning "These results were gathered against '$provenanceTenant', but the live Exchange Online session is connected to '$liveTenant'. The report is labelled '$provenanceTenant'."
           }
         }
@@ -229,9 +231,13 @@ function Get-METReport {
         # deviceCodeFlow (or any) sign-in they see in their own logs with a known,
         # expected MET run instead of triaging it as a live incident. $null when
         # Get-METReport is called without ever going through Connect-METSession
-        # (e.g. piping hand-built result objects, as the unit tests do).
+        # (e.g. piping hand-built result objects, as the unit tests do), and also
+        # $null when the results carry provenance for a different tenant than the
+        # live session - $script:METSessionInfo describes whoever is connected
+        # *now*, not who gathered these results, and a wrong auth description is
+        # worse than none (A-1).
         $authInfoLine = $null
-        if ($script:METSessionInfo) {
+        if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
             $info = $script:METSessionInfo
             $modeLabel = switch ($info.AuthMode) {
                 'ServicePrincipal' { 'Service Principal (certificate)' }
@@ -297,7 +303,7 @@ function Get-METReport {
                 tenant         = $effectiveTenantName
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
-                authentication = if ($script:METSessionInfo) {
+                authentication = if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
                     [ordered]@{
                         authMode          = $script:METSessionInfo.AuthMode
                         deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed

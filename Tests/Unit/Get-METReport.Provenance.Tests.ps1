@@ -24,6 +24,11 @@ BeforeAll {
     }
 }
 
+AfterAll {
+    Remove-Item function:global:Get-AcceptedDomain -ErrorAction SilentlyContinue
+    InModuleScope MET { $script:METSessionInfo = $null }
+}
+
 Describe 'Get-METReport tenant provenance (A-1)' {
     Context 'Results carry provenance and the live connection reports a different tenant' {
         BeforeAll {
@@ -46,6 +51,51 @@ Describe 'Get-METReport tenant provenance (A-1)' {
                 Out-Null
             ($warnings -join ' ') | Should -Match 'customer-a\.onmicrosoft\.com'
             ($warnings -join ' ') | Should -Match 'customer-b\.onmicrosoft\.com'
+        }
+
+        It 'Suppresses the authentication block, since it would describe the wrong tenant''s session' {
+            InModuleScope MET {
+                $script:METSessionInfo = [PSCustomObject]@{
+                    AuthMode          = 'Interactive'
+                    DeviceCodeUsed    = $false
+                    TenantIdentity    = 'customer-b.onmicrosoft.com'
+                    ServicesConnected = @('ExchangeOnline')
+                    ConnectedAtUtc    = [datetime]::UtcNow
+                }
+            }
+
+            $out = New-StampedResult -Tenant 'customer-a.onmicrosoft.com' |
+                Get-METReport -Format JSON -WarningAction SilentlyContinue |
+                ConvertFrom-Json
+
+            $out.authentication | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Results carry provenance and the live connection reports the same tenant' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'customer-a.onmicrosoft.com'; Default = $true }
+            } -ModuleName MET
+        }
+
+        It 'Still populates the authentication block' {
+            InModuleScope MET {
+                $script:METSessionInfo = [PSCustomObject]@{
+                    AuthMode          = 'Interactive'
+                    DeviceCodeUsed    = $false
+                    TenantIdentity    = 'customer-a.onmicrosoft.com'
+                    ServicesConnected = @('ExchangeOnline')
+                    ConnectedAtUtc    = [datetime]::UtcNow
+                }
+            }
+
+            $out = New-StampedResult -Tenant 'customer-a.onmicrosoft.com' |
+                Get-METReport -Format JSON -WarningAction SilentlyContinue |
+                ConvertFrom-Json
+
+            $out.authentication | Should -Not -BeNullOrEmpty
+            $out.authentication.authMode | Should -Be 'Interactive'
         }
     }
 
