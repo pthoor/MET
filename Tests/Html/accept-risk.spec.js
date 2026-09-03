@@ -70,3 +70,41 @@ test.describe('risk acceptance keyed per result', () => {
     await expect(targetCard).toBeInViewport();
   });
 });
+
+// A-5 (residual collision): resultKey was checkId + affectedObject only. That still collides
+// for real checks whose sections all report the same AffectedObject - MET-EXO006 (Report
+// Submission Policy) does this for all ten of its New-METCheckResult calls. The
+// RepeatedCheckId fixture above varies AffectedObject, so it cannot catch this; this fixture
+// shares CheckId AND AffectedObject across all three results, distinguished only by Name.
+test.describe('risk acceptance keyed per result when AffectedObject is also shared', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/report-same-affected-object.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+  });
+
+  test('accepting one result leaves siblings sharing checkId+affectedObject unaccepted, and it survives reload', async ({ page }) => {
+    const cards = page.locator('[data-check-id="MET-EXO006"]');
+    await expect(cards).toHaveCount(3);
+
+    const before = parseInt(await page.locator('#tc-all').innerText(), 10);
+
+    await cards.nth(0).locator('.card-header').click();
+    await cards.nth(0).getByRole('button', { name: /accept risk/i }).click();
+    await expect(page.locator('#modal-overlay')).toHaveClass(/open/);
+    await page.locator('#modal-text').fill('Reviewed 2026-09-03, compensating control in place');
+    await expect(page.locator('#modal-confirm')).toBeEnabled();
+    await page.locator('#modal-confirm').click();
+    await expect(page.locator('#modal-overlay')).not.toHaveClass(/open/);
+
+    await expect(cards.nth(0)).toContainText('ACCEPTED');
+    await expect(cards.nth(1)).not.toContainText('ACCEPTED');
+    await expect(cards.nth(2)).not.toContainText('ACCEPTED');
+    expect(parseInt(await page.locator('#tc-all').innerText(), 10)).toBe(before - 1);
+
+    await page.reload();
+    const cardsAfterReload = page.locator('[data-check-id="MET-EXO006"]');
+    await expect(cardsAfterReload.nth(0)).toContainText('ACCEPTED');
+    await expect(cardsAfterReload.nth(1)).not.toContainText('ACCEPTED');
+    await expect(cardsAfterReload.nth(2)).not.toContainText('ACCEPTED');
+  });
+});

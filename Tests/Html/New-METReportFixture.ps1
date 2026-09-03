@@ -13,6 +13,11 @@
     Empty          - no checks at all.
     RepeatedCheckId - three MET-EXO004 results with distinct AffectedObject values, all Fail
                        (A-5: risk acceptance keyed on the result, not the CheckId).
+    SameAffectedObject - three MET-EXO006 results sharing both CheckId AND AffectedObject
+                       (the real-world shape - EXO006's ten sections all use AffectedObject
+                       'Report Submission Policy'), distinguished only by Name. Regression
+                       fixture for A-5's residual collision: CheckId + AffectedObject alone
+                       is not a unique key.
 #>
 [CmdletBinding()]
 param(
@@ -20,7 +25,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject')]
     [string] $Scenario = 'Rich'
 )
 
@@ -97,6 +102,28 @@ $fixtures = switch ($Scenario) {
                 -Finding 'ESNEnabled is false but end users have release permission' `
                 -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
                 -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+        )
+    }
+
+    'SameAffectedObject' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO006' -Category 'EXO' -Name 'Non-Microsoft Report Add-in' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Report Submission Policy' `
+                -Finding 'User reports are routed through a third-party add-in, not the built-in Microsoft report button' `
+                -Recommendation 'Review whether the non-Microsoft reporting flow still meets requirements.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/submissions-user-reported-messages-custom-mailbox'
+
+            New-FixtureResult -CheckId 'MET-EXO006' -Category 'EXO' -Name 'SecOps Mailbox Routing' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Report Submission Policy' `
+                -Finding 'No custom SecOps mailbox configured for reported messages' `
+                -Recommendation 'Configure a SecOps review mailbox for Junk/Not Junk/Phishing reports.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/submissions-user-reported-messages-custom-mailbox'
+
+            New-FixtureResult -CheckId 'MET-EXO006' -Category 'EXO' -Name 'User Post-Review Notifications' -Result 'Warning' `
+                -Severity 'Low' -Score 50 -AffectedObject 'Report Submission Policy' `
+                -Finding 'Users are not notified of the outcome after reporting a message' `
+                -Recommendation 'Enable post-review notifications so users learn the result of their report.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/submissions-user-reported-messages-custom-mailbox'
         )
     }
 

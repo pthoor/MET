@@ -834,12 +834,15 @@ const CONTROLS_CATEGORIES = [
 // Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one per
 // domain/policy/mailbox). CheckId alone is not a unique identity for a result, so every
 // acceptance helper, cardMap, and click target below is keyed on resultKey(check) instead.
-// Two results CAN still legitimately share both checkId and affectedObject (e.g. a check
-// emitting several findings about the same object) - that residual collision is accepted
-// deliberately rather than disambiguated with a render-time index, because an index is not
-// stable across page loads (result order can shift between runs) and this key must survive
-// a reload for the accepted state to mean anything.
-function resultKey(c){ return c.checkId + '|' + (c.affectedObject || ''); }
+// checkId + affectedObject alone is not enough either: MET-EXO006 emits ten independent
+// sections that all report AffectedObject 'Report Submission Policy', so several results can
+// share both fields in normal runs, not just in a hypothetical edge case. name is folded in
+// as a third component - it is already present on every check payload, is distinct across
+// EXO006's sections, and is exactly as stable across page loads/regenerations as checkId and
+// affectedObject are, so this preserves the stability property that ruled out a render-time
+// index (order can shift between runs, and the key must survive a reload for accepted state
+// to mean anything).
+function resultKey(c){ return c.checkId + '|' + (c.name || '') + '|' + (c.affectedObject || ''); }
 
 // ── localStorage helpers ─────────────────────────────────────────
 // Some browsers (notably Safari) throw a SecurityError accessing localStorage
