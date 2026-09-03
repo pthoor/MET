@@ -66,6 +66,7 @@
         AcceptedDomains = @()
         GroupMembers    = @{}    # keyed by group identity; populated lazily by checks
         AllMailboxes    = $null  # populated lazily by MDO008; reused by any future coverage check
+        TenantName      = ''
     }
 
     Write-Progress -Activity 'MET Triage' -Status 'Initializing - fetching accepted domains...' `
@@ -74,6 +75,11 @@
     try {
         $METContext.AcceptedDomains = @(Get-AcceptedDomain -ErrorAction Stop)
         Write-Verbose "Pre-fetched $($METContext.AcceptedDomains.Count) accepted domain(s)"
+
+        $defaultDomain = $METContext.AcceptedDomains | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+        if ($defaultDomain -and $defaultDomain.DomainName) {
+            $METContext.TenantName = [string]$defaultDomain.DomainName
+        }
     }
     catch {
         Write-Warning "Could not pre-fetch accepted domains: $_"
@@ -83,6 +89,18 @@
 
     $totalChecks = @($checkFiles).Count
     $currentIndex = 0
+
+    $stampProvenance = {
+        param($Result, [string] $Tenant)
+        if (-not $Tenant) { return $Result }
+        if ($null -eq $Result.Metadata) {
+            $Result.Metadata = @{ METRunTenant = $Tenant }
+        }
+        elseif (-not $Result.Metadata.ContainsKey('METRunTenant')) {
+            $Result.Metadata['METRunTenant'] = $Tenant
+        }
+        $Result
+    }
 
     foreach ($file in $checkFiles) {
         $currentIndex++
@@ -107,6 +125,7 @@
 
             if ($checkResults) {
                 foreach ($r in $checkResults) {
+                    $r = & $stampProvenance $r $METContext.TenantName
                     if ($PassThru) { Write-Output $r } else { $results.Add($r) }
                 }
             }
@@ -132,6 +151,7 @@
                 Error          = $_.ToString()
                 Metadata       = $null
             }
+            $errResult = & $stampProvenance $errResult $METContext.TenantName
             if ($PassThru) { Write-Output $errResult } else { $results.Add($errResult) }
         }
     }

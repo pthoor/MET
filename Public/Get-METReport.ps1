@@ -47,17 +47,37 @@ function Get-METReport {
     end {
       $effectiveTenantName = $TenantName
       if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
+        $provenanceTenant = $allResults |
+          ForEach-Object {
+            if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTenant')) {
+              [string]$_.Metadata['METRunTenant']
+            }
+          } |
+          Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+          Select-Object -First 1
+
+        $liveTenant = $null
         try {
           $defaultAcceptedDomain = Get-AcceptedDomain -ErrorAction Stop |
             Where-Object { $_.Default -eq $true } |
             Select-Object -First 1
 
           if ($defaultAcceptedDomain -and $defaultAcceptedDomain.DomainName) {
-            $effectiveTenantName = [string]$defaultAcceptedDomain.DomainName
+            $liveTenant = [string]$defaultAcceptedDomain.DomainName
           }
         }
         catch {
           Write-Verbose "Unable to discover default accepted domain: $($_.Exception.Message)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($provenanceTenant)) {
+          $effectiveTenantName = $provenanceTenant
+          if (-not [string]::IsNullOrWhiteSpace($liveTenant) -and $liveTenant -ne $provenanceTenant) {
+            Write-Warning "These results were gathered against '$provenanceTenant', but the live Exchange Online session is connected to '$liveTenant'. The report is labelled '$provenanceTenant'."
+          }
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($liveTenant)) {
+          $effectiveTenantName = $liveTenant
         }
       }
 
