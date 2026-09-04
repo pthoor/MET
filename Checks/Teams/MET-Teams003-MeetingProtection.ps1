@@ -1,4 +1,5 @@
 ﻿$issues = [System.Collections.Generic.List[string]]::new()
+$retrievalErrors = [System.Collections.Generic.List[string]]::new()
 
 # Check Teams external access settings via EXO/Graph
 try {
@@ -16,7 +17,7 @@ try {
     }
 }
 catch {
-    $issues.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve tenant federation configuration: $_"
 }
 
@@ -63,7 +64,7 @@ try {
     }
 }
 catch {
-    $issues.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve Teams meeting policies: $_"
 }
 
@@ -76,7 +77,7 @@ try {
     }
 }
 catch {
-    $issues.Add("Could not retrieve Teams channel policy: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve Teams channel policy: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve Teams channel policy: $_"
 }
 
@@ -86,7 +87,16 @@ if ($issues.Count -gt 0) {
         -Result $result -Severity Medium -AffectedObject 'Teams Meeting Policies' `
         -Finding ($issues -join '; ') `
         -Recommendation "Disable anonymous meeting join, set AutoAdmittedUsers to 'EveryoneInSameAndFederatedCompany' or 'OrganizerOnly', and review external chat permissions. Use the lobby as a security control." `
-        -ReferenceUrl 'https://aka.ms/teams-meeting-security'
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage ($retrievalErrors -join '; ')
+}
+elseif ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
+        -Result Warning -Severity Medium -AffectedObject 'Teams Meeting Policies' `
+        -Finding 'Teams meeting protection state could not be read in full, so anonymous join, lobby admission and external meeting chat exposure were not assessed.' `
+        -Recommendation 'Ensure the MicrosoftTeams module is installed and the session has permission to read Teams meeting, federation and channel policies, then rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage ($retrievalErrors -join '; ')
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `

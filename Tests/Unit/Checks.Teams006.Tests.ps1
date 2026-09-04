@@ -185,10 +185,16 @@ Describe 'MET-Teams006 External Access' {
         BeforeAll {
             Mock Get-CsTenantFederationConfiguration { throw 'Teams federation configuration unavailable' }
         }
-        It 'Returns Warning and Finding mentions Could not retrieve' {
+        It 'Returns Warning instead of false Pass' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'Could not retrieve'
+        }
+
+        It 'Records the retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Error   | Should -Match 'Could not retrieve tenant federation configuration'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
+            $results[0].Result  | Should -Not -Be 'Pass'
         }
     }
 }

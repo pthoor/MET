@@ -208,10 +208,33 @@ Describe 'MET-Teams003 Meeting Protection' {
             }
         }
 
-        It 'Returns Warning instead of false Pass' {
+        It 'Returns Warning instead of false Pass even though the other cmdlets returned clean data' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'Could not retrieve Teams meeting policies'
+        }
+
+        It 'Records the retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Error   | Should -Match 'Could not retrieve Teams meeting policies'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
+            $results[0].Result  | Should -Not -Be 'Pass'
+        }
+    }
+
+    Context 'Every meeting protection cmdlet fails' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration { throw 'Tenant federation configuration unavailable' }
+            Mock Get-CsTeamsMeetingPolicy { throw 'Teams meeting policy unavailable' }
+            Mock Get-CsTeamsChannelsPolicy { throw 'Teams channels policy unavailable' }
+        }
+
+        It 'Records every retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Result  | Should -Be 'Warning'
+            $results[0].Error   | Should -Match 'Could not retrieve tenant federation configuration'
+            $results[0].Error   | Should -Match 'Could not retrieve Teams meeting policies'
+            $results[0].Error   | Should -Match 'Could not retrieve Teams channel policy'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
         }
     }
 
