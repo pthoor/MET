@@ -21,7 +21,14 @@ function Find-METRuleContradictions {
     $domainMap = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[string]]]::new(
         [System.StringComparer]::OrdinalIgnoreCase)
     foreach ($mbx in $AllMailboxes) {
+        # Exchange can return a recipient value that is not an SMTP address. No
+        # RecipientDomainIs condition can match one, so it is left out of the
+        # domain map rather than keyed under a null domain.
         $d = ($mbx -split '@', 2)[1]
+        if ([string]::IsNullOrWhiteSpace($d)) {
+            Write-Verbose "Find-METRuleContradictions: recipient '$mbx' has no domain part and is excluded from domain matching."
+            continue
+        }
         if (-not $domainMap.ContainsKey($d)) {
             $domainMap[$d] = [System.Collections.Generic.List[string]]::new()
         }
