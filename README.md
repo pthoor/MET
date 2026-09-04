@@ -512,7 +512,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO004 | Anti-Spoofing | High | Spoof intelligence, DMARC honor, auth failure action |
 | MET-MDO005 | Anti-Malware | High | ZAP, common attachment filter, admin notifications |
 | MET-MDO006 | Anti-Spam Inbound | Medium | Spam/phish actions, high-confidence thresholds, BCL |
-| MET-MDO007 | Anti-Spam Outbound | Medium | Auto-forward disabled, send limit action, admin alerts |
+| MET-MDO007 | Anti-Spam Outbound | High | Auto-forward disabled, send limit action, admin alerts |
 | MET-MDO008 | Preset Policy Coverage | Medium | % of mailboxes covered by Standard or Strict preset |
 | MET-MDO009 | Zero-Hour Auto Purge | High | ZAP enabled for spam and phishing in all policies |
 | MET-MDO010 | Priority Accounts | Medium | Priority Account tag usage + differentiated protection policy |
@@ -536,7 +536,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
 | MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
 | MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
-| MET-EXO012 | Mailbox Forwarding | Critical | Mailboxes with SMTP forwarding configured, flagging silent (no local copy) forwarding |
+| MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured, flagging silent (no local copy) forwarding |
 | MET-EXO013 | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
 | MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |

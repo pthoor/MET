@@ -1,6 +1,6 @@
 # MET-EXO012 - Mailbox Forwarding Exfiltration Risk
 
-**Category:** EXO | **Severity:** Critical
+**Category:** EXO | **Severity:** High
 
 ## What it checks
 
@@ -31,6 +31,10 @@ Set-Mailbox -Identity <mailbox> -ForwardingSmtpAddress $null
 ```
 
 Pay particular attention to entries where `DeliverToMailboxAndForward` is `$false`, since these leave no trace in the owner's own mailbox.
+
+## Related checks
+
+Automatic mail forwarding is governed by three independent control planes, all of which must be closed: the remote domain `AutoForwardEnabled` setting (MET-EXO018), the outbound spam filter policy's `AutoForwardingMode` (MET-MDO007), and per-mailbox forwarding addresses (MET-EXO012). All three checks carry the same **High** severity - they assess one control at three layers, so a gap in any one of them leaves the same exfiltration path open.
 
 ## Reference
 

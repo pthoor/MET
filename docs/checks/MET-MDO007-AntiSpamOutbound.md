@@ -1,6 +1,6 @@
 ﻿# MET-MDO007 - Anti-Spam Outbound
 
-**Category:** MDO | **Severity:** Medium
+**Category:** MDO | **Severity:** High
 
 ## What it checks
 
@@ -29,6 +29,10 @@ Auto-forwarding rules are a common post-compromise technique for exfiltrating ma
 ## Recommendation
 
 Set `AutoForwardingMode` to `Off` and the sending limit action to `BlockUser`. Verify the `User restricted from sending email` alert policy separately for administrator notification coverage.
+
+## Related checks
+
+Automatic mail forwarding is governed by three independent control planes, all of which must be closed: the remote domain `AutoForwardEnabled` setting (MET-EXO018), the outbound spam filter policy's `AutoForwardingMode` (MET-MDO007), and per-mailbox forwarding addresses (MET-EXO012). All three checks carry the same **High** severity - they assess one control at three layers, so a gap in any one of them leaves the same exfiltration path open.
 
 ## Reference
 

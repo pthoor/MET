@@ -103,6 +103,7 @@ Describe 'MET-MDO007 outbound anti-spam effective coverage' {
         }
         $result=& "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
         $result.Result | Should -Be Fail
+        $result.Severity | Should -Be 'High'
         $result.Metadata.AffectedRecipients | Should -Be @('b@other.com')
     }
     It 'reports Automatic as Warning and does not require legacy notification recipients' {

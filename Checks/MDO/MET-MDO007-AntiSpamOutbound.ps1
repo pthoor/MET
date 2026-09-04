@@ -4,11 +4,11 @@ try {
     if ($METContext -and -not $METContext.AllMailboxes) { $METContext.AllMailboxes = $allSenders }
 }
 catch {
-    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result Warning -Severity Medium -AffectedObject 'All Senders' -Finding 'Unable to determine effective outbound anti-spam coverage because the sender list could not be retrieved.' -Recommendation 'Ensure the account has Exchange View-Only Recipients permission and rerun the assessment.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -ErrorMessage $_.ToString()
+    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result Warning -Severity High -AffectedObject 'All Senders' -Finding 'Unable to determine effective outbound anti-spam coverage because the sender list could not be retrieved.' -Recommendation 'Ensure the account has Exchange View-Only Recipients permission and rerun the assessment.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -ErrorMessage $_.ToString()
     return
 }
 if ($allSenders.Count -eq 0) {
-    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result NotApplicable -Severity Medium -AffectedObject 'Tenant (0 senders)' -Finding 'No assessable senders were found in the tenant.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam'
+    New-METCheckResult -CheckId 'MET-MDO007' -Category MDO -Name 'Anti-Spam Outbound Effective Coverage' -Result NotApplicable -Severity High -AffectedObject 'Tenant (0 senders)' -Finding 'No assessable senders were found in the tenant.' -ReferenceUrl 'https://aka.ms/mdo-outboundspam'
     return
 }
 $errors = [System.Collections.Generic.List[string]]::new()
@@ -28,4 +28,4 @@ $warnings = {
     param($policy, $policyType)
     if ($policy -and $policy.AutoForwardingMode -notin @('Off','On')) { "Automatic forwarding is '$($policy.AutoForwardingMode)' - system-controlled rather than explicitly disabled" }
 }
-New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO007' -Name 'Anti-Spam Outbound Effective Coverage' -ProtectionType 'Outbound Anti-Spam' -Severity Medium -Subjects $allSenders -SubjectLabel 'senders' -Resolution $resolution -GetPolicyIssues $evaluate -GetPolicyWarnings $warnings -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -Recommendation 'Apply a compliant outbound anti-spam policy to every affected sender. Explicitly disable automatic external forwarding and use BlockUser when sending limits are reached. Use the restricted-user alert policy for administrator notifications.'
+New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO007' -Name 'Anti-Spam Outbound Effective Coverage' -ProtectionType 'Outbound Anti-Spam' -Severity High -Subjects $allSenders -SubjectLabel 'senders' -Resolution $resolution -GetPolicyIssues $evaluate -GetPolicyWarnings $warnings -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-outboundspam' -Recommendation 'Apply a compliant outbound anti-spam policy to every affected sender. Explicitly disable automatic external forwarding and use BlockUser when sending limits are reached. Use the restricted-user alert policy for administrator notifications.'

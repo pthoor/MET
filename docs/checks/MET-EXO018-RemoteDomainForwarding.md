@@ -28,6 +28,8 @@ This check covers only one of **three independent control planes** for automatic
 
 Closing one while leaving the others open still permits mail to leave the tenant automatically.
 
+All three checks in this family carry the same **High** severity. They assess one control at three layers, so a gap in any one of them leaves the same exfiltration path open, and scoring them differently would have implied a difference in exposure that does not exist.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |

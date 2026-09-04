@@ -17,7 +17,7 @@ Describe 'MET-EXO012 Mailbox Forwarding' {
         It 'Returns Info' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Info'
-            $results[0].Severity | Should -Be 'Critical'
+            $results[0].Severity | Should -Be 'High'
         }
     }
 
@@ -35,7 +35,7 @@ Describe 'MET-EXO012 Mailbox Forwarding' {
         It 'Returns Warning, Finding shows the address mapping, no silent marker' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Severity | Should -Be 'Critical'
+            $results[0].Severity | Should -Be 'High'
             $results[0].Finding | Should -Match 'alice@contoso.com -> smtp:alice@external.com'
             $results[0].Finding | Should -Not -Match '\[silent'
         }
