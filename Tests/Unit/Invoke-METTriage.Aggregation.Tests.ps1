@@ -2,6 +2,7 @@ BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METWorstSeverity.ps1"
+    . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
     . "$root/Private/Expand-METGroupMembership.ps1"
     . "$root/Private/Get-METAssessableMailboxes.ps1"
     . "$root/Public/Invoke-METTriage.ps1"
@@ -18,6 +19,10 @@ BeforeAll {
     function Get-MgGroupTransitiveMember  { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
     function Get-DistributionGroupMember  { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
     function Get-UnifiedGroupLinks        { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
+    function Get-DkimSigningConfig        { [CmdletBinding()] param([string]$Identity) }
+    function Get-QuarantinePolicy         { [CmdletBinding()] param([string]$Identity) }
+    function Get-AtpPolicyForO365         { [CmdletBinding()] param([string]$Identity) }
+    function Get-SafeAttachmentPolicy     { [CmdletBinding()] param([string]$Identity) }
 }
 
 Describe 'Invoke-METTriage default aggregation' {
@@ -96,5 +101,141 @@ Describe 'Invoke-METTriage default aggregation' {
             $results[0].Metadata | Should -Not -BeNullOrEmpty
             $results[0].Metadata['METRunTenant'] | Should -Be 'contoso.com'
         }
+    }
+}
+
+Describe 'Invoke-METTriage mixed-result aggregation' {
+    BeforeEach {
+        Mock Get-AcceptedDomain { @() }
+    }
+
+    Context 'A check emits one Fail among many Pass results' {
+        BeforeEach {
+            # Nine healthy domains and one with DKIM switched off, all under MET-EXO002.
+            Mock Get-DkimSigningConfig {
+                @(1..4 | ForEach-Object { "ok$_.contoso.com" }) +
+                @('broken.contoso.com') +
+                @(5..9 | ForEach-Object { "ok$_.contoso.com" }) |
+                    ForEach-Object {
+                        [PSCustomObject]@{
+                            Domain                     = $_
+                            Enabled                    = ($_ -ne 'broken.contoso.com')
+                            Status                     = 'Valid'
+                            Selector1KeySize           = 2048
+                            Selector2KeySize           = 2048
+                            SelectorBeforeRotateOnDate = 'selector1'
+                            RotateOnDate               = $null
+                        }
+                    }
+            }
+        }
+
+        It 'Reports the aggregate as a Fail counting only the failing domain' {
+            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
+
+            $results.Count           | Should -Be 1
+            $results[0].Result       | Should -Be 'Fail'
+            $results[0].Score        | Should -Be 0
+            $results[0].Severity     | Should -Be 'High'
+            $results[0].AffectedObject | Should -Be '1 of 10 domains'
+        }
+
+        It 'Keeps only the failing domain in the aggregated Finding' {
+            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
+
+            $results[0].Finding | Should -Match 'broken\.contoso\.com'
+            $results[0].Finding | Should -Not -Match 'ok1\.contoso\.com'
+            $results[0].Error   | Should -BeNullOrEmpty
+        }
+
+        It 'Still returns all ten per-domain results with -Detailed' {
+            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -Detailed -WarningAction SilentlyContinue)
+
+            $results.Count | Should -Be 10
+            @($results | Where-Object Result -eq 'Fail').Count | Should -Be 1
+            @($results | Where-Object Result -eq 'Pass').Count | Should -Be 9
+        }
+    }
+
+    Context 'A check emits Warning results and no Fail' {
+        BeforeEach {
+            # Custom quarantine policies only - the four built-ins are filtered out by
+            # the check itself, so all three of these reach the aggregation.
+            Mock Get-QuarantinePolicy {
+                @(
+                    [PSCustomObject]@{ Name = 'CustomNoNotify1'; ESNEnabled = $false; EndUserQuarantinePermissionsValue = 23 }
+                    [PSCustomObject]@{ Name = 'CustomHealthy';   ESNEnabled = $true;  EndUserQuarantinePermissionsValue = 23 }
+                    [PSCustomObject]@{ Name = 'CustomNoNotify2'; ESNEnabled = $false; EndUserQuarantinePermissionsValue = 7 }
+                )
+            }
+        }
+
+        It 'Reports the aggregate as a Warning, not a Fail' {
+            $results = @(Invoke-METTriage -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
+
+            $results.Count             | Should -Be 1
+            $results[0].Result         | Should -Be 'Warning'
+            $results[0].Score          | Should -Be 50
+            $results[0].Severity       | Should -Be 'Medium'
+            $results[0].AffectedObject | Should -Be '2 of 3 quarantine policies'
+        }
+
+        It 'Names the warned policies and leaves the healthy one out of the Finding' {
+            $results = @(Invoke-METTriage -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
+
+            $results[0].Finding | Should -Match 'CustomNoNotify1'
+            $results[0].Finding | Should -Match 'CustomNoNotify2'
+            $results[0].Finding | Should -Not -Match 'CustomHealthy'
+        }
+    }
+
+    Context 'A check emits a result carrying an Error but no Fail or Warning' {
+        BeforeEach {
+            # The global policy answers without EnableATPForSPOTeamsODB, which MET-MDO002
+            # reports as NotApplicable with the absence recorded in ErrorMessage. The
+            # Built-In policy passes, so the group has an error item and no Fail/Warning.
+            Mock Get-AtpPolicyForO365 { [PSCustomObject]@{ EnableSafeDocs = $true } }
+            Mock Get-SafeAttachmentRule { @() }
+            Mock Get-SafeAttachmentPolicy {
+                @([PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' })
+            }
+        }
+
+        It 'Produces exactly the underlying mix the branch is meant to handle' {
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO002' -Detailed -WarningAction SilentlyContinue)
+
+            $results.Count | Should -Be 2
+            @($results.Result | Sort-Object) | Should -Be @('NotApplicable', 'Pass')
+            @($results | Where-Object { $_.Error }).Count | Should -Be 1
+        }
+
+        It 'Escalates the aggregate to Fail and carries the error text forward' {
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO002' -WarningAction SilentlyContinue)
+
+            $results.Count             | Should -Be 1
+            $results[0].Result         | Should -Be 'Fail'
+            $results[0].Severity       | Should -Be 'High'
+            $results[0].AffectedObject | Should -Be '1 of 2 policies'
+            $results[0].Error          | Should -Match 'did not return an EnableATPForSPOTeamsODB value'
+            $results[0].Finding        | Should -Match 'Global Safe Attachments Settings'
+            $results[0].Finding        | Should -Not -Match 'Built-In Protection Policy'
+        }
+    }
+}
+
+Describe 'Get-METAggregationNoun' {
+    It 'Calls the email authentication checks domains' {
+        Get-METAggregationNoun -CheckId 'MET-EXO001' | Should -Be 'domains'
+        Get-METAggregationNoun -CheckId 'MET-EXO002' | Should -Be 'domains'
+        Get-METAggregationNoun -CheckId 'MET-EXO003' | Should -Be 'domains'
+    }
+
+    It 'Calls the quarantine policy check quarantine policies' {
+        Get-METAggregationNoun -CheckId 'MET-EXO004' | Should -Be 'quarantine policies'
+    }
+
+    It 'Falls back to policies for a check with no noun of its own' {
+        Get-METAggregationNoun -CheckId 'MET-MDO001' | Should -Be 'policies'
+        Get-METAggregationNoun -CheckId 'MET-EXO099' | Should -Be 'policies'
     }
 }
