@@ -29,7 +29,10 @@ foreach ($policy in $antiPhishPolicies) {
 
     $issues = [System.Collections.Generic.List[string]]::new()
 
-    if (-not $policy.EnableSpoofIntelligence) {
+    if ($null -eq $policy.PSObject.Properties['EnableSpoofIntelligence'] -or $null -eq $policy.EnableSpoofIntelligence) {
+        $issues.Add('The EnableSpoofIntelligence property was not returned for this policy, so spoof intelligence was not established as enabled - reported as a gap rather than a pass, because a policy with it switched off returns nothing different here')
+    }
+    elseif (-not $policy.EnableSpoofIntelligence) {
         $issues.Add('Spoof intelligence is disabled')
     }
 

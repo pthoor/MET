@@ -83,7 +83,8 @@ Describe 'MET-MDO004 Anti-Spoofing' {
         It 'Grades the spoof-intelligence finding as Fail, not Warning' {
             $results = @(& $checkFile)
             $results.Count | Should -Be 1
-            $results[0].Finding | Should -Match 'Spoof intelligence is disabled'
+            $results[0].Finding | Should -Match 'EnableSpoofIntelligence property was not returned'
+            $results[0].Finding | Should -Not -Match 'Spoof intelligence is disabled'
             $results[0].Result  | Should -Be 'Fail'
         }
     }
@@ -100,7 +101,8 @@ Describe 'MET-MDO004 Anti-Spoofing' {
 
         It 'Grades the spoof-intelligence finding as Fail, not Warning' {
             $results = @(& $checkFile)
-            $results[0].Finding | Should -Match 'Spoof intelligence is disabled'
+            $results[0].Finding | Should -Match 'EnableSpoofIntelligence property was not returned'
+            $results[0].Finding | Should -Not -Match 'Spoof intelligence is disabled'
             $results[0].Result  | Should -Be 'Fail'
         }
     }
