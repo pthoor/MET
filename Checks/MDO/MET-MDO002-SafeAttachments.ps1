@@ -1,15 +1,41 @@
-﻿try {
+$atpGlobal = $null
+$atpRetrievalError = $null
+
+try {
     $atpGlobal = Get-AtpPolicyForO365 -ErrorAction Stop
-    if (-not $atpGlobal.EnableATPForSPOTeamsODB) {
-        New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
-            -Result Fail -Severity High -AffectedObject 'Global Safe Attachments Settings' `
-            -Finding 'Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is disabled (EnableATPForSPOTeamsODB = $false)' `
-            -Recommendation 'Run: Set-AtpPolicyForO365 -EnableATPForSPOTeamsODB $true. This global toggle must be on for Safe Attachments to protect Teams, SharePoint, and OneDrive file sharing.' `
-            -ReferenceUrl 'https://aka.ms/mdo-safeattachments'
-    }
 }
 catch {
+    $atpRetrievalError = "Could not retrieve the global Safe Attachments policy: $($_.Exception.Message)"
     Write-Verbose "Could not retrieve ATP global policy for O365: $_"
+}
+
+if ($atpRetrievalError) {
+    New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+        -Result Warning -Severity High -AffectedObject 'Global Safe Attachments Settings' `
+        -Finding 'The global Safe Attachments policy could not be read, so whether Safe Attachments protects SharePoint, OneDrive and Microsoft Teams file sharing was not established for this tenant. An unconfirmed state is reported as a gap rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.' `
+        -Recommendation 'Ensure the account has Security Reader or higher permissions, then rerun the assessment to establish the SharePoint, OneDrive and Microsoft Teams setting. The Safe Attachments policy results in this report cover email only and do not speak for that setting.' `
+        -ReferenceUrl 'https://aka.ms/mdo-safeattachments' -ErrorMessage $atpRetrievalError
+}
+elseif (-not $atpGlobal -or -not $atpGlobal.PSObject.Properties['EnableATPForSPOTeamsODB']) {
+    New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+        -Result NotApplicable -Severity High -AffectedObject 'Global Safe Attachments Settings' `
+        -Finding 'The EnableATPForSPOTeamsODB property was not returned by the global Safe Attachments policy, so whether Safe Attachments protects SharePoint, OneDrive and Microsoft Teams file sharing was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.' `
+        -Recommendation 'Confirm the setting directly with: Get-AtpPolicyForO365 | Format-List EnableATPForSPOTeamsODB. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-safeattachments' `
+        -ErrorMessage 'The global Safe Attachments policy did not return an EnableATPForSPOTeamsODB value.'
+}
+elseif ($atpGlobal.EnableATPForSPOTeamsODB) {
+    New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+        -Result Pass -Severity High -AffectedObject 'Global Safe Attachments Settings' `
+        -Finding 'Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is enabled (EnableATPForSPOTeamsODB = $true)' `
+        -ReferenceUrl 'https://aka.ms/mdo-safeattachments'
+}
+else {
+    New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+        -Result Fail -Severity High -AffectedObject 'Global Safe Attachments Settings' `
+        -Finding 'Safe Attachments for SharePoint, OneDrive, and Microsoft Teams is disabled (EnableATPForSPOTeamsODB = $false)' `
+        -Recommendation 'Run: Set-AtpPolicyForO365 -EnableATPForSPOTeamsODB $true. This global toggle must be on for Safe Attachments to protect Teams, SharePoint, and OneDrive file sharing.' `
+        -ReferenceUrl 'https://aka.ms/mdo-safeattachments'
 }
 
 try {

@@ -129,7 +129,8 @@ Describe 'MET-MDO002 Safe Attachments' {
         }
         It 'Returns Pass' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Be 'Pass'
         }
     }
 
@@ -143,11 +144,13 @@ Describe 'MET-MDO002 Safe Attachments' {
         }
         It 'Returns Fail' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Be 'Fail'
         }
         It 'Finding mentions Allow' {
             $results = & $checkFile
-            $results[0].Finding | Should -Match 'Allow'
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Finding | Should -Match 'Allow'
         }
     }
 
@@ -161,7 +164,89 @@ Describe 'MET-MDO002 Safe Attachments' {
         }
         It 'Returns Fail' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Be 'Fail'
+        }
+    }
+
+    Context 'Global SharePoint, OneDrive and Teams setting is enabled' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $true } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' }
+            }
+        }
+        It 'Reports the global setting as Pass instead of emitting nothing for it' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult | Should -Not -BeNullOrEmpty
+            $globalResult.Result | Should -Be 'Pass'
+            $globalResult.Error  | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Global SharePoint, OneDrive and Teams setting is disabled' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $false } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' }
+            }
+        }
+        It 'Returns Fail for the global setting' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult.Result | Should -Be 'Fail'
+        }
+    }
+
+    Context 'Global Safe Attachments policy cannot be retrieved' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { throw 'Access denied' }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' }
+            }
+        }
+        It 'Emits a result for the global setting carrying the failure in Error' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult | Should -Not -BeNullOrEmpty
+            $globalResult.Error | Should -Match 'Access denied'
+        }
+        It 'Does not report the unread global setting as Pass' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult | Should -Not -BeNullOrEmpty
+            $globalResult.Result | Should -Not -Be 'Pass'
+        }
+        It 'Finding says the setting was not established rather than naming a state' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult.Finding | Should -Match 'not established'
+        }
+        It 'Still assesses the Safe Attachment policies' {
+            $results = & $checkFile
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'Global policy does not return the EnableATPForSPOTeamsODB property' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { [PSCustomObject]@{ Identity = 'Default' } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' }
+            }
+        }
+        It 'Reports the absent property as unassessed, not as a pass or a disabled setting' {
+            $results = & $checkFile
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult.Result | Should -Be 'NotApplicable'
+            $globalResult.Error  | Should -Not -BeNullOrEmpty
+            $globalResult.Finding | Should -Match 'not established'
         }
     }
 }
