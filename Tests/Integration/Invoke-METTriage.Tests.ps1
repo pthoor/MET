@@ -133,10 +133,17 @@ Describe 'Invoke-METTriage' {
             $streamed | Should -Not -BeNullOrEmpty
         }
 
-        It 'Produces the same results as the default (collect-then-return) mode' {
-            $batch    = Invoke-METTriage -Category MDO
-            $streamed = Invoke-METTriage -Category MDO -PassThru | ForEach-Object { $_ }
-            $streamed.Count | Should -Be $batch.Count
+        It 'Streams exactly the results the collecting mode returns' {
+            $collected = @(Invoke-METTriage -Category MDO -Detailed)
+            $streamed  = @(Invoke-METTriage -Category MDO -PassThru | ForEach-Object { $_ })
+            $streamed.Count | Should -Be $collected.Count
+            @($streamed.CheckId | Sort-Object) | Should -Be @($collected.CheckId | Sort-Object)
+        }
+
+        It 'Aggregates same-CheckId results in the default mode but not when streaming' {
+            $batch    = @(Invoke-METTriage -Category MDO)
+            $streamed = @(Invoke-METTriage -Category MDO -PassThru | ForEach-Object { $_ })
+            $batch.Count | Should -Be @($streamed.CheckId | Sort-Object -Unique).Count
         }
     }
 
