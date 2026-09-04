@@ -577,4 +577,60 @@ Describe 'MET-EXO006 Submission Policy' {
             $consistencyResult.Finding | Should -Match 'old-secops@contoso.com'
         }
     }
+
+    Context 'Rule routes reports to more than one address' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
+                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
+                    ReportJunkAddresses = 'secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+                }
+            }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('secops@contoso.com', 'soc@contoso.com') } }
+        }
+        It 'Never renders the addresses space-joined' {
+            $results = & $checkFile
+            foreach ($result in $results) {
+                $result.AffectedObject | Should -Not -Match 'secops@contoso\.com soc@contoso\.com'
+                $result.Finding | Should -Not -Match 'secops@contoso\.com soc@contoso\.com'
+            }
+        }
+        It 'Compares the policy addresses against the first address only' {
+            $results = & $checkFile
+            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
+            $consistencyResult | Should -Not -BeNullOrEmpty
+            $consistencyResult.Result | Should -Be 'Pass'
+        }
+        It 'Names the first address as the SecOps mailbox and surfaces the additional one' {
+            $results = & $checkFile
+            $mailboxResult = $results | Where-Object { $_.Name -match 'SecOps Mailbox' }
+            $mailboxResult | Should -Not -BeNullOrEmpty
+            $mailboxResult.AffectedObject | Should -Be 'Report Submission Policy (secops@contoso.com)'
+            $mailboxResult.Finding | Should -Match "'secops@contoso\.com'"
+            $mailboxResult.Finding | Should -Match 'soc@contoso\.com'
+        }
+    }
+
+    Context 'Rule routes to more than one address and the policy has drifted' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
+                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
+                    ReportJunkAddresses = 'old-secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+                }
+            }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('secops@contoso.com', 'soc@contoso.com') } }
+        }
+        It 'Still detects the drift against the first address' {
+            $results = & $checkFile
+            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
+            $consistencyResult | Should -Not -BeNullOrEmpty
+            $consistencyResult.Result | Should -Be 'Warning'
+            $consistencyResult.Finding | Should -Match 'Junk reports go to'
+            $consistencyResult.Finding | Should -Match 'old-secops@contoso.com'
+            $consistencyResult.Finding | Should -Not -Match 'secops@contoso\.com soc@contoso\.com'
+        }
+    }
 }

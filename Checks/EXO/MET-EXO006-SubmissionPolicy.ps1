@@ -21,11 +21,21 @@ if (-not $policy) {
 
 # Resolve the custom submission mailbox from the associated rule
 $submissionMailbox = $null
+$additionalMailboxes = @()
 try {
     $rule = Get-ReportSubmissionRule -ErrorAction Stop
-    if ($rule -and $rule.SentTo) { $submissionMailbox = $rule.SentTo }
+    if ($rule -and $rule.SentTo) {
+        $ruleRecipients = @($rule.SentTo)
+        $submissionMailbox = $ruleRecipients | Select-Object -First 1
+        $additionalMailboxes = @($ruleRecipients | Select-Object -Skip 1)
+    }
 }
 catch { Write-Verbose "Could not retrieve report submission rule: $_" }
+
+$additionalMailboxNote = ''
+if ($additionalMailboxes.Count -gt 0) {
+    $additionalMailboxNote = " The rule also routes reports to $($additionalMailboxes -join ', '); only the first address is compared against the policy's own reporting addresses."
+}
 
 # ── Determine reporting mode from the combination of two flags ────────────────
 # EnableReportToMicrosoft  EnableThirdPartyAddress  Meaning
@@ -108,7 +118,7 @@ if (-not $reportingDisabled) {
         New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
             -Name 'User Reported Message Settings - SecOps Mailbox' `
             -Result Warning -Severity Low -AffectedObject "Report Submission Policy ($submissionMailbox)" `
-            -Finding "Custom mailbox '$submissionMailbox' is configured but the following report types are not routed to it: $($missingFlows -join ', ')." `
+            -Finding "Custom mailbox '$submissionMailbox' is configured but the following report types are not routed to it: $($missingFlows -join ', ').$additionalMailboxNote" `
             -Recommendation "In the Defender portal go to Settings > Email & collaboration > User reported settings and enable the custom mailbox for all three report types: Junk, Not Junk, and Phishing." `
             -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
     }
@@ -116,7 +126,7 @@ if (-not $reportingDisabled) {
         New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
             -Name 'User Reported Message Settings - SecOps Mailbox' `
             -Result Pass -Severity Medium -AffectedObject "Report Submission Policy ($submissionMailbox)" `
-            -Finding "All three report flows (Junk, Not Junk, Phishing) are routed to the SecOps mailbox '$submissionMailbox'." `
+            -Finding "All three report flows (Junk, Not Junk, Phishing) are routed to the SecOps mailbox '$submissionMailbox'.$additionalMailboxNote" `
             -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
     }
 }
