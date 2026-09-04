@@ -49,7 +49,7 @@ foreach ($policy in $antiPhishPolicies) {
     }
 
     if ($issues.Count -gt 0) {
-        $result = if ($policy.EnableSpoofIntelligence -eq $false) { 'Fail' } else { 'Warning' }
+        $result = if ($policy.EnableSpoofIntelligence -ne $true) { 'Fail' } else { 'Warning' }
         New-METCheckResult -CheckId 'MET-MDO004' -Category MDO -Name 'Anti-Spoofing' `
             -Result $result -Severity High -AffectedObject $label `
             -Finding ($issues -join '; ') `
