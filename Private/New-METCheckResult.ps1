@@ -32,7 +32,7 @@
         Recommendation = $Recommendation
         ReferenceUrl   = $ReferenceUrl
         Timestamp      = [datetime]::UtcNow
-        Error          = $ErrorMessage
+        Error          = if ([string]::IsNullOrEmpty($ErrorMessage)) { $null } else { $ErrorMessage }
         Metadata       = $Metadata
     }
 }

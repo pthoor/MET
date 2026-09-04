@@ -71,6 +71,15 @@ Describe 'New-METCheckResult' {
             $result.Error | Should -Be 'Connection refused'
         }
 
+        It 'Normalises an empty ErrorMessage to null rather than an empty string' {
+            $result = New-METCheckResult `
+                -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
+                -Result Warning -Severity Low -AffectedObject 'Obj' -Finding 'ok' `
+                -ErrorMessage (@() -join "`n")
+
+            $result.Error | Should -BeExactly $null
+        }
+
         It 'Error field is null when not provided' {
             $result = New-METCheckResult `
                 -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `

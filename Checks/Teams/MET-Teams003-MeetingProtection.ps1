@@ -88,7 +88,7 @@ if ($issues.Count -gt 0) {
         -Finding ($issues -join '; ') `
         -Recommendation "Disable anonymous meeting join, set AutoAdmittedUsers to 'EveryoneInSameAndFederatedCompany' or 'OrganizerOnly', and review external chat permissions. Use the lobby as a security control." `
         -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
-        -ErrorMessage ($retrievalErrors -join '; ')
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 elseif ($retrievalErrors.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
@@ -96,7 +96,7 @@ elseif ($retrievalErrors.Count -gt 0) {
         -Finding 'Teams meeting protection state could not be read in full, so anonymous join, lobby admission and external meeting chat exposure were not assessed.' `
         -Recommendation 'Ensure the MicrosoftTeams module is installed and the session has permission to read Teams meeting, federation and channel policies, then rerun the assessment.' `
         -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
-        -ErrorMessage ($retrievalErrors -join '; ')
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `

@@ -31,7 +31,7 @@ if ($issues.Count -gt 0) {
         -Finding ($issues -join '; ') `
         -Recommendation 'If guest access is enabled at all for this tenant, consider whether guests need chat-initiation and private-calling rights specifically, distinct from meeting participation. Disable AllowUserChat and AllowPrivateCalling for guest configurations unless there is a specific collaboration need - this is separate from meeting-level controls (see MET-Teams003) and from external tenant federation (see MET-Teams006). Run: Set-CsTeamsGuestMessagingConfiguration -AllowUserChat $false and Set-CsTeamsGuestCallingConfiguration -AllowPrivateCalling $false to restrict.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/teams/get-csteamsguestmessagingconfiguration' `
-        -ErrorMessage ($retrievalErrors -join '; ')
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 elseif ($retrievalErrors.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams007' -Category Teams -Name 'Guest Messaging/Calling Configuration' `
@@ -39,7 +39,7 @@ elseif ($retrievalErrors.Count -gt 0) {
         -Finding 'The Teams guest messaging and calling configuration could not be read in full, so guest-initiated chat and private calling exposure was not assessed.' `
         -Recommendation 'Ensure the MicrosoftTeams module is installed and the session has permission to read the guest messaging and guest calling configurations, then rerun the assessment.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/teams/get-csteamsguestmessagingconfiguration' `
-        -ErrorMessage ($retrievalErrors -join '; ')
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams007' -Category Teams -Name 'Guest Messaging/Calling Configuration' `
