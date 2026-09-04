@@ -125,4 +125,25 @@ Describe 'MET-Teams007 Guest Configuration' {
             $results[0].Result  | Should -Not -Be 'Pass'
         }
     }
+
+    Context 'guest messaging retrieval fails while guest calling is clean' {
+        BeforeAll {
+            Mock Get-CsTeamsGuestMessagingConfiguration { throw 'Guest messaging config unavailable' }
+            Mock Get-CsTeamsGuestCallingConfiguration {
+                [PSCustomObject]@{ AllowPrivateCalling = $false }
+            }
+        }
+
+        It 'Returns Warning rather than passing on the half it could read' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+        }
+
+        It 'Records the retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Error   | Should -Match 'Could not retrieve Teams guest messaging configuration'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
+            $results[0].Result  | Should -Not -Be 'Pass'
+        }
+    }
 }
