@@ -909,7 +909,7 @@ Describe 'Disconnect-METSession' {
     }
 }
 
-Describe 'Connect-METSession concurrent session verification (A-2)' {
+Describe 'Connect-METSession concurrent session verification' {
     BeforeEach {
         $script:METConnection = $null
         $script:METSessionInfo = $null

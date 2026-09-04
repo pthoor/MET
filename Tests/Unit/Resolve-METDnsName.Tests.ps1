@@ -46,7 +46,7 @@ Describe 'Resolve-METDnsName' {
     }
 }
 
-Describe 'Resolve-METDnsName DNS-over-HTTPS disclosure and control (A-4)' {
+Describe 'Resolve-METDnsName DNS-over-HTTPS disclosure and control' {
     BeforeEach {
         Set-Variable -Name METDohWarned -Scope Script -Value $false -ErrorAction SilentlyContinue
         Remove-Item Env:\MET_DOH_RESOLVER -ErrorAction SilentlyContinue

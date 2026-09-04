@@ -235,7 +235,7 @@ function Get-METReport {
         # $null when the results carry provenance for a different tenant than the
         # live session - $script:METSessionInfo describes whoever is connected
         # *now*, not who gathered these results, and a wrong auth description is
-        # worse than none (A-1).
+        # worse than none.
         $authInfoLine = $null
         if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
             $info = $script:METSessionInfo
@@ -859,7 +859,7 @@ function lsRemove(key) {
   try { localStorage.removeItem(key); } catch (e) { delete memStore[key]; }
 }
 // Deliberately NOT migrated from the legacy 'MET_accepted_<tenant>_<checkId>' scheme - those
-// entries are already collided (this is the bug A-5 fixes), so migrating would propagate a
+// entries are already collided under the CheckId-only scheme, so migrating would propagate a
 // wrong acceptance state into the new per-result scheme. Existing acceptances are dropped.
 function lsKey(key){ return 'MET_accepted_' + TENANT_ID + '_' + key; }
 function isAccepted(key){ return !!lsGet(lsKey(key)); }

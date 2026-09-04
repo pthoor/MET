@@ -210,7 +210,7 @@ test.describe('card expansion', () => {
     // point it must not silently lose its ERROR badge and go back to looking like a resolved risk.
     // Simulated here via localStorage (the mechanism Accept Risk itself writes to) since the
     // fixture's only Error case, MET-Teams014, is NotApplicable and has no Accept Risk button.
-    // Keyed on resultKey (checkId + '|' + name + '|' + affectedObject) per A-5, not on the
+    // Keyed on resultKey (checkId + '|' + name + '|' + affectedObject), not on the
     // bare CheckId - name was folded in because checkId + affectedObject alone still collides
     // for checks like MET-EXO006 whose sections share one AffectedObject.
     await page.evaluate(() => {

@@ -29,7 +29,7 @@ AfterAll {
     InModuleScope MET { $script:METSessionInfo = $null }
 }
 
-Describe 'Get-METReport tenant provenance (A-1)' {
+Describe 'Get-METReport tenant provenance' {
     Context 'Results carry provenance and the live connection reports a different tenant' {
         BeforeAll {
             Mock Get-AcceptedDomain {

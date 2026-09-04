@@ -12,11 +12,11 @@
     Single         - a single check (exercises the one-element JSON serialisation path).
     Empty          - no checks at all.
     RepeatedCheckId - three MET-EXO004 results with distinct AffectedObject values, all Fail
-                       (A-5: risk acceptance keyed on the result, not the CheckId).
+                       (risk acceptance is keyed on the result, not the CheckId).
     SameAffectedObject - three MET-EXO006 results sharing both CheckId AND AffectedObject
                        (the real-world shape - EXO006's ten sections all use AffectedObject
                        'Report Submission Policy'), distinguished only by Name. Regression
-                       fixture for A-5's residual collision: CheckId + AffectedObject alone
+                       fixture for the residual collision: CheckId + AffectedObject alone
                        is not a unique key.
 #>
 [CmdletBinding()]

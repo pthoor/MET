@@ -12,7 +12,7 @@ BeforeAll {
     }
 }
 
-Describe 'Get-METReport writes reports owner-only (A-3)' {
+Describe 'Get-METReport writes reports owner-only' {
     BeforeEach {
         $script:outDir = Join-Path ([System.IO.Path]::GetTempPath()) ("met-perm-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:outDir -Force | Out-Null

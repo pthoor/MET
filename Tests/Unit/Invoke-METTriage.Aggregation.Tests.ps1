@@ -66,7 +66,7 @@ Describe 'Invoke-METTriage default aggregation' {
         }
     }
 
-    Context 'A-1: tenant provenance survives aggregation' {
+    Context 'tenant provenance survives aggregation' {
         BeforeEach {
             Mock Get-AcceptedDomain {
                 @([PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' })

@@ -3,7 +3,7 @@ BeforeAll {
     . "$root/Private/Resolve-METTenantGuid.ps1"
 }
 
-Describe 'Resolve-METTenantGuid input handling (A-6)' {
+Describe 'Resolve-METTenantGuid input handling' {
     Context 'A well-formed GUID' {
         It 'Returns it without any network call' {
             Mock Invoke-RestMethod { throw 'must not be called' }

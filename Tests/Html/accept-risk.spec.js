@@ -1,6 +1,6 @@
 const { test, expect } = require('./fixtures');
 
-// A-5: risk acceptance is keyed on the result (checkId + affectedObject), not the CheckId
+// Risk acceptance is keyed on the result (checkId + affectedObject), not the CheckId
 // alone. Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one
 // per domain/policy/mailbox) - MET-EXO004 (Quarantine Policies) here, with three distinct
 // AffectedObject values, all Fail. Before the fix, accepting the first of three same-CheckId
@@ -71,7 +71,7 @@ test.describe('risk acceptance keyed per result', () => {
   });
 });
 
-// A-5 (residual collision): resultKey was checkId + affectedObject only. That still collides
+// Residual collision: resultKey was checkId + affectedObject only. That still collides
 // for real checks whose sections all report the same AffectedObject - MET-EXO006 (Report
 // Submission Policy) does this for all ten of its New-METCheckResult calls. The
 // RepeatedCheckId fixture above varies AffectedObject, so it cannot catch this; this fixture
