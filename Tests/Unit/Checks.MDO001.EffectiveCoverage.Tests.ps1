@@ -45,8 +45,8 @@ Describe 'MET-MDO001 effective recipient coverage' {
         $script:METContext = $null
         $script:checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO001-SafeLinks.ps1'
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@thoorsec.onmicrosoft.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@contoso.onmicrosoft.com' }
         }
         Mock Get-ATPProtectionPolicyRule { @() }
     }
@@ -83,7 +83,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
     It 'fails only the recipient outside a compliant domain-scoped policy' {
         Mock Get-SafeLinksRule {
             @(
-                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('thoor.tech')
+                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('contoso.com')
                 New-TestSafeLinksRule -Name 'Weak fallback' -Policy 'Weak fallback' -Priority 1
             )
         }
@@ -98,15 +98,15 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
         $result.Result | Should -Be 'Fail'
         $result.Metadata.CompliantRecipients | Should -Be 1
-        $result.Metadata.AffectedRecipients | Should -Be @('bob@thoorsec.onmicrosoft.com')
-        $result.Finding | Should -Match 'bob@thoorsec.onmicrosoft.com'
+        $result.Metadata.AffectedRecipients | Should -Be @('bob@contoso.onmicrosoft.com')
+        $result.Finding | Should -Match 'bob@contoso.onmicrosoft.com'
         $result.Finding | Should -Match 'Safe Links for email is disabled'
     }
 
     It 'excludes discovery mailboxes from the assessment population' {
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'DiscoverySearchMailbox@thoorsec.onmicrosoft.com'; RecipientTypeDetails = 'DiscoveryMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'DiscoverySearchMailbox@contoso.onmicrosoft.com'; RecipientTypeDetails = 'DiscoveryMailbox' }
         }
         Mock Get-SafeLinksRule { @(New-TestSafeLinksRule -Name 'Strict custom' -Policy 'Strict custom' -Priority 0) }
         Mock Get-SafeLinksPolicy { @(New-TestSafeLinksPolicy -Name 'Strict custom' -Compliant $true) }
@@ -115,7 +115,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
         $result.Result | Should -Be 'Pass'
         $result.Metadata.TotalRecipients | Should -Be 1
-        $result.Metadata.AffectedRecipients | Should -Not -Contain 'DiscoverySearchMailbox@thoorsec.onmicrosoft.com'
+        $result.Metadata.AffectedRecipients | Should -Not -Contain 'DiscoverySearchMailbox@contoso.onmicrosoft.com'
     }
 
     It 'returns NotApplicable when no assessable mailboxes remain' {
@@ -139,7 +139,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
     It 'returns Warning when a scoped group cannot be expanded' {
         $groupRule = New-TestSafeLinksRule -Name 'Group policy' -Policy 'Group policy' -Priority 0
-        $groupRule.SentToMemberOf = @('security@thoor.tech')
+        $groupRule.SentToMemberOf = @('security@contoso.com')
         Mock Get-SafeLinksRule { @($groupRule) }
         Mock Get-SafeLinksPolicy {
             @(
@@ -153,17 +153,17 @@ Describe 'MET-MDO001 effective recipient coverage' {
         $result = & $script:checkFile
 
         $result.Result | Should -Be 'Warning'
-        $result.Error | Should -Match 'security@thoor.tech'
+        $result.Error | Should -Match 'security@contoso.com'
     }
 
     It 'applies a parent-domain policy to subdomain recipients through the full check' {
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@lab.thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@lab.contoso.com'; RecipientTypeDetails = 'UserMailbox' }
         }
         Mock Get-SafeLinksRule {
             @(
-                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('thoor.tech')
+                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('contoso.com')
                 New-TestSafeLinksRule -Name 'Weak fallback' -Policy 'Weak fallback' -Priority 1
             )
         }

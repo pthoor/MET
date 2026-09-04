@@ -260,26 +260,26 @@ Describe 'MET-EXO014 Advanced Delivery Policy' {
 
         It 'Notes as Info when a SecOps mailbox is not tied to any reporting flow' {
             Mock Get-ExoSecOpsOverrideRule {
-                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@thoor.tech', 'adam@thoorsec.onmicrosoft.com') }
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@contoso.com', 'adam@contoso.onmicrosoft.com') }
             }
             Mock Get-ReportSubmissionPolicy { [PSCustomObject]@{ EnableReportToMicrosoft = $true; ReportJunkToCustomizedAddress = $false; ReportNotJunkToCustomizedAddress = $false; ReportPhishToCustomizedAddress = $false } }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@thoor.tech') } }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@contoso.com') } }
 
             $results = & $checkFile
             $purposeResult = $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - SecOps Mailbox Purpose' }
             $purposeResult | Should -Not -BeNullOrEmpty
             $purposeResult.Result | Should -Be 'Info'
             $purposeResult.Severity | Should -Be 'Low'
-            $purposeResult.Finding | Should -Match 'adam@thoorsec.onmicrosoft.com'
-            $purposeResult.Finding | Should -Not -Match 'pierre@thoor.tech'
+            $purposeResult.Finding | Should -Match 'adam@contoso.onmicrosoft.com'
+            $purposeResult.Finding | Should -Not -Match 'pierre@contoso.com'
         }
 
         It 'Does not note SecOps Mailbox Purpose when every SecOps mailbox is tied to reporting' {
             Mock Get-ExoSecOpsOverrideRule {
-                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@thoor.tech') }
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@contoso.com') }
             }
             Mock Get-ReportSubmissionPolicy { [PSCustomObject]@{ EnableReportToMicrosoft = $true; ReportJunkToCustomizedAddress = $false; ReportNotJunkToCustomizedAddress = $false; ReportPhishToCustomizedAddress = $false } }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@thoor.tech') } }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@contoso.com') } }
 
             $results = & $checkFile
             $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - SecOps Mailbox Purpose' } | Should -BeNullOrEmpty
