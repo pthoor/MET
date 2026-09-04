@@ -21,8 +21,8 @@ if ($auditDisabled -eq $true) {
 }
 elseif ($null -eq $auditDisabled) {
     New-METCheckResult -CheckId 'MET-EXO021' -Category EXO -Name 'Mailbox Audit Logging' `
-        -Result Pass -Severity Medium -AffectedObject 'Organization Configuration' `
-        -Finding 'Mailbox audit logging is assumed to be enabled - the AuditDisabled property was absent from the organization configuration, so this state was assumed from the platform default (mailbox auditing is on by default) rather than observed on this tenant' `
+        -Result Warning -Severity Medium -AffectedObject 'Organization Configuration' `
+        -Finding 'The AuditDisabled property was not returned by the organization configuration, so whether mailbox audit logging is on was not established for this tenant. An unconfirmed state is reported as a gap rather than a pass: the platform default is on, but a default is not an observation, and a tenant that has switched auditing off looks identical here' `
         -Recommendation 'Confirm the state directly: Get-OrganizationConfig | Format-List AuditDisabled. If it reports true, run Set-OrganizationConfig -AuditDisabled $false, then confirm per-mailbox auditing is on (Get-Mailbox -ResultSize Unlimited | Format-List UserPrincipalName, AuditEnabled).' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/purview/audit-mailboxes'
 }

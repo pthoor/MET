@@ -10,7 +10,7 @@ The property's sense is inverted relative to the result:
 
 - `AuditDisabled = $true` means mailbox auditing is **off** organization-wide - reported as a Fail
 - `AuditDisabled = $false` means mailbox auditing is **on** - reported as a Pass
-- The property being absent is reported as a Pass, because mailbox auditing is on by default on the platform, but the finding states explicitly that the value was assumed from that default rather than observed on this tenant
+- The property being absent is reported as a **Warning**, not a Pass. Mailbox auditing is on by default on the platform, but a default is not an observation: a tenant that has switched auditing off returns the same absent property, so the state is reported as not established
 
 ## Why it matters
 
@@ -25,7 +25,7 @@ Because the loss is silent and irreversible, this is worth verifying periodicall
 | Result | Condition |
 |---|---|
 | Pass | `AuditDisabled` is `$false` - mailbox auditing is enabled organization-wide |
-| Pass | `AuditDisabled` is absent - state assumed from the platform default (auditing on), noted in the finding as assumed rather than observed |
+| Warning | `AuditDisabled` is absent - the state was not established for this tenant, so it is reported as a gap rather than assumed from the platform default |
 | Fail | `AuditDisabled` is `$true` - mailbox auditing is turned off organization-wide |
 | Fail (Error) | Unable to retrieve the organization configuration (permissions issue) |
 

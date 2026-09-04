@@ -58,12 +58,13 @@ Describe 'MET-EXO021 Mailbox Audit Logging' {
             }
         }
 
-        It 'Returns Pass and states the value was assumed from the platform default' {
+        It 'Warns rather than passing on a state it did not observe' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'Medium'
-            $results[0].Finding | Should -Match 'absent'
-            $results[0].Finding | Should -Match 'platform default'
+            $results[0].Finding | Should -Match 'AuditDisabled'
+            $results[0].Finding | Should -Match 'not established'
+            $results[0].Finding | Should -Not -Match 'assumed to be enabled'
         }
     }
 
@@ -74,11 +75,12 @@ Describe 'MET-EXO021 Mailbox Audit Logging' {
             }
         }
 
-        It 'Returns Pass and states the value was assumed from the platform default' {
+        It 'Warns rather than passing on a state it did not observe' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'Medium'
-            $results[0].Finding | Should -Match 'assumed'
+            $results[0].Finding | Should -Match 'AuditDisabled'
+            $results[0].Finding | Should -Not -Match 'assumed to be enabled'
         }
     }
 
