@@ -536,7 +536,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
 | MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
 | MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
-| MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured, flagging silent (no local copy) forwarding |
+| MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
 | MET-EXO013 | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
 | MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
