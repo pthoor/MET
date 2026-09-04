@@ -80,4 +80,32 @@ Describe 'MET-EXO013 Spoof Intelligence Allow-List' {
             $results[0].Error | Should -Match 'Access denied'
         }
     }
+
+    Context 'allow entries omit the SpoofType property' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListSpoofItems {
+                @(
+                    [PSCustomObject]@{ SpoofedUser = 'ceo@contoso.com'; SendingInfrastructure = 'mail.evil-example.com'; Action = 'Allow' }
+                )
+            }
+        }
+
+        It 'Still returns Warning and names the entry whose type was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'High'
+            $results[0].Finding | Should -Match 'ceo@contoso.com via mail.evil-example.com'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the External count is reported as
+        # zero when SpoofType was never returned, so the higher-risk external-spoof
+        # exception is indistinguishable here from an internal one. The verdict is a
+        # Warning either way, so this is a reporting defect rather than a false Pass. Left
+        # pinned so it cannot change unnoticed.
+        It 'Currently reports zero External entries for a type it never read' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match '1 spoof intelligence allow entry\(ies\) found \(0 External\)'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }

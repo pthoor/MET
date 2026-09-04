@@ -187,3 +187,87 @@ Describe 'MET-MDO005 common attachment filter file types' {
         }
     }
 }
+
+Describe 'MET-MDO005/006/007 absent-property handling' {
+    BeforeEach {
+        $script:METContext = $null
+        Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
+    }
+
+    # ZapEnabled and EnableFileFilter are read with -not, which collapses an absent
+    # property into $false.
+    Context 'MET-MDO005: the effective anti-malware policy omits ZapEnabled and EnableFileFilter' {
+        BeforeEach {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+        }
+
+        It 'Does not return Pass on settings it never observed' {
+            $result = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Not -Be 'Pass'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports malware ZAP and
+        # the common attachment filter as disabled on the strength of properties Exchange
+        # Online never returned. The verdict is fail-closed and safe, but the sentence
+        # states an observation that was not made. Left pinned rather than corrected here
+        # so the defect is visible and cannot change unnoticed.
+        It 'Currently states both settings are disabled rather than that they were not returned' {
+            $result = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'ZAP for malware is disabled'
+            $result.Finding | Should -Match 'Common attachment filter is disabled'
+            $result.Finding | Should -Not -Match 'not returned'
+        }
+    }
+
+    # BulkThreshold is the one inbound anti-spam setting tested with a numeric comparison
+    # rather than an equality check. $null -gt 6 is $false, so an absent threshold raises
+    # no issue at all and the policy is graded compliant on a value never read.
+    Context 'MET-MDO006: an otherwise compliant anti-spam policy omits BulkThreshold' {
+        BeforeEach {
+            Mock Get-HostedContentFilterRule { @() }
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; SpamAction='MoveToJmf'; HighConfidenceSpamAction='Quarantine'
+                    PhishSpamAction='Quarantine'; HighConfidencePhishAction='Quarantine'
+                    HighConfidencePhishQuarantineTag='AdminOnlyAccessPolicy'; AllowedSenders=@(); AllowedSenderDomains=@() }
+            }
+        }
+
+        # Pins current behaviour, which is wrong: the bulk complaint level threshold was
+        # never returned, so nothing here distinguishes a policy at the recommended 6 from
+        # one left wide open, and the check reports the recipient as fully protected. Per
+        # the repo's own rule an absent property must not yield Pass. Left pinned rather
+        # than corrected here so the defect is visible and cannot change unnoticed.
+        It 'Currently returns Pass on a threshold that was never observed' {
+            $result = & "$root/Checks/MDO/MET-MDO006-AntiSpamInbound.ps1"
+            $result.Result | Should -Be 'Pass'
+            $result.Finding | Should -Not -Match 'Bulk complaint level threshold'
+            $result.Finding | Should -Not -Match 'not returned'
+        }
+    }
+
+    # The outbound check is the one that gets this right: AutoForwardingMode is compared
+    # against the documented value set rather than tested for truth, so an absent value
+    # falls outside it and is surfaced instead of being read as Off.
+    Context 'MET-MDO007: the effective outbound policy omits AutoForwardingMode' {
+        BeforeEach {
+            Mock Get-HostedOutboundSpamFilterRule { @() }
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ActionWhenThresholdReached='BlockUser' }
+            }
+        }
+
+        It 'Returns Warning rather than reading the absent value as disabled forwarding' {
+            $result = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $result.Result | Should -Be 'Warning'
+            $result.Severity | Should -Be 'High'
+            $result.Finding | Should -Match 'system-controlled rather than explicitly disabled'
+            $result.Finding | Should -Not -Match 'Automatic external forwarding is enabled'
+        }
+    }
+}

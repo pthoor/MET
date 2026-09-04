@@ -190,4 +190,46 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # The enabled-connector filter is Enabled -eq $true, so a connector object that omits
+    # Enabled is dropped before any of its settings are looked at.
+    Context 'a connector omits the Enabled property' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name              = 'LegacyConnector'
+                    ConnectorType     = 'OnPremises'
+                    RequireTls        = $false
+                    SenderIPAddresses = @()
+                    SenderDomains     = @('vendor.com')
+                }
+            }
+        }
+
+        # Pins current behaviour, which is wrong: a connector was returned and never
+        # assessed, yet the check reports that no enabled inbound connectors were found -
+        # a state it did not observe. Left pinned rather than corrected here so the defect
+        # is visible and cannot change unnoticed.
+        It 'Currently reports no enabled connectors rather than naming the connector it could not grade' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Finding | Should -Match 'No enabled inbound connectors found'
+            $results[0].Finding | Should -Not -Match 'LegacyConnector'
+        }
+    }
+
+    Context 'an enabled connector omits every authentication property' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{ Name = 'BareConnector'; Enabled = $true }
+            }
+        }
+
+        It 'Returns Warning naming the connector rather than passing it' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match "'BareConnector'"
+            $results[0].Finding | Should -Match 'does not require TLS'
+        }
+    }
 }

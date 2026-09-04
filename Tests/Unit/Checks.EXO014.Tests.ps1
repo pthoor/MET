@@ -285,4 +285,32 @@ Describe 'MET-EXO014 Advanced Delivery Policy' {
             $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - SecOps Mailbox Purpose' } | Should -BeNullOrEmpty
         }
     }
+
+    # Only rules whose Mode is 'Enforce' are counted. A rule object that omits Mode is
+    # filtered out before anything about its scope is assessed.
+    Context 'Override rules omit the Mode property' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Domains = @('fabrikam.com'); SenderIpRanges = @('10.0.0.0/8') }
+            }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; SentTo = @('secops@contoso.com') }
+            }
+            Mock Get-ReportSubmissionPolicy { throw 'not configured' }
+            Mock Get-ReportSubmissionRule { throw 'not configured' }
+        }
+
+        # Pins current behaviour, which is wrong: two override rules were returned and
+        # neither was assessed, yet the check reports that no enforceable overrides are
+        # configured - and the broad /8 sender range on the simulation rule goes unflagged.
+        # Left pinned rather than corrected here so the defect is visible and cannot change
+        # unnoticed.
+        It 'Currently reports no enforceable overrides for rules whose Mode was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Finding | Should -Match 'No enforceable Advanced Delivery'
+            $results[0].Finding | Should -Not -Match 'fabrikam.com'
+            ($results | Where-Object { $_.Name -match 'Sender Scope' }) | Should -BeNullOrEmpty
+        }
+    }
 }

@@ -190,4 +190,33 @@ Describe 'MET-EXO009 Quarantine Policy Verdict Alignment' {
             $results[0].Finding | Should -Not -Match 'Strict Preset Security Policy'
         }
     }
+
+    # PermissionToRelease is reached through a nested property. A quarantine policy
+    # object that omits EndUserQuarantinePermissions makes the whole expression $null,
+    # so the self-release test never fires for a tag the check did resolve.
+    Context 'The referenced quarantine policy omits EndUserQuarantinePermissions' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @([PSCustomObject]@{ Name = 'ContosoCustomTag' })
+            }
+            Mock Get-HostedContentFilterPolicy { @() }
+            Mock Get-MalwareFilterPolicy {
+                @([PSCustomObject]@{ Name = 'Custom Anti-Malware Policy'; QuarantineTag = 'ContosoCustomTag' })
+            }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { @() }
+        }
+
+        # Pins current behaviour, which is wrong: the check reports that the Malware
+        # verdict uses a quarantine policy preventing user self-release, having never read
+        # the permission that decides it. Per the repo's own rule an absent property must
+        # not yield Pass. Left pinned rather than corrected here so the defect is visible
+        # and cannot change unnoticed.
+        It 'Currently returns Pass on a permission that was never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Match 'prevent user self-release'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }

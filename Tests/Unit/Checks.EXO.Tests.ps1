@@ -144,6 +144,38 @@ Describe 'MET-EXO002 DKIM' {
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # Get-DkimSigningConfig omits Enabled on service or module versions that do not
+    # return it. The check reads it with -not, which collapses an absent property into
+    # $false, so the domain is graded on a signing state that was never observed.
+    Context 'The DKIM config object omits the Enabled property' {
+        BeforeAll {
+            Mock Get-DkimSigningConfig {
+                [PSCustomObject]@{ Domain = 'contoso.com'; Status = 'Valid'
+                    Selector1KeySize = 2048; Selector2KeySize = 2048
+                    SelectorBeforeRotateOnDate = 'selector1'; SelectorAfterRotateOnDate = 'selector2'
+                    RotateOnDate = [datetime]::UtcNow.AddDays(30) }
+            }
+        }
+
+        It 'Does not return Pass on a signing state it never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'contoso.com'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports DKIM signing
+        # as disabled for this domain on the strength of a property Exchange Online never
+        # returned. The verdict is fail-closed and safe, but the sentence states an
+        # observation that was not made. Left pinned rather than corrected here so the
+        # defect is visible and cannot change unnoticed.
+        It 'Currently states signing is disabled rather than that the property was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'DKIM signing is disabled for this domain'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
 
 Describe 'MET-EXO004 Quarantine Policies' {
@@ -237,6 +269,30 @@ Describe 'MET-EXO004 Quarantine Policies' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    # A reduced Get-QuarantinePolicy object omits both properties this check reads.
+    # -not $null is $true and $null -gt 0 is $false, so the policy falls through to the
+    # else branch and is graded on two values that were never read.
+    Context 'A custom quarantine policy omits ESNEnabled and EndUserQuarantinePermissionsValue' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy' }
+            }
+        }
+
+        # Pins current behaviour, which is wrong: the check reports the notification
+        # settings as consistent with the permissions granted to end users when it read
+        # neither the notification setting nor the permissions. Per the repo's own rule
+        # an absent property must not yield Pass. Left pinned rather than corrected here
+        # so the defect is visible and cannot change unnoticed.
+        It 'Currently returns Pass on two properties that were never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'ContosoCustomPolicy'
+            $results[0].Finding | Should -Match 'Notification settings are consistent'
+            $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
 }
@@ -436,6 +492,38 @@ Describe 'MET-EXO005 Tenant Allow/Block List' {
             $mainResult.Finding | Should -Match 'Url'
         }
     }
+
+    # An entry whose Action property is absent matches neither the Allow filter nor the
+    # Block filter, so an entry the check did read is counted as neither.
+    Context 'Tenant Allow/Block List entries omit the Action property' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Value = 'legacy@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        # Pins current behaviour, which is wrong: the list is reported as well-maintained
+        # on a count of zero allows and zero blocks, when the one entry that was returned
+        # simply carried no Action to classify it by. Per the repo's own rule an absent
+        # property must not yield Pass. Left pinned rather than corrected here so the
+        # defect is visible and cannot change unnoticed.
+        It 'Currently returns Pass and counts an entry it did read as neither allow nor block' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Pass'
+            $mainResult.AffectedObject | Should -Be 'TABL (0 allows, 0 blocks)'
+            $mainResult.Finding | Should -Match 'appear well-maintained'
+        }
+    }
 }
 
 Describe 'MET-EXO006 Submission Policy' {
@@ -580,6 +668,38 @@ Describe 'MET-EXO006 Submission Policy' {
             $consistencyResult.Finding | Should -Match 'Junk reports go to'
             $consistencyResult.Finding | Should -Match 'old-secops@contoso.com'
             $consistencyResult.Finding | Should -Not -Match 'secops@contoso\.com soc@contoso\.com'
+        }
+    }
+
+    # A report submission policy object that returns none of the reporting flags leaves
+    # every -eq $true comparison false, which is indistinguishable here from a tenant
+    # that has genuinely switched reporting off.
+    Context 'The report submission policy omits every reporting property' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{ Identity = 'DefaultReportSubmissionPolicy' }
+            }
+            Mock Get-ReportSubmissionRule { $null }
+        }
+
+        It 'Does not return Pass on a reporting configuration it never observed' {
+            $results = @(& $checkFile)
+            ($results | Where-Object { $_.Result -eq 'Pass' }) | Should -BeNullOrEmpty
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports user
+        # reporting as completely disabled on the strength of properties the service
+        # never returned. The verdict is fail-closed and safe, but the sentence states an
+        # observation that was not made. Left pinned rather than corrected here so the
+        # defect is visible and cannot change unnoticed.
+        It 'Currently states reporting is completely disabled rather than that the properties were not returned' {
+            $results = @(& $checkFile)
+            $buttonResult = $results | Where-Object { $_.Name -match 'Report Button' }
+            $buttonResult | Should -Not -BeNullOrEmpty
+            $buttonResult.Result | Should -Be 'Fail'
+            $buttonResult.AffectedObject | Should -Be 'Report Submission Policy'
+            $buttonResult.Finding | Should -Match 'completely disabled'
+            $buttonResult.Finding | Should -Not -Match 'not returned'
         }
     }
 }

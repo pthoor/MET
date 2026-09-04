@@ -61,6 +61,33 @@ Describe 'MET-Teams002 Safe Attachments for Teams' {
             $result.Error | Should -Match 'Access denied'
         }
     }
+
+    # MET-MDO002 reads this same property and has an explicit branch for it being
+    # absent (NotApplicable, "not established"). MET-Teams002 has no such branch.
+    Context 'The global policy omits the EnableATPForSPOTeamsODB property' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 { [PSCustomObject]@{ Identity = 'Default' } }
+        }
+
+        It 'Does not return Pass on a setting it never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'Global Safe Attachments Settings'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check states the setting is
+        # false, quoting a value the global policy never returned. The verdict is
+        # fail-closed and safe, but the sentence states an observation that was not made,
+        # and MET-MDO002 handles the identical property correctly. Left pinned rather than
+        # corrected here so the defect is visible and cannot change unnoticed.
+        It 'Currently states the setting is false rather than that the property was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'EnableATPForSPOTeamsODB = \$false'
+            $results[0].Finding | Should -Not -Match 'not established'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
 
 Describe 'MET-Teams003 Meeting Protection' {
@@ -357,6 +384,35 @@ Describe 'MET-Teams003 Meeting Protection' {
             $results[0].Finding | Should -Not -Match 'start a meeting with no organiser present'
         }
     }
+
+    # Every meeting-policy assertion in this check is an -eq $true comparison, so a
+    # policy object that returns none of the properties produces no issue at all.
+    Context 'The meeting policy object omits every property the check reads' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                [PSCustomObject]@{ Identity = 'Global' }
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+
+        # Pins current behaviour, which is wrong: the check reports meeting protection as
+        # correctly configured having read none of anonymous join, lobby admission,
+        # external meeting chat, PSTN lobby bypass, screen-control handoff or anonymous
+        # meeting start. Per the repo's own rule an absent property must not yield Pass.
+        # Left pinned rather than corrected here so the defect is visible and cannot
+        # change unnoticed.
+        It 'Currently returns Pass and claims the settings are correctly configured' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Match 'correctly configured'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
 
 Describe 'MET-Teams004 ZAP for Teams' {
@@ -503,6 +559,36 @@ Describe 'MET-Teams004 ZAP for Teams' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    # The quarantine tag is resolved to a policy object and read as
+    # $policy.EndUserQuarantinePermissions.PermissionToRelease. A policy object that
+    # omits EndUserQuarantinePermissions makes the whole expression $null, so the
+    # self-release test never fires.
+    Context 'The assigned quarantine policy omits EndUserQuarantinePermissions' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag             = 'ContosoCustomTag'
+                    HighConfidencePhishQuarantineTag = 'ContosoCustomTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy { [PSCustomObject]@{ Name = 'ContosoCustomTag' } }
+        }
+
+        # Pins current behaviour, which is wrong: the check reports that the quarantine
+        # policies do not allow user self-release having never read the permission that
+        # decides it. Per the repo's own rule an absent property must not yield Pass.
+        # Left pinned rather than corrected here so the defect is visible and cannot
+        # change unnoticed.
+        It 'Currently returns Pass and claims users cannot self-release' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Match 'quarantine policies do not allow user self-release'
+            $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
 }

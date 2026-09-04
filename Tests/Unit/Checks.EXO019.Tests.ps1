@@ -169,4 +169,30 @@ Describe 'MET-EXO019 SMTP Client Authentication' {
             $results[0].Error | Should -Match 'Access denied'
         }
     }
+
+    # Get-EXOCasMailbox returns $null for SmtpClientAuthenticationDisabled on a mailbox
+    # that inherits the tenant setting, which the check reads as "no override". A mailbox
+    # object that omits the property entirely is indistinguishable from that.
+    Context 'The CAS mailbox objects omit SmtpClientAuthenticationDisabled' {
+        BeforeAll {
+            Mock Get-TransportConfig { [PSCustomObject]@{ SmtpClientAuthenticationDisabled = $true } }
+            Mock Get-EXOCasMailbox {
+                @(
+                    [PSCustomObject]@{ PrimarySmtpAddress = 'a@contoso.com' }
+                    [PSCustomObject]@{ PrimarySmtpAddress = 'b@contoso.com' }
+                )
+            }
+        }
+
+        # Pins current behaviour. An absent value here is not separated from the documented
+        # $null that means "inherits the tenant setting", so the check states that no
+        # mailbox re-enables SMTP AUTH on the strength of a property it may never have been
+        # given. Left pinned so it cannot change unnoticed.
+        It 'Currently returns Pass and claims no mailbox re-enables SMTP AUTH' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Match 'no mailbox explicitly re-enables it'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }

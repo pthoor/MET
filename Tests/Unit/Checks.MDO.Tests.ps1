@@ -111,6 +111,35 @@ Describe 'MET-MDO001 Safe Links' {
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # A Safe Links policy object that returns none of the settings the check reads is
+    # indistinguishable, to a -not test, from one that has every setting switched off.
+    Context 'The effective Safe Links policy omits every setting the check reads' {
+        BeforeAll {
+            Mock Get-SafeLinksRule   { @() }
+            Mock Get-SafeLinksPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy' }
+            }
+        }
+
+        It 'Does not return Pass on settings it never observed' {
+            $results = & $checkFile
+            $results[0].Result | Should -Not -Be 'Pass'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports each setting
+        # as disabled on the strength of properties Exchange Online never returned. The
+        # verdict is fail-closed and safe, but the sentence states an observation that was
+        # not made. Left pinned rather than corrected here so the defect is visible and
+        # cannot change unnoticed.
+        It 'Currently states each setting is disabled rather than that it was not returned' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'Safe Links for email is disabled'
+            $results[0].Finding | Should -Match 'Real-time URL scanning is disabled'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
 
 Describe 'MET-MDO002 Safe Attachments' {
@@ -249,6 +278,60 @@ Describe 'MET-MDO002 Safe Attachments' {
             $globalResult.Finding | Should -Match 'not established'
         }
     }
+
+    # Get-SafeAttachmentPolicy omits Action on a reduced object. The check tests it with
+    # -eq 'Allow', so an absent Action is read as "not Allow" and never questioned.
+    Context 'An enabled Safe Attachments policy omits the Action property' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $true } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true }
+            }
+        }
+
+        # Pins current behaviour, which is wrong: the policy is reported as protecting
+        # mail with an action the check never read, and the empty value is rendered
+        # straight into the Finding. Per the repo's own rule an absent property must not
+        # yield Pass. Left pinned rather than corrected here so the defect is visible and
+        # cannot change unnoticed.
+        It 'Currently returns Pass and renders an empty action into the Finding' {
+            $results = & $checkFile
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult | Should -Not -BeNullOrEmpty
+            $policyResult.Result | Should -Be 'Pass'
+            $policyResult.Finding | Should -Match "Safe Attachments is enabled with action ''"
+            $policyResult.Finding | Should -Not -Match 'not returned'
+        }
+    }
+
+    # Enable is read with -not, so an absent Enable is graded as a disabled policy.
+    Context 'A Safe Attachments policy omits the Enable property' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365     { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $true } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy {
+                [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Action = 'Block' }
+            }
+        }
+
+        It 'Does not return Pass on a state it never observed' {
+            $results = & $checkFile
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Not -Be 'Pass'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports Safe
+        # Attachments as disabled for a property that was never returned. Left pinned so
+        # the defect is visible and cannot change unnoticed.
+        It 'Currently states Safe Attachments is disabled rather than that the property was not returned' {
+            $results = & $checkFile
+            $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
+            $policyResult.Result | Should -Be 'Fail'
+            $policyResult.Finding | Should -Match 'Safe Attachments is disabled'
+            $policyResult.Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
 
 Describe 'MET-MDO009 ZAP' {
@@ -316,6 +399,35 @@ Describe 'MET-MDO009 ZAP' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Finding | Should -Match 'phish'
+        }
+    }
+
+    # An anti-spam policy object that returns neither ZAP property leaves both -not
+    # tests true, which is indistinguishable from both settings being switched off.
+    Context 'The effective anti-spam policy omits SpamZapEnabled and PhishZapEnabled' {
+        BeforeAll {
+            Mock Get-HostedContentFilterRule   { @() }
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name = 'Default'; IsDefault = $true }
+            }
+        }
+
+        It 'Does not return Pass on settings it never observed' {
+            $results = & $checkFile
+            $results[0].Result | Should -Not -Be 'Pass'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check reports both ZAP
+        # settings as disabled on the strength of properties Exchange Online never
+        # returned. The verdict is fail-closed and safe, but the sentence states an
+        # observation that was not made. Left pinned rather than corrected here so the
+        # defect is visible and cannot change unnoticed.
+        It 'Currently states both ZAP settings are disabled rather than that they were not returned' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'ZAP for spam is disabled'
+            $results[0].Finding | Should -Match 'ZAP for phishing is disabled'
+            $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
 }

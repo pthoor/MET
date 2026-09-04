@@ -115,4 +115,21 @@ Describe 'MET-EXO017 Quarantine Notification Cadence' {
             $results[0].Error | Should -Match 'Access Denied'
         }
     }
+
+    Context 'The global quarantine policy omits EndUserSpamNotificationFrequency' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'DefaultGlobalTag' }
+            }
+        }
+
+        It 'Reports the cadence as undetermined rather than naming one it never read' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Severity | Should -Be 'Informational'
+            $results[0].AffectedObject | Should -Be 'Global Quarantine Notification Settings'
+            $results[0].Finding | Should -Match 'could not be determined'
+            $results[0].Finding | Should -Not -Match 'currently sent every'
+        }
+    }
 }

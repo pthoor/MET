@@ -88,4 +88,30 @@ Describe 'MET-EXO016 ARC Trusted Sealers' {
             $results[0].Error | Should -Match 'Access Denied'
         }
     }
+
+    Context 'The ARC configuration omits the ArcTrustedSealers property' {
+        BeforeAll {
+            Mock Get-ArcConfig {
+                [PSCustomObject]@{ Identity = 'Default' }
+            }
+        }
+
+        It 'Does not return Pass on a list it never read' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'ARC Trusted Sealers'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check states no trusted
+        # sealers are configured and that there is nothing to review, having never read the
+        # property that lists them. The result is Info and carries no score, so this is a
+        # reporting defect rather than a false Pass. Left pinned so it cannot change
+        # unnoticed.
+        It 'Currently states nothing is configured rather than that the property was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Finding | Should -Match 'No ARC trusted sealers configured'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }

@@ -88,4 +88,29 @@ Describe 'MET-EXO015 External Sender Tag' {
             $results[0].Recommendation | Should -Match 'View-Only Organization Management'
         }
     }
+
+    Context 'The configuration omits the Enabled property' {
+        BeforeAll {
+            Mock Get-ExternalInOutlook {
+                [PSCustomObject]@{ Identity = 'Default'; AllowList = @() }
+            }
+        }
+
+        It 'Does not return Pass on a setting it never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'External Sender Tag Configuration'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check states external sender
+        # tagging is disabled on the strength of a property Exchange Online never returned.
+        # The verdict is a Warning either way, so this is a reporting defect rather than a
+        # false Pass. Left pinned so it cannot change unnoticed.
+        It 'Currently states tagging is disabled rather than that the property was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'External sender tagging is disabled'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }

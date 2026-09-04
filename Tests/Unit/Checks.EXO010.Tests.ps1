@@ -70,4 +70,30 @@ Describe 'MET-EXO010 Direct Send' {
             $results[0].Error | Should -Match 'Access denied'
         }
     }
+
+    Context 'The RejectDirectSend property is absent from the organization configuration' {
+        BeforeAll {
+            Mock Get-OrganizationConfig {
+                [PSCustomObject]@{ Name = 'contoso.onmicrosoft.com' }
+            }
+        }
+
+        It 'Does not return Pass on a setting it never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].AffectedObject | Should -Be 'Organization Configuration'
+        }
+
+        # Pins current behaviour, whose wording is wrong: the check states RejectDirectSend
+        # is disabled, quoting a property the organization configuration never returned.
+        # The verdict is fail-closed and safe, but the sentence states an observation that
+        # was not made. Left pinned rather than corrected here so the defect is visible and
+        # cannot change unnoticed.
+        It 'Currently states RejectDirectSend is disabled rather than that it was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'RejectDirectSend is disabled'
+            $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
 }
