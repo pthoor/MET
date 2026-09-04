@@ -10,7 +10,6 @@
     function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }
-    function Get-TransportRule               { [CmdletBinding()] param([string]$ResultSize) }
 }
 
 Describe 'MET-EXO002 DKIM' {
@@ -245,6 +244,50 @@ Describe 'MET-EXO004 Quarantine Policies' {
 Describe 'MET-EXO005 Tenant Allow/Block List' {
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO005-TenantAllowBlockList.ps1'
+    }
+
+    # These dates are fixed rather than relative to Get-Date: entries built from the
+    # current clock are never older than the check's 90-day cutoff, so the stale-allow
+    # branch would never run.
+    Context 'Allow entries are past their expiration date or untouched for over 90 days' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'legacy@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = ([datetime]::new(2020, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)) }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'bad@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    'Url' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'https://expired.vendor.com'; ExpirationDate = ([datetime]::new(2021, 6, 1, 0, 0, 0, [System.DateTimeKind]::Utc)); LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'https://bad.vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Returns Warning counting both stale allow entries' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Warning'
+            $mainResult.Severity | Should -Be 'Low'
+            $mainResult.AffectedObject | Should -Be 'TABL (2 allows, 2 blocks)'
+            $mainResult.Finding | Should -Match '2 allow entry\(ies\) are stale'
+        }
+
+        It 'Does not attribute the Warning to wildcards or to the allow/block ratio' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult.Finding | Should -Not -Match 'wildcard'
+            $mainResult.Finding | Should -Not -Match 'significantly outnumber'
+            $mainResult.Finding | Should -Not -Match 'no corresponding block entries'
+        }
     }
 
     Context 'Advanced Delivery URL allow entries present alongside a well-maintained TABL' {
