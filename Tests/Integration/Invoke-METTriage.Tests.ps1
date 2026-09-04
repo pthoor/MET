@@ -156,6 +156,28 @@ Describe 'Invoke-METTriage' {
         }
     }
 
+    Context 'A check that produces no output' {
+
+        It 'Emits a NotApplicable placeholder rather than vanishing from the run' {
+            try {
+                Set-Item -Path 'function:global:Get-AntiPhishPolicy' -Value { @() }
+                Set-Item -Path 'function:global:Get-AntiPhishRule'   -Value { @() }
+                $results = @(Invoke-METTriage -CheckId 'MET-MDO004' -Detailed)
+            }
+            finally {
+                Remove-Item -Path 'function:global:Get-AntiPhishPolicy' -ErrorAction SilentlyContinue
+                Remove-Item -Path 'function:global:Get-AntiPhishRule'   -ErrorAction SilentlyContinue
+            }
+
+            $results.Count            | Should -Be 1
+            $results[0].CheckId       | Should -Be 'MET-MDO004'
+            $results[0].Category      | Should -Be 'MDO'
+            $results[0].Result        | Should -Be 'NotApplicable'
+            $results[0].Severity      | Should -Be 'Informational'
+            $results[0].Finding       | Should -Match 'produced no result'
+        }
+    }
+
     Context 'Error resilience' {
 
         It 'Does not throw when all checks fail to connect' {

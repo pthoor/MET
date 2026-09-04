@@ -129,6 +129,16 @@
                     if ($PassThru) { Write-Output $r } else { $results.Add($r) }
                 }
             }
+            else {
+                $checkName = [regex]::Replace((($file.BaseName -split '-')[-1]), '(?<=[a-z0-9])(?=[A-Z])', ' ')
+                $placeholder = New-METCheckResult -CheckId $checkIdDisplay -Category $file.Directory.Name `
+                    -Name $checkName -Result NotApplicable -Severity Informational `
+                    -AffectedObject 'Tenant' `
+                    -Finding 'The check ran without error but produced no result, which usually means the cmdlet it reads returned no objects. Nothing was asserted about this control.' `
+                    -Recommendation 'Confirm the relevant policies exist in the tenant, and that the account running MET can enumerate them.'
+                $placeholder = & $stampProvenance $placeholder $METContext.TenantName
+                if ($PassThru) { Write-Output $placeholder } else { $results.Add($placeholder) }
+            }
         }
         catch {
             $checkIdPart = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
