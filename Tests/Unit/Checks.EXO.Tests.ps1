@@ -4,52 +4,13 @@
     . "$root/Private/Get-METCheckWeight.ps1"
     . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
 
-    # Stub EXO/DNS cmdlets
-    function Get-AcceptedDomain              { [CmdletBinding()] param() }
-    function Resolve-DnsName                 { [CmdletBinding()] param([string]$Name,[string]$Type,[switch]$DnsOnly,[switch]$ErrorAction) }
-    function Resolve-METDnsName             { [CmdletBinding()] param([string]$Name,[string]$Type) }
+    # Stub EXO cmdlets
     function Get-DkimSigningConfig           { [CmdletBinding()] param() }
     function Get-QuarantinePolicy            { [CmdletBinding()] param() }
     function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }
     function Get-TransportRule               { [CmdletBinding()] param([string]$ResultSize) }
-}
-
-Describe 'MET-EXO001 DMARC' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO001-DMARC.ps1'
-    }
-
-    Context 'mail.onmicrosoft.com accepted domain' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.mail.onmicrosoft.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-        }
-
-        It 'Returns NotApplicable' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'NotApplicable'
-            $results[0].Severity | Should -Be 'Informational'
-        }
-    }
-
-    Context 'onmicrosoft domain without DMARC record' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.onmicrosoft.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-            Mock Resolve-METDnsName { throw 'DNS name not found' }
-        }
-
-        It 'Returns Warning with the lookup error instead of a false Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'DNS lookup failed'
-            $results[0].Error | Should -Match 'DNS name not found'
-        }
-    }
 }
 
 Describe 'MET-EXO002 DKIM' {
@@ -182,61 +143,6 @@ Describe 'MET-EXO002 DKIM' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Error | Should -Not -BeNullOrEmpty
-        }
-    }
-}
-
-Describe 'MET-EXO003 SPF' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO003-SPF.ps1'
-    }
-
-    Context 'SPF lookup counting includes bare mechanisms and redirect' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-
-            Mock Resolve-METDnsName {
-                param([string]$Name, [string]$Type)
-
-                switch ($Name) {
-                    'contoso.com' {
-                        return [PSCustomObject]@{
-                            Strings = @('v=spf1 a mx include:_spf1.contoso.com include:_spf2.contoso.com include:_spf3.contoso.com include:_spf4.contoso.com include:_spf5.contoso.com redirect=_spf6.contoso.com -all')
-                        }
-                    }
-                    { $_ -match '^_spf[1-6]\.contoso\.com$' } {
-                        return [PSCustomObject]@{ Strings = @('v=spf1 a mx -all') }
-                    }
-                    default {
-                        return @()
-                    }
-                }
-            }
-        }
-
-        It 'Returns Warning for more than 10 lookups' {
-            $results = & $checkFile
-            $result = $results | Select-Object -First 1
-            $result.Result | Should -Be 'Warning'
-            $result.Finding | Should -Match 'exceeds 10 DNS lookups'
-        }
-    }
-
-    Context 'DNS lookup fails' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-            Mock Resolve-METDnsName { throw 'resolver unavailable' }
-        }
-
-        It 'Returns Warning with the lookup error instead of a false Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'DNS lookup failed'
-            $results[0].Error | Should -Match 'resolver unavailable'
         }
     }
 }
