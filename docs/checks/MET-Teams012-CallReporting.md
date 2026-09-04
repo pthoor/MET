@@ -18,7 +18,9 @@ Call reporting is the closest native Teams control to helpdesk-vishing attacks -
 
 | Result | Condition |
 |---|---|
-| Pass | Every Teams calling policy has `ReportCall` set to `Enabled` (or unset, which defaults to `Enabled`) |
+| Pass | Every Teams calling policy has `ReportCall` set to `Enabled` |
+| Warning | `ReportCall` was returned for some policies but not others - call reporting was not established for the policies it was absent from, which are named in the finding |
+| NotApplicable | `ReportCall` was not returned for any policy - nothing was assessed, so the result is unassessed rather than a pass; the installed `MicrosoftTeams` module version may not expose the property |
 | Fail | One or more Teams calling policies have `ReportCall` explicitly set to a value other than `Enabled` |
 | Fail | The Teams calling policies could not be retrieved (check itself failed to run) |
 

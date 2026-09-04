@@ -35,8 +35,17 @@ foreach ($policy in $spamPolicies) {
     $label     = "$($policy.Name) [$scope]"
     $retention = $policy.QuarantineRetentionPeriod
 
+    if ($null -eq $retention) {
+        New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
+            -Result Warning -Severity Low -AffectedObject $label `
+            -Finding "The QuarantineRetentionPeriod property was not returned for this policy, so its quarantine retention window was not established. An unconfirmed state is reported as a gap rather than a pass, because nothing here distinguishes a policy at the recommended 30 days from one left at the 15-day default. $antiPhishNote" `
+            -Recommendation "Confirm the value directly: Get-HostedContentFilterPolicy -Identity '$($policy.Name)' | Format-List QuarantineRetentionPeriod." `
+            -ReferenceUrl 'https://aka.ms/mdo-quarantine-retention'
+        continue
+    }
+
     if ($isPreset) {
-        if ($null -ne $retention -and $retention -lt 30) {
+        if ($retention -lt 30) {
             New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
                 -Result Warning -Severity Low -AffectedObject $label `
                 -Finding "Quarantine retention period is $retention days, below the 30-day value Microsoft guarantees for $presetTier preset security policies. $antiPhishNote" `
@@ -52,7 +61,7 @@ foreach ($policy in $spamPolicies) {
         continue
     }
 
-    if ($null -ne $retention -and $retention -lt 30) {
+    if ($retention -lt 30) {
         New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
             -Result Fail -Severity Low -AffectedObject $label `
             -Finding "Quarantine retention period is $retention days - Microsoft recommends 30 days for Standard and Strict profiles. $antiPhishNote" `

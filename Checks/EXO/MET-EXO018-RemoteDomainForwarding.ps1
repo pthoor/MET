@@ -36,8 +36,9 @@ foreach ($remoteDomain in $remoteDomains) {
 
     if (-not $hasProperty) {
         New-METCheckResult -CheckId 'MET-EXO018' -Category EXO -Name 'Remote Domain Automatic Forwarding' `
-            -Result Pass -Severity High -AffectedObject $affectedObject `
-            -Finding 'The AutoForwardEnabled property was absent or null on this remote domain, so automatic forwarding was not asserted as enabled and is treated as not permitted - verify directly with Get-RemoteDomain if this domain matters to you' `
+            -Result Warning -Severity High -AffectedObject $affectedObject `
+            -Finding 'The AutoForwardEnabled property was not returned for this remote domain, so its automatic forwarding state was not established. An unconfirmed state is reported as a gap rather than a pass, because nothing here distinguishes a domain that permits automatic forwarding from one that does not.' `
+            -Recommendation "Confirm the state directly: Get-RemoteDomain -Identity '$identity' | Format-List DomainName, AutoForwardEnabled. If it is enabled, remediate as follows. $recommendation" `
             -ReferenceUrl $referenceUrl
         continue
     }

@@ -33,7 +33,7 @@ Closing one while leaving the others open still permits mail to leave the tenant
 | Result | Condition |
 |---|---|
 | Pass | `AutoForwardEnabled` is disabled for the remote domain |
-| Pass | `AutoForwardEnabled` is absent or null on the object - forwarding is not asserted as enabled, and the finding states that the property was not present |
+| Warning | `AutoForwardEnabled` was not returned for the remote domain - the forwarding state was not established, so it is reported as a gap rather than a pass, with a recommendation to confirm directly with `Get-RemoteDomain` |
 | Warning | `AutoForwardEnabled` is enabled for a specific (non-`*`) remote domain - a scoped exception that needs periodic review |
 | Fail | `AutoForwardEnabled` is enabled on the tenant-wide default remote domain (`DomainName = '*'`) |
 | Info | No remote domains are configured in the tenant |

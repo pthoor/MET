@@ -104,11 +104,22 @@ Describe 'MET-EXO018 Remote Domain Automatic Forwarding' {
             }
         }
 
-        It 'Returns Pass and states the property was absent' {
+        It 'Returns Warning and states the forwarding state was not established' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'High'
-            $results[0].Finding | Should -Match 'absent or null'
+            $results[0].Finding | Should -Match 'AutoForwardEnabled'
+            $results[0].Finding | Should -Match 'not established'
+        }
+
+        It 'Does not claim automatic forwarding is not permitted' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Not -Match 'not permitted'
+        }
+
+        It 'Recommends confirming the state directly with Get-RemoteDomain' {
+            $results = @(& $checkFile)
+            $results[0].Recommendation | Should -Match 'Get-RemoteDomain'
         }
     }
 
@@ -119,10 +130,11 @@ Describe 'MET-EXO018 Remote Domain Automatic Forwarding' {
             }
         }
 
-        It 'Returns Pass and states the property was absent' {
+        It 'Returns Warning and states the forwarding state was not established' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
-            $results[0].Finding | Should -Match 'absent or null'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'AutoForwardEnabled'
+            $results[0].Finding | Should -Match 'not established'
         }
     }
 
