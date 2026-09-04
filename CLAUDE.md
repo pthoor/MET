@@ -103,10 +103,10 @@ MET/
 │   ├── Unit/
 │   │   ├── New-METCheckResult.Tests.ps1
 │   │   ├── Resolve-METCoverageMatrix.Tests.ps1
-│   │   ├── Checks.MDO.Tests.ps1          # MDO001-MDO012 (MDO013 has its own file below)
+│   │   ├── Checks.MDO.Tests.ps1          # MDO001, MDO002, MDO009 only - every other MDO check has its own file below
 │   │   ├── Checks.EXO.Tests.ps1          # EXO001-EXO009 (EXO010+ each have their own file below)
-│   │   ├── Checks.Teams.Tests.ps1        # Teams001-Teams005 (Teams006+ each have their own file below)
-│   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check from MDO013/EXO010+/Teams006+ onward - each check's tests now get a dedicated file (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file.
+│   │   ├── Checks.Teams.Tests.ps1        # Teams002, Teams003, Teams004 only - every other Teams check has its own file below
+│   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file. This is the convention for all new checks, and existing checks move here as they gain coverage - MDO008, MDO010, MDO011, MDO012, Teams005 and EXO007 were added this way. Some also carry a suffix when a check has more than one file (e.g. Checks.MDO001.EffectiveCoverage.Tests.ps1).
 │   └── Integration/
 │       └── Invoke-METTriage.Tests.ps1
 ├── docs/
