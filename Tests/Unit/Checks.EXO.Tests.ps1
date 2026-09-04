@@ -403,10 +403,88 @@ Describe 'MET-EXO005 Tenant Allow/Block List' {
             $mainResult.Finding | Should -Match 'wildcard'
         }
 
-        It 'Does not emit an Advanced Delivery result' {
+        It 'Still emits an Advanced Delivery result carrying the retrieval error' {
             $results = & $checkFile
             $advResult = $results | Where-Object { $_.AffectedObject -match 'Advanced Delivery' }
-            $advResult | Should -BeNullOrEmpty
+            $advResult | Should -Not -BeNullOrEmpty
+            $advResult.Result | Should -Not -Be 'Pass'
+            $advResult.Error | Should -Match 'Access denied'
+            $advResult.Finding | Should -Not -Match 'No Advanced Delivery URL allow entries are configured'
+        }
+    }
+
+    Context 'Every Tenant Allow/Block List type fails to read' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } { throw 'Access denied' }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Returns Warning with the retrieval error rather than an empty-list Info result' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match 'Tenant Allow/Block List' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Warning'
+            $mainResult.Error | Should -Match 'Access denied'
+            $mainResult.Finding | Should -Not -Match 'No entries found'
+        }
+    }
+
+    Context 'Sender list type fails while the other list types succeed' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' { throw 'Access denied' }
+                    default {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'https://good.example.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'https://bad.example.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Names the unreadable list type and does not return Pass' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Error | Should -Match 'Sender'
+            $mainResult.Finding | Should -Match 'Sender'
+        }
+    }
+
+    Context 'The unreadable list type is the one holding the block entries' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Url' { throw 'Access denied' }
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'partner@fabrikam.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Does not claim the tenant has allow entries with no corresponding blocks' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Finding | Should -Not -Match 'no corresponding block entries'
+            $mainResult.Finding | Should -Not -Match 'significantly outnumber'
+        }
+
+        It 'Reports the partial coverage and does not return Pass' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Error | Should -Match 'Url'
+            $mainResult.Finding | Should -Match 'Url'
         }
     }
 }
