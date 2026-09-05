@@ -140,6 +140,47 @@ Describe 'MET-MDO001 Safe Links' {
             $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
+
+    # AllowClickThrough is the one Safe Links setting whose secure value is $false; the
+    # six beside it are all secure at $true and are read with -not. A pass that
+    # normalised the list onto one form would invert this one and nothing else would
+    # notice, so both senses are pinned.
+    Context 'Inverted-sense regression guard' {
+        It 'Raises the click-through issue only when AllowClickThrough is true' {
+            Mock Get-SafeLinksRule   { @() }
+            Mock Get-SafeLinksPolicy {
+                [PSCustomObject]@{
+                    Name                      = 'Built-In Protection Policy'
+                    EnableSafeLinksForEmail   = $true
+                    EnableSafeLinksForOffice  = $true
+                    TrackClicks               = $true
+                    EnableForInternalSenders  = $true
+                    ScanUrls                  = $true
+                    DeliverMessageAfterScan   = $true
+                    AllowClickThrough         = $false
+                }
+            }
+            $secure = (& $checkFile)[0]
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'click through to blocked URLs'
+
+            Mock Get-SafeLinksPolicy {
+                [PSCustomObject]@{
+                    Name                      = 'Built-In Protection Policy'
+                    EnableSafeLinksForEmail   = $true
+                    EnableSafeLinksForOffice  = $true
+                    TrackClicks               = $true
+                    EnableForInternalSenders  = $true
+                    ScanUrls                  = $true
+                    DeliverMessageAfterScan   = $true
+                    AllowClickThrough         = $true
+                }
+            }
+            $insecure = (& $checkFile)[0]
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'Users can click through to blocked URLs'
+        }
+    }
 }
 
 Describe 'MET-MDO002 Safe Attachments' {
@@ -428,6 +469,48 @@ Describe 'MET-MDO009 ZAP' {
             $results[0].Finding | Should -Match 'ZAP for spam is disabled'
             $results[0].Finding | Should -Match 'ZAP for phishing is disabled'
             $results[0].Finding | Should -Not -Match 'not returned'
+        }
+    }
+
+    # Both ZAP properties are read with -not, so the secure value is $true and the issue
+    # text is the negative. Reading either as "ZAP is off" inverts the verdict, so both
+    # senses are pinned for both properties, and each is pinned independently so one
+    # cannot silently stand in for the other.
+    Context 'Inverted-sense regression guard' {
+        It 'Fails only when the ZAP settings are false and passes only when they are true' {
+            Mock Get-HostedContentFilterRule   { @() }
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $true; PhishZapEnabled = $true }
+            }
+            $secure = (& $checkFile)[0]
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'ZAP for spam is disabled'
+            $secure.Finding | Should -Not -Match 'ZAP for phishing is disabled'
+
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $false; PhishZapEnabled = $false }
+            }
+            $insecure = (& $checkFile)[0]
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'ZAP for spam is disabled'
+            $insecure.Finding | Should -Match 'ZAP for phishing is disabled'
+        }
+
+        It 'Keeps the spam and phish settings independent' {
+            Mock Get-HostedContentFilterRule   { @() }
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $false; PhishZapEnabled = $true }
+            }
+            $spamOnly = (& $checkFile)[0]
+            $spamOnly.Finding | Should -Match 'ZAP for spam is disabled'
+            $spamOnly.Finding | Should -Not -Match 'ZAP for phishing is disabled'
+
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name = 'Default'; IsDefault = $true; SpamZapEnabled = $true; PhishZapEnabled = $false }
+            }
+            $phishOnly = (& $checkFile)[0]
+            $phishOnly.Finding | Should -Match 'ZAP for phishing is disabled'
+            $phishOnly.Finding | Should -Not -Match 'ZAP for spam is disabled'
         }
     }
 }

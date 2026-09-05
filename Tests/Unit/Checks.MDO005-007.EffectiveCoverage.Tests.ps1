@@ -271,3 +271,75 @@ Describe 'MET-MDO005/006/007 absent-property handling' {
         }
     }
 }
+
+
+Describe 'MET-MDO005/007 inverted-sense regression guards' {
+    BeforeEach {
+        $script:METContext = $null
+        Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
+    }
+
+    # ZapEnabled and EnableFileFilter are both read with -not, so the secure value is
+    # $true and the issue text is the negative. Reading either as "the feature is off"
+    # inverts the verdict, so both senses are pinned for both properties.
+    Context 'MET-MDO005 ZapEnabled and EnableFileFilter' {
+        It 'Raises each issue only when its property is false' {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$true; EnableFileFilter=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $secure = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'ZAP for malware is disabled'
+            $secure.Finding | Should -Not -Match 'Common attachment filter is disabled'
+
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$false; EnableFileFilter=$false; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $insecure = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'ZAP for malware is disabled'
+            $insecure.Finding | Should -Match 'Common attachment filter is disabled'
+        }
+
+        It 'Keeps the two properties independent so one cannot stand in for the other' {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$false; EnableFileFilter=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $zapOnly = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $zapOnly.Finding | Should -Match 'ZAP for malware is disabled'
+            $zapOnly.Finding | Should -Not -Match 'Common attachment filter is disabled'
+
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$true; EnableFileFilter=$false; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $filterOnly = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $filterOnly.Finding | Should -Match 'Common attachment filter is disabled'
+            $filterOnly.Finding | Should -Not -Match 'ZAP for malware is disabled'
+        }
+    }
+
+    # AutoForwardingMode is the inverted one in the outbound check: 'On' is the insecure
+    # value while every other setting it grades is secure when switched on.
+    Context 'MET-MDO007 AutoForwardingMode' {
+        It 'Flags automatic forwarding only when AutoForwardingMode is On' {
+            Mock Get-HostedOutboundSpamFilterRule { @() }
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; AutoForwardingMode='Off'; ActionWhenThresholdReached='BlockUser' }
+            }
+            $secure = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'Automatic external forwarding is enabled'
+
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; AutoForwardingMode='On'; ActionWhenThresholdReached='BlockUser' }
+            }
+            $insecure = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'Automatic external forwarding is enabled'
+        }
+    }
+}

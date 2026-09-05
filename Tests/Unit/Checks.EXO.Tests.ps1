@@ -295,6 +295,29 @@ Describe 'MET-EXO004 Quarantine Policies' {
             $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
+
+    # The Warning fires on a conjunction of a negative and a positive: notifications off
+    # AND end-user permissions granted. Dropping or flipping either half turns the check
+    # into one that flags every policy or no policy, so all three combinations that
+    # decide the verdict are pinned.
+    Context 'Inverted-sense regression guard' {
+        It 'Warns only when ESNEnabled is false while end-user permissions are granted' {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 23; ESNEnabled = $false }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Warning'
+
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 23; ESNEnabled = $true }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 0; ESNEnabled = $false }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+        }
+    }
 }
 
 Describe 'MET-EXO005 Tenant Allow/Block List' {

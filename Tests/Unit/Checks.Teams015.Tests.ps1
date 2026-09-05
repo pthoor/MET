@@ -93,4 +93,37 @@ Describe 'MET-Teams015 Teams Email Integration' {
             $results[0].Recommendation | Should -Match 'Teams administrator'
         }
     }
+
+    # AllowEmailIntoChannel $true is the permissive state, so the secure verdict is the
+    # one attached to $false - the opposite pairing to most Allow* settings the suite
+    # asserts. A refactor that reads the property as a protection toggle inverts it.
+    Context 'Inverted-sense regression guard' {
+        It 'Warns only when AllowEmailIntoChannel is true and passes only when it is false' {
+            Mock Get-CsTeamsClientConfiguration {
+                [PSCustomObject]@{ Identity = 'Global'; AllowEmailIntoChannel = $true }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Warning'
+
+            Mock Get-CsTeamsClientConfiguration {
+                [PSCustomObject]@{ Identity = 'Global'; AllowEmailIntoChannel = $false }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+        }
+
+        It 'Names the enabled ingress path only in the Warning and the closed one only in the Pass' {
+            Mock Get-CsTeamsClientConfiguration {
+                [PSCustomObject]@{ Identity = 'Global'; AllowEmailIntoChannel = $true }
+            }
+            $insecure = (& $checkFile)[0]
+            $insecure.Finding | Should -Match 'Channel email integration is enabled'
+            $insecure.Finding | Should -Not -Match 'Channel email integration is disabled'
+
+            Mock Get-CsTeamsClientConfiguration {
+                [PSCustomObject]@{ Identity = 'Global'; AllowEmailIntoChannel = $false }
+            }
+            $secure = (& $checkFile)[0]
+            $secure.Finding | Should -Match 'Channel email integration is disabled'
+            $secure.Finding | Should -Not -Match 'Channel email integration is enabled'
+        }
+    }
 }

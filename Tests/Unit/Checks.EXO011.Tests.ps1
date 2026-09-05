@@ -232,4 +232,42 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
             $results[0].Finding | Should -Match 'does not require TLS'
         }
     }
+
+    # RequireTls is asserted with -ne $true while the two binding tests beside it are
+    # asserted with -eq $true. Normalising the three onto one form would flip this one.
+    Context 'Inverted-sense regression guard' {
+        It 'Raises the TLS issue only when RequireTls is false' {
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name                         = 'PartnerConnector'
+                    Enabled                      = $true
+                    RequireTls                   = $true
+                    SenderIPAddresses            = @('203.0.113.10')
+                    SenderDomains                = @()
+                    RestrictDomainsToIPAddresses = $true
+                    RestrictDomainsToCertificate = $false
+                    TlsSenderCertificateName     = $null
+                }
+            }
+            $secure = (& $checkFile)[0]
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'does not require TLS'
+
+            Mock Get-InboundConnector {
+                [PSCustomObject]@{
+                    Name                         = 'PartnerConnector'
+                    Enabled                      = $true
+                    RequireTls                   = $false
+                    SenderIPAddresses            = @('203.0.113.10')
+                    SenderDomains                = @()
+                    RestrictDomainsToIPAddresses = $true
+                    RestrictDomainsToCertificate = $false
+                    TlsSenderCertificateName     = $null
+                }
+            }
+            $insecure = (& $checkFile)[0]
+            $insecure.Result | Should -Be 'Warning'
+            $insecure.Finding | Should -Match "'PartnerConnector' does not require TLS"
+        }
+    }
 }

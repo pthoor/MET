@@ -96,4 +96,30 @@ Describe 'MET-EXO010 Direct Send' {
             $results[0].Finding | Should -Not -Match 'not returned'
         }
     }
+
+    # RejectDirectSend $true is the hardened state: Direct Send is rejected. A refactor
+    # that reads the property as "Direct Send is allowed" inverts the verdict silently,
+    # so both senses are pinned here rather than only the one the other contexts happen
+    # to exercise.
+    Context 'Inverted-sense regression guard' {
+        It 'Passes only when RejectDirectSend is true and fails only when it is false' {
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ RejectDirectSend = $true } }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ RejectDirectSend = $false } }
+            (& $checkFile)[0].Result | Should -Be 'Fail'
+        }
+
+        It 'Names the blocked state only in the Pass and the unblocked state only in the Fail' {
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ RejectDirectSend = $true } }
+            $secure = (& $checkFile)[0]
+            $secure.Finding | Should -Match 'Direct Send is blocked'
+            $secure.Finding | Should -Not -Match 'RejectDirectSend is disabled'
+
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ RejectDirectSend = $false } }
+            $insecure = (& $checkFile)[0]
+            $insecure.Finding | Should -Match 'Direct Send is not blocked'
+            $insecure.Finding | Should -Match 'RejectDirectSend is disabled'
+        }
+    }
 }
