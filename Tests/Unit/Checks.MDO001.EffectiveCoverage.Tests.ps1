@@ -8,12 +8,14 @@ BeforeAll {
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-SafeLinksRule { [CmdletBinding()] param() }
     function Get-SafeLinksPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
-    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-MgGroup { [CmdletBinding()] param([string]$Filter,[int]$Top) }
+    function Get-MgGroupTransitiveMember { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
+    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
+    function Get-UnifiedGroupLinks { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
 
     function New-TestSafeLinksPolicy {
         param([string] $Name, [bool] $Compliant)
@@ -147,13 +149,26 @@ Describe 'MET-MDO001 effective recipient coverage' {
                 New-TestSafeLinksPolicy -Name 'Built-In Protection Policy' -Compliant $true
             )
         }
+        # Expand-METGroupMembership tries three tiers - Graph, Exchange DL, then
+        # Microsoft 365 Group links - and only records a retrieval error when all
+        # three fail, so all three have to be denied for "cannot be expanded" to
+        # be what this exercises.
         Mock Get-MgGroup { throw 'group lookup denied' }
         Mock Get-DistributionGroupMember { throw 'group lookup denied' }
+        Mock Get-UnifiedGroupLinks { throw 'group lookup denied' }
 
         $result = & $script:checkFile
 
         $result.Result | Should -Be 'Warning'
         $result.Error | Should -Match 'security@contoso.com'
+        # Asserted on the denial text, not just the group name: the group name
+        # also appears in the wrapper sentence, so matching it alone passed even
+        # when the tier mocks never ran and the recorded cause was a fixture
+        # parameter-binding error rather than the denial under test.
+        $result.Error | Should -Match 'group lookup denied'
+        Should -Invoke Get-MgGroup -Times 1
+        Should -Invoke Get-DistributionGroupMember -Times 1
+        Should -Invoke Get-UnifiedGroupLinks -Times 1
     }
 
     It 'applies a parent-domain policy to subdomain recipients through the full check' {

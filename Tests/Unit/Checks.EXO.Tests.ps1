@@ -6,7 +6,7 @@
 
     # Stub EXO cmdlets
     function Get-DkimSigningConfig           { [CmdletBinding()] param() }
-    function Get-QuarantinePolicy            { [CmdletBinding()] param() }
+    function Get-QuarantinePolicy            { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
     function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }

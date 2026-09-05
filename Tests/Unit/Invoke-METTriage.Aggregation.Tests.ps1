@@ -8,7 +8,7 @@ BeforeAll {
     . "$root/Public/Invoke-METTriage.ps1"
 
     function Get-AcceptedDomain           { [CmdletBinding()] param() }
-    function Get-EXOMailbox               { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox               { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-EOPProtectionPolicyRule  { [CmdletBinding()] param([string]$Identity) }
     function Get-ATPProtectionPolicyRule  { [CmdletBinding()] param([string]$Identity) }
     function Get-HostedContentFilterRule  { [CmdletBinding()] param() }
@@ -20,7 +20,7 @@ BeforeAll {
     function Get-DistributionGroupMember  { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
     function Get-UnifiedGroupLinks        { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
     function Get-DkimSigningConfig        { [CmdletBinding()] param([string]$Identity) }
-    function Get-QuarantinePolicy         { [CmdletBinding()] param([string]$Identity) }
+    function Get-QuarantinePolicy         { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
     function Get-AtpPolicyForO365         { [CmdletBinding()] param([string]$Identity) }
     function Get-SafeAttachmentPolicy     { [CmdletBinding()] param([string]$Identity) }
 }

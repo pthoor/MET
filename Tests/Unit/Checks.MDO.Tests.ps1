@@ -14,9 +14,9 @@
     # Stub EXO cmdlets so Pester's Mock can override them
     function Get-SafeLinksPolicy               { [CmdletBinding()] param() }
     function Get-SafeLinksRule                 { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule       { [CmdletBinding()] param() }
-    function Get-EOPProtectionPolicyRule       { [CmdletBinding()] param() }
-    function Get-EXOMailbox                    { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-ATPProtectionPolicyRule       { [CmdletBinding()] param([string]$Identity) }
+    function Get-EOPProtectionPolicyRule       { [CmdletBinding()] param([string]$Identity) }
+    function Get-EXOMailbox                    { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-SafeAttachmentPolicy          { [CmdletBinding()] param() }
     function Get-SafeAttachmentRule            { [CmdletBinding()] param() }
     function Get-AtpPolicyForO365              { [CmdletBinding()] param() }

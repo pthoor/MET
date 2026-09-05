@@ -3,7 +3,7 @@ BeforeAll {
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
 
-    function Get-QuarantinePolicy { [CmdletBinding()] param([string]$QuarantinePolicyType) }
+    function Get-QuarantinePolicy { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
 }
 
 Describe 'MET-EXO017 Quarantine Notification Cadence' {

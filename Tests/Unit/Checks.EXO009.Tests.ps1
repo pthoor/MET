@@ -4,7 +4,7 @@ BeforeAll {
     . "$root/Private/Get-METPresetSecurityPolicyTier.ps1"
     . "$root/Private/Test-METIsPresetSecurityPolicyName.ps1"
 
-    function Get-QuarantinePolicy { [CmdletBinding()] param() }
+    function Get-QuarantinePolicy { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
     function Get-HostedContentFilterPolicy { [CmdletBinding()] param() }
     function Get-MalwareFilterPolicy { [CmdletBinding()] param() }
     function Get-AntiPhishPolicy { [CmdletBinding()] param() }

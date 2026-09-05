@@ -2,7 +2,7 @@ BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string[]]$Properties,[string]$Filter) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
 }
 
 Describe 'MET-EXO012 Mailbox Forwarding' {

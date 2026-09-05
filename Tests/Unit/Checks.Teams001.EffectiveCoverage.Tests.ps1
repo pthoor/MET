@@ -8,12 +8,14 @@ BeforeAll {
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-SafeLinksRule { [CmdletBinding()] param() }
     function Get-SafeLinksPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
-    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-MgGroup { [CmdletBinding()] param([string]$Filter,[int]$Top) }
+    function Get-MgGroupTransitiveMember { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
+    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
+    function Get-UnifiedGroupLinks { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
 
     function New-TestSafeLinksForTeamsPolicy {
         param([string] $Name, [bool] $Compliant)

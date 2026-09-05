@@ -4,7 +4,7 @@ BeforeAll {
     . "$root/Private/Get-METCheckWeight.ps1"
 
     function Get-TransportConfig { [CmdletBinding()] param() }
-    function Get-EXOCasMailbox { [CmdletBinding()] param($ResultSize, $Properties) }
+    function Get-EXOCasMailbox { [CmdletBinding()] param([string]$ResultSize,[string[]]$Properties) }
 }
 
 Describe 'MET-EXO019 SMTP Client Authentication' {

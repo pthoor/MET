@@ -14,7 +14,7 @@
     # Stub cmdlets needed by Teams004
     function Get-TeamsProtectionPolicy     { [CmdletBinding()] param() }
     function Get-TeamsProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity) }
+    function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
 }
 
 Describe 'MET-Teams002 Safe Attachments for Teams' {
