@@ -4,6 +4,13 @@ BeforeAll {
 }
 
 Describe 'Resolve-METDnsName' {
+    # These cases deliberately drive the DNS-over-HTTPS tier, which warns that
+    # tenant domain names would leave the host. Invoke-RestMethod is mocked in
+    # every one of them, so nothing is actually sent - but an unsuppressed
+    # warning saying otherwise in a security tool's CI log is alarming, and worse,
+    # it would camouflage the same warning raised by a test that genuinely leaked.
+    # Suppressed per call rather than by a preference variable so that a new test
+    # reaching this tier is visibly noisy until its author decides it is mocked.
     Context 'when local DNS utilities are unavailable' {
         BeforeEach {
             Mock Get-Command { $null } -ParameterFilter {
@@ -21,7 +28,7 @@ Describe 'Resolve-METDnsName' {
                 }
             }
 
-            $result = Resolve-METDnsName -Name 'contoso.com' -Type TXT
+            $result = Resolve-METDnsName -Name 'contoso.com' -Type TXT -WarningAction SilentlyContinue
 
             $result | Should -HaveCount 1
             $result[0].Strings[0] | Should -Be 'v=spf1 include:spf.protection.outlook.com -all'
@@ -34,13 +41,13 @@ Describe 'Resolve-METDnsName' {
         It 'returns no records for an authoritative NXDOMAIN response' {
             Mock Invoke-RestMethod { [PSCustomObject]@{ Status = 3; Answer = @() } }
 
-            @(Resolve-METDnsName -Name 'missing.contoso.com' -Type TXT) | Should -HaveCount 0
+            @(Resolve-METDnsName -Name 'missing.contoso.com' -Type TXT -WarningAction SilentlyContinue) | Should -HaveCount 0
         }
 
         It 'throws when the fallback resolver is unavailable' {
             Mock Invoke-RestMethod { throw 'network unavailable' }
 
-            { Resolve-METDnsName -Name 'contoso.com' -Type TXT } |
+            { Resolve-METDnsName -Name 'contoso.com' -Type TXT -WarningAction SilentlyContinue } |
                 Should -Throw '*DNS-over-HTTPS fallback*network unavailable*'
         }
     }
@@ -93,7 +100,7 @@ Describe 'Resolve-METDnsName DNS-over-HTTPS disclosure and control' {
 
         It 'Throws without issuing a request' {
             $env:MET_DOH_RESOLVER = 'none'
-            { Resolve-METDnsName -Name 'contoso.com' -Type TXT } | Should -Throw -ExpectedMessage '*MET_DOH_RESOLVER*'
+            { Resolve-METDnsName -Name 'contoso.com' -Type TXT -WarningAction SilentlyContinue } | Should -Throw -ExpectedMessage '*MET_DOH_RESOLVER*'
             Should -Invoke Invoke-RestMethod -Exactly 0
         }
     }
