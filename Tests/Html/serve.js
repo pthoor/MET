@@ -32,14 +32,28 @@ const server = http.createServer((req, res) => {
   const relative = requested === '/' ? '/report.html' : requested;
   const target = path.join(ROOT, path.normalize(relative).replace(/^(\.\.[/\\])+/, ''));
 
-  if (!target.startsWith(ROOT) || !fs.existsSync(target)) {
+  if (!target.startsWith(ROOT)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not found');
+    return;
+  }
+
+  // Read first and ask questions later: an existsSync/readFileSync pair leaves a window in
+  // which the file disappears between the two calls, and the throw from readFileSync is
+  // uncaught inside a request handler - it takes the whole server down, so every later
+  // request in the suite hangs until its timeout rather than failing fast.
+  let body;
+  try {
+    body = fs.readFileSync(target);
+  }
+  catch {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not found');
     return;
   }
 
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(fs.readFileSync(target));
+  res.end(body);
 });
 
 server.listen(PORT, () => {

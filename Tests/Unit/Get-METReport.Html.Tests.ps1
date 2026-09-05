@@ -202,11 +202,32 @@ Describe 'Get-METReport HTML injection safety' {
         $script:hostileHtml | Should -Match '"error":"\\u003C/script>\\u003Cimg src=x onerror=alert\(1\)>"'
     }
 
-    It 'keeps the client-side renderer HTML-escaping every field it injects' {
+    # Whether the rendered document actually contains an executable payload is asserted in a
+    # browser, in Tests/Html/report.spec.js ('injection safety'). What follows is the
+    # complementary code-shape guard: the renderer builds markup by string concatenation into
+    # innerHTML, so a single check-supplied field concatenated in without a sanitiser
+    # reintroduces stored XSS. The DOM test only proves the payloads it happens to carry are
+    # inert; this proves no unsanitised path into markup exists at all.
+    It 'never concatenates a raw check field into a markup string' {
+        # Matches "'<any markup fragment>' + check.field" / "' + c.field", which is exactly
+        # the shape of the regression: the escaping call dropped from an existing sink.
+        $rawFieldIntoMarkup = [regex]::Matches(
+            $script:hostileHtml,
+            "'[^'`n]*(?:<|=`")[^'`n]*'\s*\+\s*((?:check|c)\.[A-Za-z0-9_]+)"
+        )
+
+        $offenders = @($rawFieldIntoMarkup | ForEach-Object { $_.Value })
+        $offenders | Should -BeNullOrEmpty -Because 'every check field must reach markup through esc(), slug() or safeHref()'
+    }
+
+    It 'escapes all five markup-significant characters in esc()' {
+        # Missing any one of these is enough: an unescaped apostrophe breaks out of a
+        # single-quoted attribute, an unescaped double quote out of a double-quoted one.
         $script:hostileHtml | Should -Match "replace\(/&/g,'&amp;'\)"
         $script:hostileHtml | Should -Match "replace\(/</g,'&lt;'\)"
         $script:hostileHtml | Should -Match "replace\(/>/g,'&gt;'\)"
         $script:hostileHtml | Should -Match "replace\(/`"/g,'&quot;'\)"
+        $script:hostileHtml | Should -Match "replace\(/'/g,'&#39;'\)"
     }
 }
 
@@ -230,17 +251,24 @@ Describe 'Get-METReport HTML reference URL handling' {
         $script:linkHtml | Should -Not -Match '(?i)href\s*=\s*"\s*data:text/html'
     }
 
-    It 'routes every rendered reference URL through the safeHref allow-list' {
-        $script:linkHtml | Should -Match "const u = new URL\(url\)"
-        $script:linkHtml | Should -Match "u\.protocol === 'https:' \|\| u\.protocol === 'http:'"
-        $script:linkHtml | Should -Match "href=""' \+ safeHref\(check\.referenceUrl\)"
-        $script:linkHtml | Should -Match "href=""' \+ safeHref\(c\.referenceUrl\)"
+    It 'builds every href attribute in the renderer from safeHref, with no other source' {
+        # A sink guard, not a spelling check: enumerate every site in the client script that
+        # concatenates a value into an href attribute and require all of them to be safeHref.
+        # A new "Open policy" link added later that interpolates a URL directly fails here.
+        $hrefSites = [regex]::Matches($script:linkHtml, "href=[""']'\s*\+\s*([A-Za-z_][A-Za-z0-9_]*)")
+
+        @($hrefSites).Count | Should -BeGreaterThan 0 -Because 'the renderer does build href attributes'
+        foreach ($site in $hrefSites) {
+            $site.Groups[1].Value | Should -Be 'safeHref' -Because "'$($site.Value)' bypasses the URL allow-list"
+        }
     }
 
     # Scheme validation alone is not enough: safeHref's return value is interpolated
     # into an href="..." attribute, and new URL() accepts quotes and angle brackets in
     # a path. An https: URL could therefore close the attribute and inject markup - the
-    # javascript:/data: tests above pass while that hole is wide open.
+    # javascript:/data: tests above pass while that hole is wide open. What the browser
+    # does with such a URL is asserted in Tests/Html/report.spec.js; this pins the escape
+    # itself so it cannot be quietly dropped back to returning the raw string.
     It 'escapes the validated URL rather than returning the raw string' {
         $script:linkHtml | Should -Match "esc\(u\.href\)"
         $script:linkHtml | Should -Not -Match "u\.protocol === 'http:'\) \? url :"

@@ -13,6 +13,10 @@
     Empty          - no checks at all.
     RepeatedCheckId - three MET-EXO004 results with distinct AffectedObject values, all Fail
                        (risk acceptance is keyed on the result, not the CheckId).
+    ErrorBuckets   - one clean Fail, one clean Warning, and one result in every Result
+                       bucket carrying a populated Error field. Error is mutually exclusive
+                       with every Result-based bucket, so only the two clean results may
+                       appear under Fail/Warning and the donut must show three segments.
     SameAffectedObject - three MET-EXO006 results sharing both CheckId AND AffectedObject
                        (the real-world shape - EXO006's ten sections all use AffectedObject
                        'Report Submission Policy'), distinguished only by Name. Regression
@@ -25,7 +29,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets')]
     [string] $Scenario = 'Rich'
 )
 
@@ -80,6 +84,59 @@ $fixtures = switch ($Scenario) {
                 -Result 'NotApplicable' -Severity 'Low' -Score $null -AffectedObject 'Teams' `
                 -Finding 'Check could not run' `
                 -ErrorText 'Error "><img src=n8 onerror="window.__xssError=1">'
+
+            # Scheme-based payloads: neither survives safeHref's allow-list, and neither may
+            # ever reach the document as a live href - clicking one executes in the report's
+            # own origin, where the reader's risk-acceptance justifications live.
+            New-FixtureResult -CheckId 'MET-EXO010' -Category 'EXO' -Name 'Javascript URI reference' `
+                -Result 'Fail' -Severity 'High' -Score 0 -AffectedObject 'Direct Send' `
+                -Finding 'Reference URL carries a script scheme' -Recommendation 'none' `
+                -ReferenceUrl 'javascript:window.__xssJsUri=1'
+
+            New-FixtureResult -CheckId 'MET-EXO011' -Category 'EXO' -Name 'Data URI reference' `
+                -Result 'Warning' -Severity 'Low' -Score 50 -AffectedObject 'Connector' `
+                -Finding 'Reference URL carries a data scheme' -Recommendation 'none' `
+                -ReferenceUrl 'data:text/html,<script>window.__xssDataUri=1</script>'
+        )
+    }
+
+    # Error is its own bucket in both the server-rendered banner and renderDonut(): a result
+    # carrying an Error belongs to it and to nothing else. Five of these seven results pair a
+    # populated Error with a different Result value - deliberately including combinations a
+    # real check would not emit (Pass with an Error), because the point is that the bucket
+    # exclusion is driven by the Error field alone and not by the Result it happens to carry.
+    'ErrorBuckets' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Clean Fail' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+
+            New-FixtureResult -CheckId 'MET-MDO002' -Category 'MDO' -Name 'Fail that failed to run' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Safe Attachments' `
+                -Finding 'Retrieval failed' -ErrorText 'Get-SafeAttachmentPolicy threw'
+
+            New-FixtureResult -CheckId 'MET-MDO009' -Category 'MDO' -Name 'Clean Warning' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'All anti-spam policies' `
+                -Finding 'ZAP is enabled for spam but not for phish' `
+                -Recommendation 'Enable ZAP for phish.'
+
+            New-FixtureResult -CheckId 'MET-EXO001' -Category 'EXO' -Name 'Warning that failed to run' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'contoso.com' `
+                -Finding 'Retrieval failed' -ErrorText 'Resolve-DnsName threw'
+
+            New-FixtureResult -CheckId 'MET-EXO007' -Category 'EXO' -Name 'Pass that failed to run' -Result 'Pass' `
+                -Severity 'High' -Score 100 -AffectedObject 'Mail flow rules' `
+                -Finding 'Partial retrieval' -ErrorText 'Get-TransportRule threw'
+
+            New-FixtureResult -CheckId 'MET-Teams003' -Category 'Teams' -Name 'NotApplicable that failed to run' `
+                -Result 'NotApplicable' -Severity 'Medium' -Score $null -AffectedObject 'Meeting policies' `
+                -Finding 'MicrosoftTeams module unavailable' -ErrorText 'Get-CsTeamsMeetingPolicy threw'
+
+            New-FixtureResult -CheckId 'MET-Teams006' -Category 'Teams' -Name 'Info that failed to run' -Result 'Info' `
+                -Severity 'Informational' -Score $null -AffectedObject 'Tenant federation configuration' `
+                -Finding 'Partial retrieval' -ErrorText 'Get-CsTenantFederationConfiguration threw'
         )
     }
 
