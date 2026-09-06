@@ -126,12 +126,13 @@ Describe 'MET-EXO001 DMARC' {
             }
         }
 
-        It 'Returns Fail for a missing enforcement policy rather than for p=none' {
+        It 'Returns Fail naming the missing policy tag rather than assuming p=none or a bad value' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Severity | Should -Be 'High'
-            $results[0].Finding | Should -Match 'DMARC policy is not set to quarantine or reject'
+            $results[0].Finding | Should -Match 'no policy \(p=\) tag'
             $results[0].Finding | Should -Not -Match "DMARC policy is 'none'"
+            $results[0].Finding | Should -Not -Match 'not set to quarantine or reject'
         }
     }
 
@@ -241,6 +242,94 @@ Describe 'MET-EXO001 DMARC' {
             $fabrikam = $results | Where-Object { $_.AffectedObject -eq 'fabrikam.com' }
             $fabrikam.Result | Should -Be 'Fail'
             $fabrikam.Finding | Should -Match "DMARC policy is 'none'"
+        }
+    }
+
+    Context 'Enforcing domain policy alongside an open subdomain policy' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                [PSCustomObject]@{ Strings = @('v=DMARC1; p=reject; sp=none; rua=mailto:x@contoso.com') }
+            }
+        }
+
+        It 'Reports the subdomain gap and does not read sp= as the domain policy' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match "Subdomain policy is 'none'"
+            $results[0].Finding | Should -Not -Match "DMARC policy is 'none'"
+        }
+    }
+
+    Context 'Enforcing domain policy alongside an open non-existent-subdomain policy' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                [PSCustomObject]@{ Strings = @('v=DMARC1; p=reject; np=none; rua=mailto:x@contoso.com') }
+            }
+        }
+
+        It 'Does not read np= as the domain policy' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match "DMARC policy is 'none'"
+            $results[0].Finding | Should -Not -Match 'not set to quarantine or reject'
+        }
+    }
+
+    Context 'DMARC tags carry RFC-legal whitespace around the equals sign' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                [PSCustomObject]@{ Strings = @('v=DMARC1; p = reject; rua = mailto:dmarc@contoso.com') }
+            }
+        }
+
+        It 'Parses the tags despite the surrounding whitespace' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'not set to quarantine or reject'
+            $results[0].Finding | Should -Not -Match 'No aggregate reporting address'
+        }
+    }
+
+    Context 'The rua tag is present as a bare label but carries no address' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                [PSCustomObject]@{ Strings = @('v=DMARC1; p=quarantine; rua= ;') }
+            }
+        }
+
+        It 'Treats an empty value as not configured rather than matching the rua= label alone' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'No aggregate reporting address'
+            $results[0].Finding | Should -Not -Match 'not set to quarantine or reject'
+        }
+    }
+
+    Context 'DMARC tag names and policy values are upper case, with RFC-legal whitespace around the equals sign' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                [PSCustomObject]@{ Strings = @('V=DMARC1; P = REJECT; RUA = mailto:x@contoso.com') }
+            }
+        }
+
+        It 'Parses tags case-insensitively' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
         }
     }
 

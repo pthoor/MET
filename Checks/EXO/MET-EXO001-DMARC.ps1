@@ -71,15 +71,36 @@ foreach ($domain in $domains) {
     $record = ($dmarcRecord.Strings -join '') -join ''
     $issues = [System.Collections.Generic.List[string]]::new()
 
-    if ($record -match 'p=none') {
+    # Tags are matched as ; -delimited name=value pairs, not substrings of the whole
+    # record, so sp=/np= (subdomain / non-existent-subdomain policy) can never be
+    # misread as p= (the domain's own policy) - a plain 'p=none' regex matches inside
+    # both. RFC 7489 6.4 also allows whitespace around '='.
+    $tags = @{}
+    foreach ($part in $record -split ';') {
+        if ($part -match '^\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
+            $tagName = $Matches[1].ToLowerInvariant()
+            if (-not $tags.ContainsKey($tagName)) {
+                $tags[$tagName] = $Matches[2]
+            }
+        }
+    }
+
+    if (-not $tags.ContainsKey('p')) {
+        $issues.Add('DMARC record has no policy (p=) tag - the record is not valid and receivers will ignore it')
+    }
+    elseif ($tags['p'] -eq 'none') {
         $issues.Add("DMARC policy is 'none' - no enforcement; emails failing DMARC are not quarantined or rejected")
     }
-    elseif ($record -notmatch 'p=(quarantine|reject)') {
+    elseif ($tags['p'] -notin @('quarantine', 'reject')) {
         $issues.Add('DMARC policy is not set to quarantine or reject')
     }
 
-    if ($record -notmatch 'rua=') {
+    if (-not $tags.ContainsKey('rua') -or [string]::IsNullOrWhiteSpace($tags['rua'])) {
         $issues.Add('No aggregate reporting address (rua=) configured - DMARC reports will not be received')
+    }
+
+    if ($tags.ContainsKey('sp') -and $tags['sp'] -eq 'none' -and $tags.ContainsKey('p') -and $tags['p'] -in @('quarantine', 'reject')) {
+        $issues.Add("Subdomain policy is 'none' (sp=none) - subdomains of this domain are unprotected even though the domain policy enforces")
     }
 
     if ($issues.Count -gt 0) {
