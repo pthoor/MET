@@ -19,8 +19,9 @@ Teams increasingly carries the same phishing/vishing/QR-lure traffic email does 
 
 | Result | Condition |
 |---|---|
-| Pass | `ReportChatMessageEnabled` is `$true`, `ReportChatMessageToCustomizedAddressEnabled` is `$true`, and every Teams messaging policy has `AllowSecurityEndUserReporting` enabled (or unset) |
+| Pass | `ReportChatMessageEnabled` is `$true`, `ReportChatMessageToCustomizedAddressEnabled` is `$true`, and every Teams messaging policy returned `AllowSecurityEndUserReporting` and it was `$true` |
 | Fail | `ReportChatMessageEnabled` is `$false`; `ReportChatMessageEnabled` is `$true` but `ReportChatMessageToCustomizedAddressEnabled` is `$false`; one or more messaging policies explicitly set `AllowSecurityEndUserReporting` to `$false`; or the report submission policy could not be retrieved |
+| Warning | The Defender-portal half is correct, but the Teams messaging policy half could not be fully established: `Get-CsTeamsMessagingPolicy` threw, returned no policies, or returned one or more policies that did not carry `AllowSecurityEndUserReporting` at all. An unreturned property is neither "enabled" nor "disabled" - it is unconfirmed, so it is never treated as satisfying the Pass condition above, and the affected policy/policies are named in the Finding |
 
 ## Recommendation
 

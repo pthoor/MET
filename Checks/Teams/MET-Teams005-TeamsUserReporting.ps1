@@ -40,17 +40,35 @@ if ($submissionPolicy) {
 # AllowSecurityEndUserReporting controls whether the "Report a security concern"
 # button appears in the Teams client. Checked on all policies, not just Global,
 # since per-user/group policy assignments can silently suppress the button.
+$messagingPolicyUnreportedMessage = $null
 try {
+    $messagingPolicies = @(Get-CsTeamsMessagingPolicy -ErrorAction Stop)
+
+    # A property must be present to say anything about its value - a policy that never
+    # returned AllowSecurityEndUserReporting is neither "enabled" nor "disabled", it is
+    # unobserved, so it is tracked separately from $disabledPolicies rather than folded
+    # into the -eq $false filter below.
     $disabledPolicies = @(
-        Get-CsTeamsMessagingPolicy -ErrorAction Stop |
-        Where-Object {
-            $null -ne $_.AllowSecurityEndUserReporting -and
+        $messagingPolicies | Where-Object {
+            $_.PSObject.Properties['AllowSecurityEndUserReporting'] -and
             $_.AllowSecurityEndUserReporting -eq $false
         }
     )
+    $unreportedPolicies = @(
+        $messagingPolicies | Where-Object { -not $_.PSObject.Properties['AllowSecurityEndUserReporting'] }
+    )
+
     if ($disabledPolicies.Count -gt 0) {
         $names = ($disabledPolicies | Select-Object -ExpandProperty Identity) -join ', '
         $issues.Add("`"Report a security concern`" is disabled in the following Teams messaging policy/policies: $names - users assigned to these policies cannot flag suspicious messages")
+    }
+
+    if ($messagingPolicies.Count -eq 0) {
+        $messagingPolicyUnreportedMessage = 'Get-CsTeamsMessagingPolicy returned no Teams messaging policies, so whether the "Report a security concern" button is enabled for any user was not established.'
+    }
+    elseif ($unreportedPolicies.Count -gt 0) {
+        $unreportedNames = ($unreportedPolicies | Select-Object -ExpandProperty Identity) -join ', '
+        $messagingPolicyUnreportedMessage = "AllowSecurityEndUserReporting was not returned for the following Teams messaging policy/policies: $unreportedNames - whether the `"Report a security concern`" button is enabled for users assigned to them was not established."
     }
 }
 catch {
@@ -60,6 +78,10 @@ catch {
     # must not claim it. Record the gap instead of swallowing it.
     Write-Verbose "Could not retrieve Teams messaging policies: $_"
     $messagingPolicyError = $_.ToString()
+}
+
+if ($messagingPolicyUnreportedMessage -and $issues.Count -gt 0) {
+    $issues.Add($messagingPolicyUnreportedMessage)
 }
 
 if ($issues.Count -gt 0) {
@@ -75,6 +97,14 @@ elseif ($messagingPolicyError) {
         -Finding 'Teams user reporting is correctly configured in the Defender portal, but the Teams messaging policies could not be read, so whether the "Report a security concern" button is enabled for all users is unverified.' `
         -Recommendation 'Connect the MicrosoftTeams module (Connect-METSession without -SkipTeams) and rerun, or confirm "Report a security concern" is enabled in every messaging policy in the Teams admin center.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-user-reporting' -ErrorMessage $messagingPolicyError
+}
+elseif ($messagingPolicyUnreportedMessage) {
+    New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `
+        -Result Warning -Severity Medium -AffectedObject 'Teams User Reporting Settings' `
+        -Finding "Teams user reporting is correctly configured in the Defender portal, but $messagingPolicyUnreportedMessage" `
+        -Recommendation 'Confirm "Report a security concern" is enabled for every Teams messaging policy directly in the Teams admin center (admin.teams.microsoft.com), or update MicrosoftTeams to a version that returns AllowSecurityEndUserReporting from Get-CsTeamsMessagingPolicy and rerun.' `
+        -ReferenceUrl 'https://aka.ms/mdo-teams-user-reporting' `
+        -ErrorMessage 'AllowSecurityEndUserReporting was not returned by Get-CsTeamsMessagingPolicy for one or more Teams messaging policies.'
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `

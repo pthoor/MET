@@ -222,13 +222,128 @@ Describe 'MET-Teams005 Teams User Reporting' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the messaging-policy filter requires
-        # AllowSecurityEndUserReporting to be present and explicitly $false, so a policy
-        # that omits the property is treated as compliant and the check goes on to claim
-        # "all Teams messaging policies allow users to report security concerns" - a
-        # state it never observed. Per the repo's own rule an absent property must not
-        # yield Pass. Left pinned so the defect is visible and cannot change unnoticed.
-        It 'Currently returns Pass and claims every policy allows reporting' {
+        It 'Warns instead of claiming every policy allows reporting, and names the unverified policy' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Match 'Global'
+            $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
+            $results[0].Error    | Should -Match 'AllowSecurityEndUserReporting'
+        }
+    }
+
+    Context 'One Teams messaging policy carries the property and one omits it' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global';   AllowSecurityEndUserReporting = $true }
+                    [PSCustomObject]@{ Identity = 'Tag:Sales' }
+                )
+            }
+        }
+
+        It 'Warns naming only the policy that omitted the property, not the one that carried it' {
+            $results = @(& $checkFile)
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Match 'Tag:Sales'
+            $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
+        }
+    }
+
+    Context 'Every Teams messaging policy omits AllowSecurityEndUserReporting' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global' }
+                    [PSCustomObject]@{ Identity = 'Tag:Sales' }
+                )
+            }
+        }
+
+        It 'Warns rather than passing when none of the returned policies carried the property' {
+            $results = @(& $checkFile)
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
+        }
+    }
+
+    Context 'One Teams messaging policy disables the button and another omits the property' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Tag:Retail'; AllowSecurityEndUserReporting = $false }
+                    [PSCustomObject]@{ Identity = 'Tag:Sales' }
+                )
+            }
+        }
+
+        It 'Fails, and the Finding mentions both the disabled policy and the unestablished one' {
+            $results = @(& $checkFile)
+            $results[0].Result   | Should -Be 'Fail'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Match 'Tag:Retail'
+            $results[0].Finding  | Should -Match 'Tag:Sales'
+        }
+    }
+
+    Context 'Get-CsTeamsMessagingPolicy returns no policies at all' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy { @() }
+        }
+
+        It 'Warns rather than passing when no messaging policies were returned' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
+        }
+    }
+
+    Context 'Every Teams messaging policy carries the property and allows reporting' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global';   AllowSecurityEndUserReporting = $true }
+                    [PSCustomObject]@{ Identity = 'Tag:Sales'; AllowSecurityEndUserReporting = $true }
+                )
+            }
+        }
+
+        It 'Passes with the unchanged sentence once every policy is actually confirmed' {
             $results = @(& $checkFile)
             $results[0].Result  | Should -Be 'Pass'
             $results[0].Finding | Should -Match 'all Teams messaging policies allow users to report'
