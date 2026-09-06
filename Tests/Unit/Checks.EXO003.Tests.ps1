@@ -49,6 +49,75 @@ Describe 'MET-EXO003 SPF' {
         }
     }
 
+    Context 'A nested include lookup throws partway through counting' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                switch ($Name) {
+                    'contoso.com' {
+                        return [PSCustomObject]@{ Strings = @('v=spf1 include:fail.contoso.com -all') }
+                    }
+                    'fail.contoso.com' {
+                        throw 'DNS timeout'
+                    }
+                    default {
+                        return @()
+                    }
+                }
+            }
+        }
+
+        It 'Returns Warning naming the count as incomplete instead of Passing on a truncated lower bound' {
+            $results = & $checkFile
+            $result = $results | Select-Object -First 1
+            $result.Result | Should -Not -Be 'Pass'
+            $result.Result | Should -Be 'Warning'
+            $result.Severity | Should -Be 'High'
+            $result.Finding | Should -Match 'could not be completed'
+            $result.Finding | Should -Match 'at least 1 DNS-querying mechanisms'
+        }
+    }
+
+    Context 'An include chain runs 11 domains deep' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                switch ($Name) {
+                    'contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d1.contoso.com -all') } }
+                    'd1.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d2.contoso.com') } }
+                    'd2.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d3.contoso.com') } }
+                    'd3.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d4.contoso.com') } }
+                    'd4.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d5.contoso.com') } }
+                    'd5.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d6.contoso.com') } }
+                    'd6.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d7.contoso.com') } }
+                    'd7.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d8.contoso.com') } }
+                    'd8.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d9.contoso.com') } }
+                    'd9.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d10.contoso.com') } }
+                    'd10.contoso.com' { return [PSCustomObject]@{ Strings = @('v=spf1 include:d11.contoso.com') } }
+                    default { return @() }
+                }
+            }
+        }
+
+        It 'Does not truncate an 11-deep chain into a false Pass' {
+            $results = & $checkFile
+            $result = $results | Select-Object -First 1
+            $result.Result | Should -Not -Be 'Pass'
+            $result.Result | Should -Be 'Warning'
+            $result.Finding | Should -Match 'exceeds 10 DNS lookups \(11\)'
+        }
+    }
+
     Context 'DNS lookup fails' {
         BeforeAll {
             Mock Get-AcceptedDomain {
@@ -130,9 +199,9 @@ Describe 'MET-EXO003 SPF' {
             }
         }
 
-        It 'Returns Warning naming the neutral qualifier that is actually present' {
+        It 'Returns Fail naming the neutral qualifier, which RFC 7208 treats as no protection at all' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
+            $results[0].Result | Should -Be 'Fail'
             $results[0].Severity | Should -Be 'High'
             $results[0].Finding | Should -Match "SPF record uses '\?all' \(neutral\)"
             $results[0].Finding | Should -Match 'Record: v=spf1 include:spf\.protection\.outlook\.com \?all'
@@ -230,6 +299,29 @@ Describe 'MET-EXO003 SPF' {
             $results = & $checkFile
             $results[0].Result | Should -Not -Be 'Pass'
             $results[0].Finding | Should -Not -Match 'correctly configured'
+        }
+    }
+
+    Context 'SPF record has no all mechanism and no redirect' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                if ($Name -eq 'contoso.com') {
+                    return [PSCustomObject]@{ Strings = @('v=spf1 include:spf.protection.outlook.com') }
+                }
+                return [PSCustomObject]@{ Strings = @('v=spf1 ip4:203.0.113.0/24 -all') }
+            }
+        }
+
+        It 'Returns Fail rather than Warning, matching the protection an absent record gives' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Severity | Should -Be 'High'
+            $results[0].Finding | Should -Match "no 'all' mechanism - unmatched senders"
         }
     }
 
