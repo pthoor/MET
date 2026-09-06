@@ -30,6 +30,7 @@ Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
             $policyResult.Result   | Should -Be 'Warning'
             $policyResult.Severity | Should -Be 'High'
             $policyResult.Finding  | Should -Not -Match "enabled with action ''"
+            $policyResult.Finding  | Should -Match 'reported as unassessed rather than a pass'
             $policyResult.Error    | Should -Match 'Action'
         }
     }
@@ -47,6 +48,7 @@ Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
             $policyResult | Should -Not -BeNullOrEmpty
             $policyResult.Result   | Should -Be 'Warning'
             $policyResult.Finding  | Should -Not -Match 'Safe Attachments is disabled'
+            $policyResult.Finding  | Should -Match 'reported as unassessed rather than a pass'
             $policyResult.Error    | Should -Match 'Enable'
         }
     }
@@ -108,6 +110,7 @@ Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
             $policyResult | Should -Not -BeNullOrEmpty
             $policyResult.Result  | Should -Be 'Warning'
             $policyResult.Finding | Should -Not -Match "enabled with action ''"
+            $policyResult.Finding | Should -Match 'reported as unassessed rather than a pass'
             $policyResult.Error   | Should -Match 'Action'
         }
     }
@@ -124,6 +127,7 @@ Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
             $policyResult = $results | Where-Object { $_.AffectedObject -match 'Custom Policy' }
             $policyResult.Result  | Should -Be 'Warning'
             $policyResult.Finding | Should -Not -Match "enabled with action ''"
+            $policyResult.Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 
@@ -139,6 +143,7 @@ Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
             $policyResult = $results | Where-Object { $_.AffectedObject -match 'Custom Policy' }
             $policyResult.Result  | Should -Be 'Warning'
             $policyResult.Finding | Should -Not -Match 'Safe Attachments is disabled'
+            $policyResult.Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 }

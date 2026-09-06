@@ -338,6 +338,7 @@ Describe 'MET-MDO002 Safe Attachments' {
             $policyResult.Result | Should -Be 'Warning'
             $policyResult.Finding | Should -Not -Match "enabled with action ''"
             $policyResult.Finding | Should -Match 'not established'
+            $policyResult.Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 
@@ -363,6 +364,7 @@ Describe 'MET-MDO002 Safe Attachments' {
             $policyResult.Result | Should -Be 'Warning'
             $policyResult.Finding | Should -Not -Match 'Safe Attachments is disabled'
             $policyResult.Finding | Should -Match 'not established'
+            $policyResult.Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 }
