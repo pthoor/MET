@@ -110,36 +110,47 @@ Describe 'MET-MDO012 Safe Documents' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the check reports click-through as
-        # blocked on the strength of a property the service never returned. Per the
-        # repo's own rule an absent property must not yield Pass. Left pinned rather
-        # than corrected here so the defect is visible and cannot change unnoticed.
-        It 'Currently returns Pass on a property that was never observed' {
+        It 'Reports the control as unassessed rather than asserting click-through is blocked' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
-            $results[0].Finding | Should -Match 'click-through for malicious files is blocked'
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'NotApplicable'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
+            $results[0].Finding  | Should -Not -Match 'click-through .* is blocked'
         }
     }
 
     Context 'The policy object omits EnableSafeDocs' {
         BeforeAll {
             Mock Get-AtpPolicyForO365 {
+                [PSCustomObject]@{ AllowSafeDocsOpen = $false }
+            }
+        }
+
+        It 'Reports the control as unassessed rather than asserting Safe Documents is disabled' {
+            $results = @(& $checkFile)
+            $results[0].Result   | Should -Be 'NotApplicable'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
+            $results[0].Finding  | Should -Not -Match 'Safe Documents is disabled'
+        }
+    }
+
+    Context 'The policy object omits both EnableSafeDocs and AllowSafeDocsOpen' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 {
                 [PSCustomObject]@{ Identity = 'Default' }
             }
         }
 
-        It 'Does not return Pass' {
+        It 'Names both missing properties rather than asserting a state' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Not -Be 'Pass'
-        }
-
-        # Also pins current behaviour: Fail is the safe direction, but the Finding
-        # asserts "Safe Documents is disabled" for a value nothing confirmed.
-        It 'Currently states the feature is disabled rather than unestablished' {
-            $results = @(& $checkFile)
-            $results[0].Result   | Should -Be 'Fail'
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'NotApplicable'
             $results[0].Severity | Should -Be 'Medium'
-            $results[0].Finding  | Should -Match 'Safe Documents is disabled'
+            $results[0].Finding  | Should -Match 'EnableSafeDocs'
+            $results[0].Finding  | Should -Match 'AllowSafeDocsOpen'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -148,10 +159,12 @@ Describe 'MET-MDO012 Safe Documents' {
             Mock Get-AtpPolicyForO365 { }
         }
 
-        It 'Does not return Pass when no policy object came back' {
+        It 'Reports the control as unassessed when no policy object came back' {
             $results = @(& $checkFile)
             $results.Count | Should -Be 1
-            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].Result   | Should -Be 'NotApplicable'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
         }
     }
 }
