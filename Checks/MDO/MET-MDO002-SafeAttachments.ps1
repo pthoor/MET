@@ -88,13 +88,42 @@ function Invoke-SafeAttachAssessment {
         [Parameter(Mandatory)] [string] $Label
     )
 
-    $issues = [System.Collections.Generic.List[string]]::new()
+    # A property that is absent, or present but $null, was never observed by Exchange
+    # Online. Reading either state as $false would fabricate a verdict this check did
+    # not establish - most consequentially for Action, where the unobserved case is
+    # indistinguishable from 'Allow', the one value that means no protection at all.
+    $enableProperty = $Policy.PSObject.Properties['Enable']
+    if (-not $enableProperty -or $null -eq $enableProperty.Value) {
+        New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+            -Result Warning -Severity High -AffectedObject $Label `
+            -Finding 'The Enable property was not returned for this policy, so whether Safe Attachments is enabled for these recipients was not established.' `
+            -Recommendation "Confirm the setting directly with: Get-SafeAttachmentPolicy -Identity '$($Policy.Name)' | Format-List Enable. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment." `
+            -ReferenceUrl 'https://aka.ms/mdo-safeattachments' `
+            -ErrorMessage 'Get-SafeAttachmentPolicy did not return an Enable value for this policy.'
+        return
+    }
 
-    if (-not $Policy.Enable) {
+    $issues = [System.Collections.Generic.List[string]]::new()
+    $actionValue = $null
+
+    if (-not $enableProperty.Value) {
         $issues.Add('Safe Attachments is disabled')
     }
-    elseif ($Policy.Action -eq 'Allow') {
-        $issues.Add("Action is 'Allow' - attachments are not inspected")
+    else {
+        $actionProperty = $Policy.PSObject.Properties['Action']
+        if (-not $actionProperty -or $null -eq $actionProperty.Value) {
+            New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
+                -Result Warning -Severity High -AffectedObject $Label `
+                -Finding 'The Action property was not returned for this policy, so whether attachments are blocked, dynamically delivered, or allowed through was not established.' `
+                -Recommendation "Confirm the setting directly with: Get-SafeAttachmentPolicy -Identity '$($Policy.Name)' | Format-List Action. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment." `
+                -ReferenceUrl 'https://aka.ms/mdo-safeattachments' `
+                -ErrorMessage 'Get-SafeAttachmentPolicy did not return an Action value for this policy.'
+            return
+        }
+        $actionValue = $actionProperty.Value
+        if ($actionValue -eq 'Allow') {
+            $issues.Add("Action is 'Allow' - attachments are not inspected")
+        }
     }
 
     if ($issues.Count -gt 0) {
@@ -107,7 +136,7 @@ function Invoke-SafeAttachAssessment {
     else {
         New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
             -Result Pass -Severity High -AffectedObject $Label `
-            -Finding "Safe Attachments is enabled with action '$($Policy.Action)'" `
+            -Finding "Safe Attachments is enabled with action '$actionValue'" `
             -ReferenceUrl 'https://aka.ms/mdo-safeattachments'
     }
 }

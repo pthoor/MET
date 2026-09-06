@@ -331,18 +331,13 @@ Describe 'MET-MDO002 Safe Attachments' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the policy is reported as protecting
-        # mail with an action the check never read, and the empty value is rendered
-        # straight into the Finding. Per the repo's own rule an absent property must not
-        # yield Pass. Left pinned rather than corrected here so the defect is visible and
-        # cannot change unnoticed.
-        It 'Currently returns Pass and renders an empty action into the Finding' {
+        It 'Reports the missing Action as unassessed rather than a pass with an empty action' {
             $results = & $checkFile
             $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
             $policyResult | Should -Not -BeNullOrEmpty
-            $policyResult.Result | Should -Be 'Pass'
-            $policyResult.Finding | Should -Match "Safe Attachments is enabled with action ''"
-            $policyResult.Finding | Should -Not -Match 'not returned'
+            $policyResult.Result | Should -Be 'Warning'
+            $policyResult.Finding | Should -Not -Match "enabled with action ''"
+            $policyResult.Finding | Should -Match 'not established'
         }
     }
 
@@ -362,15 +357,12 @@ Describe 'MET-MDO002 Safe Attachments' {
             $policyResult.Result | Should -Not -Be 'Pass'
         }
 
-        # Pins current behaviour, whose wording is wrong: the check reports Safe
-        # Attachments as disabled for a property that was never returned. Left pinned so
-        # the defect is visible and cannot change unnoticed.
-        It 'Currently states Safe Attachments is disabled rather than that the property was not returned' {
+        It 'States the property was not returned rather than asserting Safe Attachments is disabled' {
             $results = & $checkFile
             $policyResult = $results | Where-Object { $_.AffectedObject -match 'Built-In Protection Policy' }
-            $policyResult.Result | Should -Be 'Fail'
-            $policyResult.Finding | Should -Match 'Safe Attachments is disabled'
-            $policyResult.Finding | Should -Not -Match 'not returned'
+            $policyResult.Result | Should -Be 'Warning'
+            $policyResult.Finding | Should -Not -Match 'Safe Attachments is disabled'
+            $policyResult.Finding | Should -Match 'not established'
         }
     }
 }

@@ -240,16 +240,11 @@ Describe 'MET-MDO005/006/007 absent-property handling' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the bulk complaint level threshold was
-        # never returned, so nothing here distinguishes a policy at the recommended 6 from
-        # one left wide open, and the check reports the recipient as fully protected. Per
-        # the repo's own rule an absent property must not yield Pass. Left pinned rather
-        # than corrected here so the defect is visible and cannot change unnoticed.
-        It 'Currently returns Pass on a threshold that was never observed' {
+        It 'Does not report the recipient as fully protected on a threshold that was never observed' {
             $result = & "$root/Checks/MDO/MET-MDO006-AntiSpamInbound.ps1"
-            $result.Result | Should -Be 'Pass'
+            $result.Result | Should -Not -Be 'Pass'
             $result.Finding | Should -Not -Match 'Bulk complaint level threshold'
-            $result.Finding | Should -Not -Match 'not returned'
+            $result.Finding | Should -Match 'BulkThreshold was not returned'
         }
     }
 
