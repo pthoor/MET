@@ -118,6 +118,22 @@ Describe 'MET-MDO012 Safe Documents' {
             $results[0].Error    | Should -Not -BeNullOrEmpty
             $results[0].Finding  | Should -Not -Match 'click-through .* is blocked'
         }
+
+        It 'States in the Finding why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
+        }
+
+        It 'Names the single missing property with a singular verb' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'AllowSafeDocsOpen was not returned'
+            $results[0].Finding | Should -Not -Match 'AllowSafeDocsOpen were not returned'
+        }
+
+        It 'Says the property is unassessed rather than a pass or a failure, not a failure alone' {
+            $results = @(& $checkFile)
+            $results[0].Recommendation | Should -Match 'unassessed rather than as a pass or a failure'
+        }
     }
 
     Context 'The policy object omits EnableSafeDocs' {
@@ -133,6 +149,17 @@ Describe 'MET-MDO012 Safe Documents' {
             $results[0].Severity | Should -Be 'Medium'
             $results[0].Error    | Should -Not -BeNullOrEmpty
             $results[0].Finding  | Should -Not -Match 'Safe Documents is disabled'
+        }
+
+        It 'States in the Finding why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
+        }
+
+        It 'Names the single missing property with a singular verb' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'EnableSafeDocs was not returned'
+            $results[0].Finding | Should -Not -Match 'EnableSafeDocs were not returned'
         }
     }
 
@@ -152,6 +179,17 @@ Describe 'MET-MDO012 Safe Documents' {
             $results[0].Finding  | Should -Match 'AllowSafeDocsOpen'
             $results[0].Error    | Should -Not -BeNullOrEmpty
         }
+
+        It 'States in the Finding why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
+        }
+
+        It 'Names both missing properties with a plural verb' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'EnableSafeDocs and AllowSafeDocsOpen were not returned'
+            $results[0].Finding | Should -Not -Match 'EnableSafeDocs and AllowSafeDocsOpen was not returned'
+        }
     }
 
     Context 'Get-AtpPolicyForO365 returns nothing without throwing' {
@@ -165,6 +203,11 @@ Describe 'MET-MDO012 Safe Documents' {
             $results[0].Result   | Should -Be 'NotApplicable'
             $results[0].Severity | Should -Be 'Medium'
             $results[0].Error    | Should -Not -BeNullOrEmpty
+        }
+
+        It 'States in the Finding why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 }
