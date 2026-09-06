@@ -111,11 +111,11 @@ Describe 'MET-EXO003 SPF' {
 
         It 'Does not additionally report a missing enforcement qualifier' {
             $results = & $checkFile
-            $results[0].Finding | Should -Not -Match "does not end with"
+            $results[0].Finding | Should -Not -Match "no 'all' mechanism"
         }
     }
 
-    Context 'SPF record carries no -all or ~all qualifier' {
+    Context 'SPF record ends with ?all' {
         BeforeAll {
             Mock Get-AcceptedDomain {
                 [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
@@ -130,11 +130,11 @@ Describe 'MET-EXO003 SPF' {
             }
         }
 
-        It 'Returns Warning naming the missing enforcement qualifier' {
+        It 'Returns Warning naming the neutral qualifier that is actually present' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'High'
-            $results[0].Finding | Should -Match "SPF record does not end with '-all' or '~all' - enforcement is missing"
+            $results[0].Finding | Should -Match "SPF record uses '\?all' \(neutral\)"
             $results[0].Finding | Should -Match 'Record: v=spf1 include:spf\.protection\.outlook\.com \?all'
         }
     }
@@ -159,7 +159,7 @@ Describe 'MET-EXO003 SPF' {
             $results[0].Result | Should -Be 'Warning'
             $results[0].Severity | Should -Be 'High'
             $results[0].Finding | Should -Match "SPF record uses '~all' \(soft fail\)"
-            $results[0].Finding | Should -Not -Match 'does not end with'
+            $results[0].Finding | Should -Not -Match "no 'all' mechanism"
             $results[0].Finding | Should -Match 'Record: v=spf1 include:spf\.protection\.outlook\.com ~all'
         }
     }
@@ -186,6 +186,74 @@ Describe 'MET-EXO003 SPF' {
             $results[0].AffectedObject | Should -Be 'contoso.com'
             $results[0].Finding | Should -Match 'SPF record is present and correctly configured \(1 DNS lookups\)'
             $results[0].Finding | Should -Match 'Record: v=spf1 include:spf\.protection\.outlook\.com -all'
+        }
+    }
+
+    Context 'SPF record whose mechanism arguments contain the letters "-all"' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                if ($Name -eq 'contoso.com') {
+                    return [PSCustomObject]@{ Strings = @('v=spf1 a:mail-all.contoso.com ?all') }
+                }
+                return @()
+            }
+        }
+
+        It 'Reads the "all" mechanism as a term rather than a substring of a hostname' {
+            $results = & $checkFile
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'correctly configured'
+        }
+    }
+
+    Context 'SPF record with an include whose hostname contains "-all" and no all term of its own' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                if ($Name -eq 'contoso.com') {
+                    return [PSCustomObject]@{ Strings = @('v=spf1 include:spf-all.contoso.com') }
+                }
+                return [PSCustomObject]@{ Strings = @('v=spf1 ip4:203.0.113.0/24 -all') }
+            }
+        }
+
+        It 'Does not treat an include target name as this domain enforcement qualifier' {
+            $results = & $checkFile
+            $results[0].Result | Should -Not -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'correctly configured'
+        }
+    }
+
+    Context 'SPF record has no all mechanism but defers to a redirect' {
+        BeforeAll {
+            Mock Get-AcceptedDomain {
+                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
+            }
+            Mock Resolve-METDnsName {
+                param([string]$Name, [string]$Type)
+
+                if ($Name -eq 'contoso.com') {
+                    return [PSCustomObject]@{ Strings = @('v=spf1 redirect=_spf.fabrikam.com') }
+                }
+                return [PSCustomObject]@{ Strings = @('v=spf1 ip4:203.0.113.0/24 -all') }
+            }
+        }
+
+        It 'Returns Warning naming the record it did not evaluate rather than claiming no enforcement' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'defers to redirect=_spf\.fabrikam\.com'
+            $results[0].Finding | Should -Match 'was not evaluated here'
+            $results[0].Finding | Should -Not -Match "no 'all' mechanism - unmatched senders"
         }
     }
 

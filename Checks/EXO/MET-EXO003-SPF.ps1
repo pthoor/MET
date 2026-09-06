@@ -98,15 +98,32 @@ foreach ($domain in $domains) {
 
     $record = $spfRecord.Strings -join ''
     $issues = [System.Collections.Generic.List[string]]::new()
+    $terms = @($record -split '\s+' | Where-Object { $_ })
 
-    if ($record -match '\+all') {
+    # RFC 7208 5.1: 'all' is a mechanism term, so it is only an enforcement qualifier
+    # when it stands as its own term. Matching the substring '-all' against the whole
+    # record reads an include or hostname such as 'a:mail-all.contoso.com' as enforcement.
+    $allTerm = $terms | Where-Object { $_ -match '^[+\-~?]?all$' } | Select-Object -First 1
+    $allQualifier = $null
+    if ($allTerm) {
+        $allQualifier = if ($allTerm -match '^([+\-~?])') { $Matches[1] } else { '+' }
+    }
+    $redirectTerm = $terms | Where-Object { $_ -match '^redirect=(.+)$' } | Select-Object -First 1
+
+    if ($allQualifier -eq '+') {
         $issues.Add("SPF record uses '+all' (allow all) - any server can send as this domain")
     }
-    elseif ($record -notmatch '-all' -and $record -notmatch '~all') {
-        $issues.Add("SPF record does not end with '-all' or '~all' - enforcement is missing")
+    elseif ($allQualifier -eq '?') {
+        $issues.Add("SPF record uses '?all' (neutral) - RFC 7208 requires receivers to treat a neutral result exactly as if no SPF record were published")
     }
-    elseif ($record -match '~all') {
+    elseif ($allQualifier -eq '~') {
         $issues.Add("SPF record uses '~all' (soft fail) - consider '-all' for strict enforcement")
+    }
+    elseif (-not $allQualifier -and $redirectTerm) {
+        $issues.Add("SPF record has no 'all' mechanism and defers to $redirectTerm - enforcement is whatever that record declares and was not evaluated here")
+    }
+    elseif (-not $allQualifier) {
+        $issues.Add("SPF record has no 'all' mechanism - unmatched senders get the default 'neutral' result, which receivers must treat as if no SPF record were published")
     }
 
     $lookupCount = Measure-SpfLookups -DomainName $domain.DomainName
@@ -115,7 +132,7 @@ foreach ($domain in $domains) {
     }
 
     if ($issues.Count -gt 0) {
-        $result = if ($record -match '\+all') { 'Fail' } else { 'Warning' }
+        $result = if ($allQualifier -eq '+') { 'Fail' } else { 'Warning' }
         New-METCheckResult -CheckId 'MET-EXO003' -Category EXO -Name 'SPF' `
             -Result $result -Severity High -AffectedObject $domain.DomainName `
             -Finding "$($issues -join '; ') | Record: $record" `
