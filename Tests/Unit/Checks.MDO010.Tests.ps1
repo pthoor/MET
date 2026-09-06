@@ -161,14 +161,38 @@ Describe 'MET-MDO010 Priority Accounts' {
             $toggle.Result | Should -Not -Be 'Pass'
         }
 
-        # Pins current behaviour. Fail is the safe direction, but the Finding asserts
-        # the toggle "is disabled" for a value the service never returned.
-        It 'Currently states the toggle is disabled rather than unestablished' {
+        It 'Reports the toggle as unestablished rather than disabled, since the property was never returned' {
             $results = @(& $checkFile)
             $toggle = $results | Where-Object Name -eq 'Priority Account Protection Toggle'
-            $toggle.Result   | Should -Be 'Fail'
+            $toggle.Result   | Should -Be 'NotApplicable'
             $toggle.Severity | Should -Be 'High'
-            $toggle.Finding  | Should -Match 'Priority account protection is disabled'
+            $toggle.AffectedObject | Should -Be 'Contoso EmailTenantSettings'
+            $toggle.Finding  | Should -Not -Match 'is disabled'
+            $toggle.Finding  | Should -Match 'not established'
+            $toggle.Error    | Should -Match 'EnablePriorityAccountProtection'
+        }
+
+        It 'Still assesses tagging as its own independent result' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 2
+            ($results | Where-Object Name -eq 'Priority Account Tagging').Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'EmailTenantSettings returns EnablePriorityAccountProtection as an explicit $null' {
+        BeforeEach {
+            Mock Get-EmailTenantSettings {
+                [PSCustomObject]@{ Identity = 'Contoso EmailTenantSettings'; EnablePriorityAccountProtection = $null }
+            }
+        }
+
+        It 'Treats a present-but-null value the same as an absent property' {
+            $results = @(& $checkFile)
+            $toggle = $results | Where-Object Name -eq 'Priority Account Protection Toggle'
+            $toggle.Result   | Should -Be 'NotApplicable'
+            $toggle.Severity | Should -Be 'High'
+            $toggle.Finding  | Should -Not -Match 'is disabled'
+            $toggle.Finding  | Should -Match 'not established'
         }
     }
 
@@ -177,16 +201,41 @@ Describe 'MET-MDO010 Priority Accounts' {
             Mock Get-EmailTenantSettings { }
         }
 
-        # Pins current behaviour, which is wrong: the toggle half emits no result at
-        # all, so MDO010 reports only the tagging Pass and nothing in the report says
-        # the tenant toggle went unassessed. Under the default aggregation the check
-        # collapses to a clean Pass.
-        It 'Currently emits no result for the toggle, leaving only the tagging result' {
+        It 'No longer emits zero results for the toggle - a result now exists naming the unassessed control' {
             $results = @(& $checkFile)
-            $results.Count | Should -Be 1
-            $results[0].Name   | Should -Be 'Priority Account Tagging'
-            $results[0].Result | Should -Be 'Pass'
-            ($results | Where-Object Name -eq 'Priority Account Protection Toggle') | Should -BeNullOrEmpty
+            $toggleResults = @($results | Where-Object Name -eq 'Priority Account Protection Toggle')
+            $toggleResults.Count | Should -Be 1
+        }
+
+        It 'Reports the toggle as NotApplicable with the retrieval failure recorded in Error' {
+            $results = @(& $checkFile)
+            $toggle = $results | Where-Object Name -eq 'Priority Account Protection Toggle'
+            $toggle.Result   | Should -Be 'NotApplicable'
+            $toggle.Severity | Should -Be 'High'
+            $toggle.AffectedObject | Should -Be 'EmailTenantSettings'
+            $toggle.Finding  | Should -Match 'not established'
+            $toggle.Error    | Should -Match 'Get-EmailTenantSettings returned no object'
+        }
+
+        It 'Still assesses tagging alongside the toggle result, so the fix does not swallow the second half' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 2
+            ($results | Where-Object Name -eq 'Priority Account Tagging').Result | Should -Be 'Pass'
+        }
+    }
+
+    Context '$tenantSettings arrives as an array rather than a scalar object' {
+        BeforeEach {
+            Mock Get-EmailTenantSettings {
+                @([PSCustomObject]@{ Identity = 'Contoso EmailTenantSettings'; EnablePriorityAccountProtection = $true })
+            }
+        }
+
+        It 'Assesses the first object rather than throwing' {
+            $results = @(& $checkFile)
+            $toggle = $results | Where-Object Name -eq 'Priority Account Protection Toggle'
+            $toggle.Result | Should -Be 'Pass'
+            $toggle.AffectedObject | Should -Be 'Contoso EmailTenantSettings'
         }
     }
 }
