@@ -1,0 +1,228 @@
+BeforeAll {
+    $root = Join-Path $PSScriptRoot '..' '..'
+    . "$root/Private/New-METCheckResult.ps1"
+
+    function Get-TeamsProtectionPolicy     { [CmdletBinding()] param() }
+    function Get-TeamsProtectionPolicyRule { [CmdletBinding()] param() }
+    function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
+}
+
+Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation' {
+    BeforeEach {
+        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'Teams' 'MET-Teams004-ZAPForTeams.ps1'
+    }
+
+    Context 'Malware tag: EndUserQuarantinePermissions absent entirely' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'AdminOnlyAccessPolicy'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy { [PSCustomObject]@{ Name = 'ContosoMalwareTag' } }
+        }
+        It 'Returns Warning, not a claim that self-release is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Malware'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+        }
+    }
+
+    Context 'Malware tag: EndUserQuarantinePermissions present without a PermissionToRelease member' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'AdminOnlyAccessPolicy'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoMalwareTag'; EndUserQuarantinePermissions = [PSCustomObject]@{} }
+            }
+        }
+        It 'Returns Warning, not a claim that self-release is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Malware'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+        }
+    }
+
+    Context 'Malware tag: PermissionToRelease is $true' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'AdminOnlyAccessPolicy'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                          = 'ContosoMalwareTag'
+                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                }
+            }
+        }
+        It 'Returns Fail, unchanged existing finding' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'allows users to self-release quarantined messages'
+        }
+    }
+
+    Context 'Malware tag: PermissionToRelease is $false' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'AdminOnlyAccessPolicy'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                          = 'ContosoMalwareTag'
+                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $false }
+                }
+            }
+        }
+        It 'Returns Pass, unchanged existing behaviour' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'High-Confidence Phish tag: EndUserQuarantinePermissions absent entirely' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'AdminOnlyAccessPolicy'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy { [PSCustomObject]@{ Name = 'ContosoHcpTag' } }
+        }
+        It 'Returns Warning, not a claim that self-release is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'High-confidence phish'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+        }
+    }
+
+    Context 'High-Confidence Phish tag: EndUserQuarantinePermissions present without a PermissionToRelease member' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'AdminOnlyAccessPolicy'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoHcpTag'; EndUserQuarantinePermissions = [PSCustomObject]@{} }
+            }
+        }
+        It 'Returns Warning, not a claim that self-release is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'High-confidence phish'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+        }
+    }
+
+    Context 'High-Confidence Phish tag: PermissionToRelease is $true' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'AdminOnlyAccessPolicy'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                          = 'ContosoHcpTag'
+                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                }
+            }
+        }
+        It 'Returns Fail, unchanged existing finding' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'allows users to self-release quarantined messages'
+        }
+    }
+
+    Context 'High-Confidence Phish tag: PermissionToRelease is $false' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'AdminOnlyAccessPolicy'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                          = 'ContosoHcpTag'
+                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $false }
+                }
+            }
+        }
+        It 'Returns Pass, unchanged existing behaviour' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'Both tags have an unconfirmed permission and a rule exception also exists' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule {
+                [PSCustomObject]@{
+                    Name                       = 'DefaultRule'
+                    State                      = 'Enabled'
+                    ExceptIfSentTo             = @('user1@contoso.com')
+                    ExceptIfSentToMemberOf     = @()
+                    ExceptIfRecipientDomainIs  = @()
+                }
+            }
+            Mock Get-QuarantinePolicy {
+                param($Identity)
+                [PSCustomObject]@{ Name = $Identity }
+            }
+        }
+        It 'Returns Warning naming both unconfirmed tags, not the rule-exception recommendation' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Malware'
+            $results[0].Finding | Should -Match 'High-confidence phish'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
+}

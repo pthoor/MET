@@ -115,6 +115,7 @@ if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {
 }
 
 $fails = [System.Collections.Generic.List[string]]::new()
+$permissionWarnings = [System.Collections.Generic.List[string]]::new()
 
 foreach ($a in $assignments) {
     if ($a.Verdict -notin $restrictedVerdicts) { continue }
@@ -125,7 +126,22 @@ foreach ($a in $assignments) {
         continue
     }
 
-    if ($qp.EndUserQuarantinePermissions.PermissionToRelease) {
+    # EndUserQuarantinePermissions.PermissionToRelease is a nested property: absent on
+    # either level, or present-but-$null on either level, reads as $null just like a
+    # confirmed $false would. Distinguish "not returned" from "returned and false" before
+    # branching, so an unobserved permission cannot be reported as a prevented one.
+    $permissionsProperty = $qp.PSObject.Properties['EndUserQuarantinePermissions']
+    $releaseProperty = $null
+    if ($permissionsProperty -and $null -ne $permissionsProperty.Value) {
+        $releaseProperty = $permissionsProperty.Value.PSObject.Properties['PermissionToRelease']
+    }
+
+    if (-not $permissionsProperty -or $null -eq $permissionsProperty.Value -or -not $releaseProperty -or $null -eq $releaseProperty.Value) {
+        $null = $permissionWarnings.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses quarantine tag '$($a.Tag)' whose EndUserQuarantinePermissions.PermissionToRelease was not returned by Get-QuarantinePolicy, so whether users can self-release quarantined messages via this tag was not established")
+        continue
+    }
+
+    if ($releaseProperty.Value) {
         $null = $fails.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses '$($a.Tag)' which allows users to self-release quarantined messages")
     }
 }
@@ -136,6 +152,19 @@ if ($fails.Count -gt 0) {
         -Finding ($fails -join '; ') `
         -Recommendation 'For Malware and High-Confidence Phish verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
         -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
+}
+elseif ($permissionWarnings.Count -gt 0) {
+    $finding = ($permissionWarnings -join '; ') +
+        '. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a quarantine policy that prevents self-release from one that allows it.'
+    if ($retrievalErrors.Count -gt 0) {
+        $finding += " Additionally, one or more filter policy types could not be retrieved: $($retrievalErrors -join '; ')."
+    }
+    New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
+        -Result Warning -Severity High -AffectedObject 'Quarantine Tag Assignments' `
+        -Finding $finding `
+        -Recommendation 'Confirm the setting directly with: Get-QuarantinePolicy -Identity <tag name> | Select-Object -ExpandProperty EndUserQuarantinePermissions. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
 }
 elseif ($retrievalErrors.Count -gt 0) {
     # A partial retrieval failure must not score as a clean Pass. Some policy families

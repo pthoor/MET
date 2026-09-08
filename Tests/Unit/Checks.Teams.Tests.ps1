@@ -565,7 +565,7 @@ Describe 'MET-Teams004 ZAP for Teams' {
     # The quarantine tag is resolved to a policy object and read as
     # $policy.EndUserQuarantinePermissions.PermissionToRelease. A policy object that
     # omits EndUserQuarantinePermissions makes the whole expression $null, so the
-    # self-release test never fires.
+    # self-release test must not silently treat that as "prevented".
     Context 'The assigned quarantine policy omits EndUserQuarantinePermissions' {
         BeforeAll {
             Mock Get-TeamsProtectionPolicy {
@@ -579,16 +579,11 @@ Describe 'MET-Teams004 ZAP for Teams' {
             Mock Get-QuarantinePolicy { [PSCustomObject]@{ Name = 'ContosoCustomTag' } }
         }
 
-        # Pins current behaviour, which is wrong: the check reports that the quarantine
-        # policies do not allow user self-release having never read the permission that
-        # decides it. Per the repo's own rule an absent property must not yield Pass.
-        # Left pinned rather than corrected here so the defect is visible and cannot
-        # change unnoticed.
-        It 'Currently returns Pass and claims users cannot self-release' {
+        It 'Reports the release permission as unconfirmed instead of claiming users cannot self-release' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
-            $results[0].Finding | Should -Match 'quarantine policies do not allow user self-release'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+            $results[0].Finding | Should -Match 'not returned'
         }
     }
 }

@@ -25,7 +25,7 @@ function Test-QuarantineTagPermission {
     param([string]$TagName, [string]$Label)
 
     if (-not $TagName) {
-        return "No quarantine policy is assigned for $Label - the tenant default may allow users to self-release"
+        return [PSCustomObject]@{ Severity = 'Fail'; Message = "No quarantine policy is assigned for $Label - the tenant default may allow users to self-release" }
     }
 
     if ($TagName -eq 'AdminOnlyAccessPolicy') {
@@ -36,27 +36,49 @@ function Test-QuarantineTagPermission {
         $policy = Get-QuarantinePolicy -Identity $TagName -ErrorAction Stop
     }
     catch {
-        return "Unable to retrieve quarantine policy '$TagName' for $Label - cannot verify user release permissions"
+        return [PSCustomObject]@{ Severity = 'Fail'; Message = "Unable to retrieve quarantine policy '$TagName' for $Label - cannot verify user release permissions" }
     }
 
-    if ($policy.EndUserQuarantinePermissions.PermissionToRelease) {
-        return "$Label quarantine policy '$TagName' allows users to self-release quarantined messages - set PermissionToRelease to false or use AdminOnlyAccessPolicy"
+    # EndUserQuarantinePermissions.PermissionToRelease is a nested property: absent on
+    # either level, or present-but-$null on either level, reads as $null just like a
+    # confirmed $false would. Distinguish "not returned" from "returned and false" before
+    # branching, so an unobserved permission cannot be reported as a prevented one.
+    $permissionsProperty = $policy.PSObject.Properties['EndUserQuarantinePermissions']
+    $releaseProperty = $null
+    if ($permissionsProperty -and $null -ne $permissionsProperty.Value) {
+        $releaseProperty = $permissionsProperty.Value.PSObject.Properties['PermissionToRelease']
+    }
+
+    if (-not $permissionsProperty -or $null -eq $permissionsProperty.Value -or -not $releaseProperty -or $null -eq $releaseProperty.Value) {
+        return [PSCustomObject]@{
+            Severity = 'Warning'
+            Message  = "$Label quarantine policy '$TagName' whose EndUserQuarantinePermissions.PermissionToRelease was not returned by Get-QuarantinePolicy, so whether users can self-release quarantined messages via this tag was not established"
+        }
+    }
+
+    if ($releaseProperty.Value) {
+        return [PSCustomObject]@{ Severity = 'Fail'; Message = "$Label quarantine policy '$TagName' allows users to self-release quarantined messages - set PermissionToRelease to false or use AdminOnlyAccessPolicy" }
     }
 
     return $null
 }
 
 $issues = [System.Collections.Generic.List[string]]::new()
+$permissionWarnings = [System.Collections.Generic.List[string]]::new()
 
 if (-not $teamsPolicy.ZapEnabled) {
     $issues.Add('Zero-hour auto purge (ZAP) for Teams is disabled - malicious messages already delivered to Teams chats are not retroactively removed')
 }
 
-$malwareIssue = Test-QuarantineTagPermission -TagName $teamsPolicy.MalwareQuarantineTag -Label 'Malware'
-if ($malwareIssue) { $issues.Add($malwareIssue) }
+$malwareResult = Test-QuarantineTagPermission -TagName $teamsPolicy.MalwareQuarantineTag -Label 'Malware'
+if ($malwareResult) {
+    if ($malwareResult.Severity -eq 'Fail') { $issues.Add($malwareResult.Message) } else { $permissionWarnings.Add($malwareResult.Message) }
+}
 
-$hcpIssue = Test-QuarantineTagPermission -TagName $teamsPolicy.HighConfidencePhishQuarantineTag -Label 'High-confidence phish'
-if ($hcpIssue) { $issues.Add($hcpIssue) }
+$hcpResult = Test-QuarantineTagPermission -TagName $teamsPolicy.HighConfidencePhishQuarantineTag -Label 'High-confidence phish'
+if ($hcpResult) {
+    if ($hcpResult.Severity -eq 'Fail') { $issues.Add($hcpResult.Message) } else { $permissionWarnings.Add($hcpResult.Message) }
+}
 
 $warningIssues = [System.Collections.Generic.List[string]]::new()
 
@@ -93,6 +115,19 @@ if ($issues.Count -gt 0) {
         -Finding (($issues + $warningIssues) -join '; ') `
         -Recommendation 'Enable ZAP for Teams: Set-TeamsProtectionPolicy -ZapEnabled $true. Ensure MalwareQuarantineTag and HighConfidencePhishQuarantineTag use AdminOnlyAccessPolicy or a custom policy with PermissionToRelease disabled.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-zap'
+}
+elseif ($permissionWarnings.Count -gt 0) {
+    $finding = ($permissionWarnings -join '; ') +
+        '. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a quarantine policy that prevents self-release from one that allows it.'
+    if ($warningIssues.Count -gt 0) {
+        $finding += ' ' + ($warningIssues -join '; ')
+    }
+    New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
+        -Result Warning -Severity High -AffectedObject 'Teams Protection Policy' `
+        -Finding $finding `
+        -Recommendation 'Confirm the setting directly with: Get-QuarantinePolicy -Identity <tag name> | Select-Object -ExpandProperty EndUserQuarantinePermissions. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-teams-zap' `
+        -ErrorMessage "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
 }
 elseif ($warningIssues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `

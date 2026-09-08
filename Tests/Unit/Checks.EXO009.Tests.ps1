@@ -193,7 +193,7 @@ Describe 'MET-EXO009 Quarantine Policy Verdict Alignment' {
 
     # PermissionToRelease is reached through a nested property. A quarantine policy
     # object that omits EndUserQuarantinePermissions makes the whole expression $null,
-    # so the self-release test never fires for a tag the check did resolve.
+    # so the self-release test must not silently treat that as "prevented".
     Context 'The referenced quarantine policy omits EndUserQuarantinePermissions' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
@@ -207,16 +207,52 @@ Describe 'MET-EXO009 Quarantine Policy Verdict Alignment' {
             Mock Get-SafeAttachmentPolicy { @() }
         }
 
-        # Pins current behaviour, which is wrong: the check reports that the Malware
-        # verdict uses a quarantine policy preventing user self-release, having never read
-        # the permission that decides it. Per the repo's own rule an absent property must
-        # not yield Pass. Left pinned rather than corrected here so the defect is visible
-        # and cannot change unnoticed.
-        It 'Currently returns Pass on a permission that was never observed' {
+        It 'Reports the release permission as unconfirmed instead of assuming it is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'prevent user self-release'
+            $results[0].Finding | Should -Match 'not returned'
+        }
+    }
+
+    Context 'The referenced quarantine policy has EndUserQuarantinePermissions but no PermissionToRelease member' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @([PSCustomObject]@{ Name = 'ContosoCustomTag'; EndUserQuarantinePermissions = [PSCustomObject]@{} })
+            }
+            Mock Get-HostedContentFilterPolicy { @() }
+            Mock Get-MalwareFilterPolicy {
+                @([PSCustomObject]@{ Name = 'Custom Anti-Malware Policy'; QuarantineTag = 'ContosoCustomTag' })
+            }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { @() }
+        }
+
+        It 'Reports the release permission as unconfirmed instead of assuming it is prevented' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'prevent user self-release'
+            $results[0].Finding | Should -Match 'not returned'
+        }
+    }
+
+    Context 'A preset-generated policy references a restricted-verdict tag with EndUserQuarantinePermissions absent' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @([PSCustomObject]@{ Name = 'ContosoCustomTag' })
+            }
+            Mock Get-HostedContentFilterPolicy { @() }
+            Mock Get-MalwareFilterPolicy {
+                @([PSCustomObject]@{ Name = 'Strict Preset Security Policy1707729536596'; QuarantineTag = 'ContosoCustomTag' })
+            }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { @() }
+        }
+
+        It 'Skips the preset assignment entirely and does not emit a Warning for the absent property' {
             $results = @(& $checkFile)
             $results[0].Result | Should -Be 'Pass'
-            $results[0].Finding | Should -Match 'prevent user self-release'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results | Where-Object { $_.Result -in @('Fail', 'Warning') } | Should -BeNullOrEmpty
         }
     }
 }
