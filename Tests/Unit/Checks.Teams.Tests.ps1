@@ -102,10 +102,13 @@ Describe 'MET-Teams003 Meeting Protection' {
             }
             Mock Get-CsTeamsMeetingPolicy {
                 [PSCustomObject]@{
-                    Identity                              = 'Global'
-                    AllowAnonymousUsersToJoinMeeting      = $false
-                    AutoAdmittedUsers                     = 'EveryoneInSameAndFederatedCompany'
-                    AllowExternalNonTrustedMeetingChat    = $false
+                    Identity                                    = 'Global'
+                    AllowAnonymousUsersToJoinMeeting            = $false
+                    AutoAdmittedUsers                           = 'EveryoneInSameAndFederatedCompany'
+                    AllowExternalNonTrustedMeetingChat          = $false
+                    AllowPSTNUsersToBypassLobby                 = $false
+                    AllowExternalParticipantGiveRequestControl  = $false
+                    AllowAnonymousUsersToStartMeeting           = $false
                 }
             }
             Mock Get-CsTeamsChannelsPolicy {
@@ -377,16 +380,18 @@ Describe 'MET-Teams003 Meeting Protection' {
                 [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
             }
         }
-        It 'Treats the absent properties as not enabled' {
+        It 'Warns that the absent properties were not confirmed rather than treating them as not enabled' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Finding | Should -Not -Match 'control of a shared screen'
             $results[0].Finding | Should -Not -Match 'start a meeting with no organiser present'
         }
     }
 
     # Every meeting-policy assertion in this check is an -eq $true comparison, so a
-    # policy object that returns none of the properties produces no issue at all.
+    # policy object that returns none of the properties produces no insecure-value
+    # match on its own; the absence tracking added alongside those six filters is what
+    # keeps this from reading as a clean tenant.
     Context 'The meeting policy object omits every property the check reads' {
         BeforeAll {
             Mock Get-CsTenantFederationConfiguration {
@@ -400,17 +405,11 @@ Describe 'MET-Teams003 Meeting Protection' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the check reports meeting protection as
-        # correctly configured having read none of anonymous join, lobby admission,
-        # external meeting chat, PSTN lobby bypass, screen-control handoff or anonymous
-        # meeting start. Per the repo's own rule an absent property must not yield Pass.
-        # Left pinned rather than corrected here so the defect is visible and cannot
-        # change unnoticed.
-        It 'Currently returns Pass and claims the settings are correctly configured' {
+        It 'Returns Warning and reports the settings as unobserved rather than correctly configured' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
-            $results[0].Finding | Should -Match 'correctly configured'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'correctly configured'
+            $results[0].Finding | Should -Match 'not returned'
         }
     }
 }

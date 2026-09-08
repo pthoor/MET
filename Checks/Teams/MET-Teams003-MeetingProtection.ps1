@@ -1,5 +1,7 @@
 ﻿$issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
+$unobservedSettingClauses = [System.Collections.Generic.List[string]]::new()
+$unobservedSettingNames = [System.Collections.Generic.List[string]]::new()
 
 # Check Teams external access settings via EXO/Graph
 try {
@@ -62,6 +64,33 @@ try {
         $names = ($anonymousStartPolicies | Select-Object -ExpandProperty Identity) -join ', '
         $issues.Add("Anonymous (unauthenticated) participants can start a meeting with no organiser present in the following meeting policy/policies: $names - this defeats lobby controls that assume an organiser is there to admit attendees")
     }
+
+    # A property present but $null is treated the same as absent: neither observation
+    # confirms whether the setting is actually secure, and the six -eq $true filters
+    # above only ever catch an explicit insecure value, never silence on this collection.
+    $meetingSettingNames = @(
+        'AllowAnonymousUsersToJoinMeeting',
+        'AutoAdmittedUsers',
+        'AllowExternalNonTrustedMeetingChat',
+        'AllowPSTNUsersToBypassLobby',
+        'AllowExternalParticipantGiveRequestControl',
+        'AllowAnonymousUsersToStartMeeting'
+    )
+
+    foreach ($settingName in $meetingSettingNames) {
+        $unobservedPolicies = @(
+            $meetingPolicies | Where-Object {
+                -not $_.PSObject.Properties[$settingName] -or $null -eq $_.$settingName
+            }
+        )
+        if ($unobservedPolicies.Count -gt 0) {
+            $unobservedSettingNames.Add($settingName)
+            $shownNames = @($unobservedPolicies | Select-Object -First 5 -ExpandProperty Identity)
+            $shownNamesText = $shownNames -join ', '
+            $truncationSuffix = if ($unobservedPolicies.Count -gt $shownNames.Count) { " (showing first $($shownNames.Count) of $($unobservedPolicies.Count))" } else { '' }
+            $unobservedSettingClauses.Add("$settingName was not returned for the following meeting policy/policies: $shownNamesText$truncationSuffix")
+        }
+    }
 }
 catch {
     $retrievalErrors.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
@@ -83,12 +112,25 @@ catch {
 
 if ($issues.Count -gt 0) {
     $result = if ($issues | Where-Object { $_ -match 'Anonymous' -or $_ -match 'Everyone' -or $_ -match 'PSTN callers bypass the lobby' }) { 'Fail' } else { 'Warning' }
+    $findingParts = [System.Collections.Generic.List[string]]::new($issues)
+    if ($unobservedSettingClauses.Count -gt 0) {
+        $findingParts.AddRange($unobservedSettingClauses)
+        $findingParts.Add('An unconfirmed state is reported alongside the confirmed issues above rather than folded into a pass, because nothing here distinguishes a tenant with an unreturned setting switched on from one with it switched off.')
+    }
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
         -Result $result -Severity Medium -AffectedObject 'Teams Meeting Policies' `
-        -Finding ($issues -join '; ') `
+        -Finding ($findingParts -join '; ') `
         -Recommendation "Disable anonymous meeting join, set AutoAdmittedUsers to 'EveryoneInSameAndFederatedCompany' or 'OrganizerOnly', and review external chat permissions. Use the lobby as a security control." `
         -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
         -ErrorMessage ($retrievalErrors -join "`n")
+}
+elseif ($unobservedSettingClauses.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
+        -Result Warning -Severity Medium -AffectedObject 'Teams Meeting Policies' `
+        -Finding (($unobservedSettingClauses -join '; ') + '. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.') `
+        -Recommendation 'Confirm these settings directly with: Get-CsTeamsMeetingPolicy | Format-List <PropertyName>. An absent or null property usually means a MicrosoftTeams module version that does not expose it, or a value never explicitly set on that policy - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage "The following properties were not returned by Get-CsTeamsMeetingPolicy for one or more meeting policies: $($unobservedSettingNames -join ', ')"
 }
 elseif ($retrievalErrors.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
