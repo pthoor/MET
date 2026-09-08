@@ -273,8 +273,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
     }
 
     # A reduced Get-QuarantinePolicy object omits both properties this check reads.
-    # -not $null is $true and $null -gt 0 is $false, so the policy falls through to the
-    # else branch and is graded on two values that were never read.
+    # -not $null is $true and $null -gt 0 is $false, so the policy used to fall through to
+    # the else branch and be graded on two values that were never read. Fixed: absence on
+    # either side is now checked structurally before the conjunction runs.
     Context 'A custom quarantine policy omits ESNEnabled and EndUserQuarantinePermissionsValue' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
@@ -282,17 +283,12 @@ Describe 'MET-EXO004 Quarantine Policies' {
             }
         }
 
-        # Pins current behaviour, which is wrong: the check reports the notification
-        # settings as consistent with the permissions granted to end users when it read
-        # neither the notification setting nor the permissions. Per the repo's own rule
-        # an absent property must not yield Pass. Left pinned rather than corrected here
-        # so the defect is visible and cannot change unnoticed.
-        It 'Currently returns Pass on two properties that were never observed' {
+        It 'Returns Warning naming the properties that were never observed' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].AffectedObject | Should -Be 'ContosoCustomPolicy'
-            $results[0].Finding | Should -Match 'Notification settings are consistent'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'Notification settings are consistent'
         }
     }
 
@@ -517,7 +513,9 @@ Describe 'MET-EXO005 Tenant Allow/Block List' {
     }
 
     # An entry whose Action property is absent matches neither the Allow filter nor the
-    # Block filter, so an entry the check did read is counted as neither.
+    # Block filter, so an entry the check did read was counted as neither. Fixed: an
+    # unclassifiable entry is now tallied separately and stops the clean/well-maintained
+    # verdict from being reached.
     Context 'Tenant Allow/Block List entries omit the Action property' {
         BeforeAll {
             Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
@@ -533,18 +531,13 @@ Describe 'MET-EXO005 Tenant Allow/Block List' {
             Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
         }
 
-        # Pins current behaviour, which is wrong: the list is reported as well-maintained
-        # on a count of zero allows and zero blocks, when the one entry that was returned
-        # simply carried no Action to classify it by. Per the repo's own rule an absent
-        # property must not yield Pass. Left pinned rather than corrected here so the
-        # defect is visible and cannot change unnoticed.
-        It 'Currently returns Pass and counts an entry it did read as neither allow nor block' {
+        It 'Does not return Pass and names the entry it could not classify' {
             $results = & $checkFile
             $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
             $mainResult | Should -Not -BeNullOrEmpty
-            $mainResult.Result | Should -Be 'Pass'
-            $mainResult.AffectedObject | Should -Be 'TABL (0 allows, 0 blocks)'
-            $mainResult.Finding | Should -Match 'appear well-maintained'
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Finding | Should -Not -Match 'appear well-maintained'
+            $mainResult.Finding | Should -Match '1 entry'
         }
     }
 }

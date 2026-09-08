@@ -21,6 +21,27 @@ if ($customPolicies.Count -eq 0) {
 }
 
 foreach ($policy in $customPolicies) {
+    # -not $null is $true and $null -gt 0 is $false, so with both properties absent the
+    # conjunction below reads as false and the policy would fall through to the Pass branch
+    # on two values neither of which was ever observed. Check presence first.
+    $esnProperty  = $policy.PSObject.Properties['ESNEnabled']
+    $permProperty = $policy.PSObject.Properties['EndUserQuarantinePermissionsValue']
+    $missingProperties = [System.Collections.Generic.List[string]]::new()
+    if (-not $esnProperty -or $null -eq $esnProperty.Value) { $missingProperties.Add('ESNEnabled') }
+    if (-not $permProperty -or $null -eq $permProperty.Value) { $missingProperties.Add('EndUserQuarantinePermissionsValue') }
+
+    if ($missingProperties.Count -gt 0) {
+        $propertyList = $missingProperties -join ' and '
+        $verb = if ($missingProperties.Count -eq 1) { 'was' } else { 'were' }
+        New-METCheckResult -CheckId 'MET-EXO004' -Category EXO -Name 'Quarantine Policies' `
+            -Result Warning -Severity Medium -AffectedObject $policy.Name `
+            -Finding "The $propertyList propert$(if ($missingProperties.Count -eq 1) { 'y' } else { 'ies' }) $verb not returned by Get-QuarantinePolicy for this policy, so whether end users are notified about quarantined mail they have permission to act on was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a policy whose notification settings match its permissions from one where they conflict." `
+            -Recommendation "Confirm the settings directly with: Get-QuarantinePolicy -Identity '$($policy.Name)' | Format-List ESNEnabled, EndUserQuarantinePermissionsValue. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment." `
+            -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+            -ErrorMessage "Get-QuarantinePolicy did not return $propertyList for this policy."
+        continue
+    }
+
     if (-not $policy.ESNEnabled -and $policy.EndUserQuarantinePermissionsValue -gt 0) {
         New-METCheckResult -CheckId 'MET-EXO004' -Category EXO -Name 'Quarantine Policies' `
             -Result Warning -Severity Medium -AffectedObject $policy.Name `
