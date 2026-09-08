@@ -23,8 +23,11 @@ Inbound connectors sit **upstream** of every other spam and phishing control in 
 |---|---|
 | Pass | All enabled inbound connectors require TLS and authenticate their source using bound IP addresses or a TLS sender certificate |
 | Warning | At least one enabled inbound connector does not require TLS or lacks an effective IP/certificate authentication binding |
-| Info | No enabled inbound connectors exist |
+| Warning | At least one connector's `Enabled` property was not returned, or was returned as `$null` - its state is unconfirmed, so it is assessed on its remaining settings rather than dropped, and the check reports that whether it is active was not established |
+| Info | Every returned connector is explicitly `Enabled = $false` |
 | Fail | Unable to retrieve inbound connectors (permissions or connectivity issue) |
+
+A connector whose `Enabled` property is absent or `$null` is never treated as disabled - doing so would silently drop it from every hygiene assertion this check makes.
 
 ## Recommendation
 

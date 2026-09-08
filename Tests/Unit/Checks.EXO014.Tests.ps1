@@ -286,8 +286,9 @@ Describe 'MET-EXO014 Advanced Delivery Policy' {
         }
     }
 
-    # Only rules whose Mode is 'Enforce' are counted. A rule object that omits Mode is
-    # filtered out before anything about its scope is assessed.
+    # Only rules whose Mode is 'Enforce' are counted by an -eq filter. A rule object that
+    # omits Mode, or returns it as $null, is neither enforced nor unenforced - it must
+    # still be assessed, and included in the broad-sender-range scan, rather than dropped.
     Context 'Override rules omit the Mode property' {
         BeforeAll {
             Mock Get-ExoPhishSimOverrideRule {
@@ -300,17 +301,75 @@ Describe 'MET-EXO014 Advanced Delivery Policy' {
             Mock Get-ReportSubmissionRule { throw 'not configured' }
         }
 
-        # Pins current behaviour, which is wrong: two override rules were returned and
-        # neither was assessed, yet the check reports that no enforceable overrides are
-        # configured - and the broad /8 sender range on the simulation rule goes unflagged.
-        # Left pinned rather than corrected here so the defect is visible and cannot change
-        # unnoticed.
-        It 'Currently reports no enforceable overrides for rules whose Mode was not returned' {
+        It 'Assesses both rules and includes the phishing simulation rule in the broad sender-range scan' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+            $results[0].Finding | Should -Match 'fabrikam.com'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+
+            $scopeResult = $results | Where-Object { $_.Name -match 'Sender Scope' }
+            $scopeResult | Should -Not -BeNullOrEmpty
+            $scopeResult.Finding | Should -Match '10.0.0.0/8'
+        }
+    }
+
+    Context 'A phishing simulation rule with no Mode and a broad sender range' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Domains = @('fabrikam.com'); SenderIpRanges = @('10.0.0.0/8') }
+            }
+            Mock Get-ExoSecOpsOverrideRule { @() }
+        }
+
+        It 'Flags the broad sender range even though Mode was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+
+            $scopeResult = $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - Phishing Simulation Sender Scope' }
+            $scopeResult | Should -Not -BeNullOrEmpty
+            $scopeResult.Result | Should -Be 'Warning'
+            $scopeResult.Finding | Should -Match '10.0.0.0/8'
+        }
+    }
+
+    Context 'A SecOps rule with no Mode' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule { @() }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; SentTo = @('secops@contoso.com') }
+            }
+        }
+
+        It 'Assesses the SecOps rule instead of dropping it' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+        }
+    }
+
+    Context 'All override rules have Mode = Enforce' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Mode = 'Enforce'; Domains = @('fabrikam.com') }
+            }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('secops@contoso.com') }
+            }
+            Mock Get-ReportSubmissionPolicy { throw 'not configured' }
+            Mock Get-ReportSubmissionRule { throw 'not configured' }
+        }
+
+        It 'Keeps the existing Info result with no unestablished-mode wording' {
             $results = @(& $checkFile)
             $results[0].Result | Should -Be 'Info'
-            $results[0].Finding | Should -Match 'No enforceable Advanced Delivery'
-            $results[0].Finding | Should -Not -Match 'fabrikam.com'
-            ($results | Where-Object { $_.Name -match 'Sender Scope' }) | Should -BeNullOrEmpty
+            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Match 'fabrikam.com'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+            $results[0].Error | Should -BeNullOrEmpty
         }
     }
 }

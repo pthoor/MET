@@ -26,18 +26,19 @@ Describe 'MET-EXO016 ARC Trusted Sealers' {
         }
     }
 
-    Context 'ArcTrustedSealers is null' {
+    Context 'ArcTrustedSealers is present but null' {
         BeforeAll {
             Mock Get-ArcConfig {
                 [PSCustomObject]@{ ArcTrustedSealers = $null }
             }
         }
 
-        It 'Returns Info with no sealers message' {
+        It 'Returns NotApplicable because a null value was never observed as an empty list' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Info'
+            $results[0].Result | Should -Be 'NotApplicable'
             $results[0].Severity | Should -Be 'Low'
-            $results[0].Finding | Should -Match 'No ARC trusted sealers configured'
+            $results[0].Finding | Should -Match 'not established'
+            $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -102,16 +103,12 @@ Describe 'MET-EXO016 ARC Trusted Sealers' {
             $results[0].AffectedObject | Should -Be 'ARC Trusted Sealers'
         }
 
-        # Pins current behaviour, whose wording is wrong: the check states no trusted
-        # sealers are configured and that there is nothing to review, having never read the
-        # property that lists them. The result is Info and carries no score, so this is a
-        # reporting defect rather than a false Pass. Left pinned so it cannot change
-        # unnoticed.
-        It 'Currently states nothing is configured rather than that the property was not returned' {
+        It 'States the property was not returned rather than that nothing is configured' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Info'
-            $results[0].Finding | Should -Match 'No ARC trusted sealers configured'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Result | Should -Be 'NotApplicable'
+            $results[0].Finding | Should -Not -Match 'No ARC trusted sealers configured'
+            $results[0].Finding | Should -Match 'not established'
+            $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
 }

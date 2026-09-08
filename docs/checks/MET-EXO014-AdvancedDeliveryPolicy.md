@@ -16,13 +16,16 @@ But the same exemption is dangerous if left unmanaged. A phishing simulation pla
 
 ## Pass / Fail / Warning
 
-This check is **Info-only** on its substantive branches - there is no "correct" number of override rules, since presence is often legitimate and expected. It only returns `Fail` when the rules cannot be retrieved at all.
+This check has no "correct" number of override rules, since presence is often legitimate and expected - `Info` is its normal substantive result. It returns `Warning` only when a rule's enforcement state could not be confirmed, and `Fail` when the rules cannot be retrieved at all.
 
 | Result | Condition |
 |---|---|
 | Info | No enforceable Advanced Delivery override rules are configured |
 | Info | One or more enforceable phishing simulation or SecOps mailbox rules exist - listed for review |
+| Warning | One or more override rules exist whose `Mode` property was not returned - whether they are enforced was not established, so they are listed alongside the confirmed-enforced rules rather than dropped, and are still included in the broad-sender-range and mailbox-scope reviews below |
 | Fail | Either required Advanced Delivery rule collection cannot be retrieved |
+
+A rule with no `Mode` is never treated as unenforced - an `-eq 'Enforce'` filter alone would silently drop it, along with any broad sender-IP range it carries, from every review this check performs.
 
 ## Recommendation
 

@@ -191,8 +191,11 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
         }
     }
 
-    # The enabled-connector filter is Enabled -eq $true, so a connector object that omits
-    # Enabled is dropped before any of its settings are looked at.
+    # The enabled-connector filter is Enabled -eq $true. A connector object that omits
+    # Enabled, or returns it as $null, is neither enabled nor disabled - it must still be
+    # assessed, since its remaining settings (RequireTls, IP/certificate binding) are still
+    # readable and still matter, and its enabled state is reported as not established
+    # rather than assumed.
     Context 'a connector omits the Enabled property' {
         BeforeAll {
             Mock Get-InboundConnector {
@@ -206,15 +209,52 @@ Describe 'MET-EXO011 Mail Flow Connector Hygiene' {
             }
         }
 
-        # Pins current behaviour, which is wrong: a connector was returned and never
-        # assessed, yet the check reports that no enabled inbound connectors were found -
-        # a state it did not observe. Left pinned rather than corrected here so the defect
-        # is visible and cannot change unnoticed.
-        It 'Currently reports no enabled connectors rather than naming the connector it could not grade' {
+        It 'Assesses the connector instead of reporting no enabled connectors found' {
             $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Info'
-            $results[0].Finding | Should -Match 'No enabled inbound connectors found'
-            $results[0].Finding | Should -Not -Match 'LegacyConnector'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enabled inbound connectors found'
+            $results[0].Finding | Should -Match "'LegacyConnector'"
+            $results[0].Finding | Should -Match 'Enabled property was not returned'
+            $results[0].Finding | Should -Match 'not established'
+            $results[0].Finding | Should -Match 'does not require TLS'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'one enabled connector plus one unknown-state connector' {
+        BeforeAll {
+            Mock Get-InboundConnector {
+                @(
+                    [PSCustomObject]@{
+                        Name                         = 'GoodConnector'
+                        Enabled                      = $true
+                        RequireTls                   = $true
+                        SenderIPAddresses            = @('203.0.113.5')
+                        SenderDomains                = @()
+                        RestrictDomainsToIPAddresses = $true
+                        RestrictDomainsToCertificate = $false
+                        TlsSenderCertificateName     = $null
+                    }
+                    [PSCustomObject]@{
+                        Name                         = 'UnknownConnector'
+                        RequireTls                   = $true
+                        SenderIPAddresses            = @('203.0.113.9')
+                        SenderDomains                = @()
+                        RestrictDomainsToIPAddresses = $true
+                        RestrictDomainsToCertificate = $false
+                        TlsSenderCertificateName     = $null
+                    }
+                )
+            }
+        }
+
+        It 'Assesses both the enabled connector and the unknown-state connector' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].AffectedObject | Should -Match '1 enabled'
+            $results[0].AffectedObject | Should -Match '1 with enabled state not established'
+            $results[0].Finding | Should -Match "'UnknownConnector'"
+            $results[0].Finding | Should -Not -Match "'GoodConnector' does not require TLS"
         }
     }
 

@@ -19,10 +19,11 @@ Including obsolete, compromised, or unnecessary sealers in the trusted list crea
 
 | Result | Condition |
 |---|---|
-| Info | No trusted sealers configured OR one or more sealers are configured |
+| Info | `ArcTrustedSealers` was returned as an empty list, or with one or more sealers |
+| NotApplicable | `Get-ArcConfig` did not return a value for `ArcTrustedSealers` (absent, or present as `$null`) - whether any sealers are configured was not established, so this is reported as unassessed rather than as "none configured" |
 | Fail | Unable to retrieve ARC configuration (access issue or cmdlet failure) |
 
-Note: This check returns `Info` in all successful cases because both empty and populated sealer lists can be legitimate - the decision to use ARC and which sealers to trust is configuration-specific, not a security stance that MET judges as Pass/Fail.
+Note: This check returns `Info` in both successful list cases (empty or populated) because both can be legitimate - the decision to use ARC and which sealers to trust is configuration-specific, not a security stance that MET judges as Pass/Fail. An empty list is a genuine observation; a property that was never returned is not, and the two are not conflated.
 
 ## Recommendation
 
