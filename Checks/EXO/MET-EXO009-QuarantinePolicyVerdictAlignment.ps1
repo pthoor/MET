@@ -147,11 +147,22 @@ foreach ($a in $assignments) {
 }
 
 if ($fails.Count -gt 0) {
+    # A confirmed failure on one assignment must not swallow an unconfirmed
+    # permission on a different one - the reader still needs to know that
+    # second tag's state was never established, distinct from the confirmed
+    # failure so it is not mistaken for one.
+    $finding = $fails -join '; '
+    $failErrorMessage = $null
+    if ($permissionWarnings.Count -gt 0) {
+        $finding += ' Additionally, the following have an unconfirmed release permission rather than a confirmed failure: ' + ($permissionWarnings -join '; ') + '.'
+        $failErrorMessage = "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
+    }
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
         -Result Fail -Severity High -AffectedObject 'Quarantine Tag Assignments' `
-        -Finding ($fails -join '; ') `
+        -Finding $finding `
         -Recommendation 'For Malware and High-Confidence Phish verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
-        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage $failErrorMessage
 }
 elseif ($permissionWarnings.Count -gt 0) {
     $finding = ($permissionWarnings -join '; ') +

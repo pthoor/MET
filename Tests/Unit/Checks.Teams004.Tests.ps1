@@ -225,4 +225,41 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # A confirmed failure on one tag must not silently drop an unconfirmed permission
+    # on the other - the reader still needs to know that tag's state was never
+    # established, distinct from the confirmed failure so it is not mistaken for one.
+    Context 'Malware tag is a confirmed Fail, High-Confidence Phish tag has an unconfirmed release permission' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy {
+                param($Identity)
+                if ($Identity -eq 'ContosoMalwareTag') {
+                    return [PSCustomObject]@{
+                        Name                          = 'ContosoMalwareTag'
+                        EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                    }
+                }
+                return [PSCustomObject]@{ Name = 'ContosoHcpTag' }
+            }
+        }
+        It 'Returns Fail and names both the confirmed failure and the unconfirmed tag, with Error populated' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'Malware quarantine policy'
+            $results[0].Finding | Should -Match 'allows users to self-release quarantined messages'
+            $results[0].Finding | Should -Match 'High-confidence phish'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Match 'unconfirmed release permission rather than a confirmed failure'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'ContosoHcpTag'
+        }
+    }
 }

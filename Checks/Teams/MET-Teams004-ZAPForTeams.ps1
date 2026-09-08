@@ -110,11 +110,22 @@ catch {
 }
 
 if ($issues.Count -gt 0) {
+    # A confirmed failure on one tag must not swallow an unconfirmed permission
+    # on the other - the reader still needs to know that tag's state was never
+    # established, distinct from the confirmed failure so it is not mistaken
+    # for one.
+    $finding = ($issues + $warningIssues) -join '; '
+    $failErrorMessage = $null
+    if ($permissionWarnings.Count -gt 0) {
+        $finding += ' Additionally, the following have an unconfirmed release permission rather than a confirmed failure: ' + ($permissionWarnings -join '; ') + '.'
+        $failErrorMessage = "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
+    }
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
         -Result Fail -Severity High -AffectedObject 'Teams Protection Policy' `
-        -Finding (($issues + $warningIssues) -join '; ') `
+        -Finding $finding `
         -Recommendation 'Enable ZAP for Teams: Set-TeamsProtectionPolicy -ZapEnabled $true. Ensure MalwareQuarantineTag and HighConfidencePhishQuarantineTag use AdminOnlyAccessPolicy or a custom policy with PermissionToRelease disabled.' `
-        -ReferenceUrl 'https://aka.ms/mdo-teams-zap'
+        -ReferenceUrl 'https://aka.ms/mdo-teams-zap' `
+        -ErrorMessage $failErrorMessage
 }
 elseif ($permissionWarnings.Count -gt 0) {
     $finding = ($permissionWarnings -join '; ') +

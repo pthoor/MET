@@ -255,4 +255,74 @@ Describe 'MET-EXO009 Quarantine Policy Verdict Alignment' {
             $results | Where-Object { $_.Result -in @('Fail', 'Warning') } | Should -BeNullOrEmpty
         }
     }
+
+    # A confirmed failure on one assignment must not silently drop an unconfirmed
+    # permission on a different assignment - both are signals about a control this
+    # check could not fully verify, and only one of them is a fixable "flip a bit".
+    Context 'One assignment is a confirmed Fail, a different assignment has an unconfirmed release permission' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @(
+                    New-METQuarantinePolicy -Name 'CustomFullAccess' -PermissionToRelease $true
+                    [PSCustomObject]@{ Name = 'ContosoCustomTag' }
+                )
+            }
+            Mock Get-HostedContentFilterPolicy {
+                @(
+                    [PSCustomObject]@{
+                        Name                              = 'Custom Anti-Spam Policy'
+                        HighConfidencePhishQuarantineTag  = 'CustomFullAccess'
+                        PhishQuarantineTag                = $null
+                        HighConfidenceSpamQuarantineTag   = $null
+                        SpamQuarantineTag                 = $null
+                        BulkQuarantineTag                 = $null
+                    }
+                )
+            }
+            Mock Get-MalwareFilterPolicy {
+                @([PSCustomObject]@{ Name = 'Custom Anti-Malware Policy'; QuarantineTag = 'ContosoCustomTag' })
+            }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { @() }
+        }
+
+        It 'Returns Fail and names both the confirmed failure and the unconfirmed tag, with Error populated' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'Custom Anti-Spam Policy'
+            $results[0].Finding | Should -Match 'High-Confidence Phish'
+            $results[0].Finding | Should -Match 'Custom Anti-Malware Policy'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Match 'unconfirmed release permission rather than a confirmed failure'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'ContosoCustomTag'
+        }
+    }
+
+    # Two independent unconfirmed signals in the same run - a permission that was
+    # never returned, and a policy family that could not be retrieved at all - must
+    # both survive into the single Warning result, not just the first one found.
+    Context 'One assignment has an unconfirmed release permission and a different policy family failed to retrieve' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @([PSCustomObject]@{ Name = 'ContosoCustomTag' })
+            }
+            Mock Get-HostedContentFilterPolicy { @() }
+            Mock Get-MalwareFilterPolicy {
+                @([PSCustomObject]@{ Name = 'Custom Anti-Malware Policy'; QuarantineTag = 'ContosoCustomTag' })
+            }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { throw 'Access denied' }
+        }
+
+        It 'Returns Warning naming both the unconfirmed permission and the retrieval failure' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Custom Anti-Malware Policy'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Match 'could not be retrieved'
+            $results[0].Finding | Should -Match 'Access denied'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
 }
