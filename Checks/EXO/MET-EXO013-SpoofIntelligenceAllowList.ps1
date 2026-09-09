@@ -20,22 +20,38 @@ if ($allowEntries.Count -eq 0) {
 }
 
 $count = $allowEntries.Count
-$externalCount = @($allowEntries | Where-Object { $_.SpoofType -eq 'External' }).Count
+
+$unclassified = @($allowEntries | Where-Object { -not $_.PSObject.Properties['SpoofType'] -or $null -eq $_.SpoofType })
+$externalCount = @($allowEntries | Where-Object { $_.PSObject.Properties['SpoofType'] -and $_.SpoofType -eq 'External' }).Count
 
 $samples = $allowEntries | Select-Object -First 10 | ForEach-Object {
-    "$($_.SpoofedUser) via $($_.SendingInfrastructure) ($($_.SpoofType))"
+    $spoofTypeText = if (-not $_.PSObject.Properties['SpoofType'] -or $null -eq $_.SpoofType) { 'spoof type not returned' } else { $_.SpoofType }
+    "$($_.SpoofedUser) via $($_.SendingInfrastructure) ($spoofTypeText)"
 }
 
 $findingParts = [System.Collections.Generic.List[string]]::new()
-$findingParts.Add("$count spoof intelligence allow entry(ies) found ($externalCount External)")
+if ($unclassified.Count -gt 0) {
+    $findingParts.Add("$count spoof intelligence allow entry(ies) found ($externalCount External, $($unclassified.Count) of $count entries did not report a spoof type)")
+}
+else {
+    $findingParts.Add("$count spoof intelligence allow entry(ies) found ($externalCount External)")
+}
 $findingParts.Add(($samples -join '; '))
 
 if ($count -gt 10) {
     $findingParts.Add("...and $($count - 10) more")
 }
 
+$errorMessage = if ($unclassified.Count -gt 0) {
+    "$($unclassified.Count) of $count entries returned by Get-TenantAllowBlockListSpoofItems did not include a SpoofType value, so the Internal/External split above is a lower bound for External."
+}
+else {
+    $null
+}
+
 New-METCheckResult -CheckId 'MET-EXO013' -Category EXO -Name 'Spoof Intelligence Allow-List' `
     -Result Warning -Severity High -AffectedObject "Spoof Intelligence Allow List ($count entries)" `
     -Finding ($findingParts -join '; ') `
     -Recommendation 'Review each allowed spoof pair. These are often created automatically when spoof intelligence learns a legitimate sender pattern, or manually during incident response, and are meant to be periodically reviewed - not permanent. Remove entries for senders/infrastructure no longer in use. External spoof types are higher risk than Internal since they permit an outside domain to impersonate a sender address. Run: Get-TenantAllowBlockListSpoofItems -Action Allow | Remove-TenantAllowBlockListSpoofItems to clean up stale entries.' `
-    -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-tenantallowblocklistspoofitems'
+    -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-tenantallowblocklistspoofitems' `
+    -ErrorMessage $errorMessage

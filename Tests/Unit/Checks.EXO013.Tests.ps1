@@ -97,15 +97,31 @@ Describe 'MET-EXO013 Spoof Intelligence Allow-List' {
             $results[0].Finding | Should -Match 'ceo@contoso.com via mail.evil-example.com'
         }
 
-        # Pins current behaviour, whose wording is wrong: the External count is reported as
-        # zero when SpoofType was never returned, so the higher-risk external-spoof
-        # exception is indistinguishable here from an internal one. The verdict is a
-        # Warning either way, so this is a reporting defect rather than a false Pass. Left
-        # pinned so it cannot change unnoticed.
-        It 'Currently reports zero External entries for a type it never read' {
+        It 'Does not report a bare zero External count and names the unclassified entry' {
             $results = @(& $checkFile)
-            $results[0].Finding | Should -Match '1 spoof intelligence allow entry\(ies\) found \(0 External\)'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Not -Match '1 spoof intelligence allow entry\(ies\) found \(0 External\)$'
+            $results[0].Finding | Should -Match '1 spoof intelligence allow entry\(ies\) found \(0 External, 1 of 1 entries did not report a spoof type\)'
+            $results[0].Finding | Should -Match 'ceo@contoso\.com via mail\.evil-example\.com \(spoof type not returned\)'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'SpoofType'
+            $results[0].Error | Should -Match 'Get-TenantAllowBlockListSpoofItems'
+        }
+    }
+
+    Context 'allow entries carry SpoofType present but null' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListSpoofItems {
+                @(
+                    [PSCustomObject]@{ SpoofedUser = 'ceo@contoso.com'; SendingInfrastructure = 'mail.evil-example.com'; SpoofType = $null; Action = 'Allow' }
+                )
+            }
+        }
+
+        It 'Treats a present-and-null SpoofType the same as an absent one' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match '1 of 1 entries did not report a spoof type'
+            $results[0].Finding | Should -Match 'spoof type not returned'
         }
     }
 }

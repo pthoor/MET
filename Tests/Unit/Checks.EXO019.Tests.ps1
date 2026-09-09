@@ -172,7 +172,8 @@ Describe 'MET-EXO019 SMTP Client Authentication' {
 
     # Get-EXOCasMailbox returns $null for SmtpClientAuthenticationDisabled on a mailbox
     # that inherits the tenant setting, which the check reads as "no override". A mailbox
-    # object that omits the property entirely is indistinguishable from that.
+    # object that omits the property entirely is a different fact - whether it overrides
+    # was never returned at all - and must not be folded into "no override".
     Context 'The CAS mailbox objects omit SmtpClientAuthenticationDisabled' {
         BeforeAll {
             Mock Get-TransportConfig { [PSCustomObject]@{ SmtpClientAuthenticationDisabled = $true } }
@@ -184,15 +185,60 @@ Describe 'MET-EXO019 SMTP Client Authentication' {
             }
         }
 
-        # Pins current behaviour. An absent value here is not separated from the documented
-        # $null that means "inherits the tenant setting", so the check states that no
-        # mailbox re-enables SMTP AUTH on the strength of a property it may never have been
-        # given. Left pinned so it cannot change unnoticed.
-        It 'Currently returns Pass and claims no mailbox re-enables SMTP AUTH' {
+        It 'Returns Warning rather than claiming no mailbox re-enables SMTP AUTH' {
             $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'High'
+            $results[0].Finding | Should -Not -Match 'no mailbox explicitly re-enables it'
+            $results[0].Finding | Should -Match '2 mailbox\(es\) did not return the SmtpClientAuthenticationDisabled property'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'SmtpClientAuthenticationDisabled'
+        }
+    }
+
+    Context 'One mailbox has SmtpClientAuthenticationDisabled present and explicitly $null, none absent' {
+        BeforeAll {
+            Mock Get-TransportConfig { [PSCustomObject]@{ SmtpClientAuthenticationDisabled = $true } }
+            Mock Get-EXOCasMailbox {
+                @(
+                    [PSCustomObject]@{ PrimarySmtpAddress = 'inherits@contoso.com'; SmtpClientAuthenticationDisabled = $null }
+                )
+            }
+        }
+
+        # This is the documented exception in this check: a present-and-null value means
+        # "inherits the tenant setting", a real and meaningful value, not an unconfirmed
+        # one. It must not be swept into the same unverified bucket as a truly absent
+        # property, even though both read as $null through a bare property access.
+        It 'Still returns Pass - present-and-null is the documented inherit case, not an unverified one' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'Pass'
+            $results[0].Severity | Should -Be 'High'
             $results[0].Finding | Should -Match 'no mailbox explicitly re-enables it'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Error | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'Overrides exist alongside mailboxes with an absent SmtpClientAuthenticationDisabled property' {
+        BeforeAll {
+            Mock Get-TransportConfig { [PSCustomObject]@{ SmtpClientAuthenticationDisabled = $true } }
+            Mock Get-EXOCasMailbox {
+                @(
+                    [PSCustomObject]@{ PrimarySmtpAddress = 'scanner@contoso.com'; SmtpClientAuthenticationDisabled = $false }
+                    [PSCustomObject]@{ PrimarySmtpAddress = 'unknown@contoso.com' }
+                )
+            }
+        }
+
+        It 'Keeps the override Warning and additionally names the unverified mailbox' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'scanner@contoso\.com'
+            $results[0].Finding | Should -Match '1 mailbox\(es\) did not return the SmtpClientAuthenticationDisabled property'
+            $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
 
