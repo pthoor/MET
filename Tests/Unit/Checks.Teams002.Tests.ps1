@@ -75,6 +75,19 @@ Describe 'MET-Teams002 Safe Attachments for Teams' {
         }
     }
 
+    Context 'The global policy has EnableATPForSPOTeamsODB present but explicitly $null' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $null } }
+        }
+
+        It 'Reports NotApplicable rather than a Pass or Fail on a value it never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'NotApplicable'
+            $results[0].Error  | Should -Not -BeNullOrEmpty
+            $results[0].Finding | Should -Not -Match 'EnableATPForSPOTeamsODB = \$'
+        }
+    }
+
     # Mutation verification: the absent path is NotApplicable while the present-and-false
     # path stays Fail, with different Findings.
     Context 'Property absent vs. present and false' {

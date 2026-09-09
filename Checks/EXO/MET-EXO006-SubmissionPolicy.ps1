@@ -109,6 +109,19 @@ elseif ($thirdPartyMode -and $reportsToMicrosoft) {
         -Recommendation 'Consider switching to the built-in Microsoft report button for a directly supported path. If keeping the add-in, verify it is current and that full message headers are preserved in forwarded copies.' `
         -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
 }
+elseif ($thirdPartyAddressUnknown) {
+    # $reportsToMicrosoft is confirmed true here (the reportingDisabled/reportingModeUnknown
+    # branch above already claimed every case where it wasn't), but whether the button is the
+    # built-in one or a non-Microsoft add-in was never observed. Reaching the Pass sentence
+    # below would assert "built-in" on a value this check did not confirm.
+    New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+        -Name 'User Reported Message Settings - Report Button' `
+        -Result NotApplicable -Severity High -AffectedObject 'Report Submission Policy' `
+        -Finding 'EnableThirdPartyAddress was not returned by the report submission policy, so whether user reports come from the built-in Microsoft report button or a non-Microsoft add-in was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes the built-in report button from a third-party add-in, which needs its own verification that message headers are preserved.' `
+        -Recommendation 'Confirm the setting directly with: Get-ReportSubmissionPolicy | Format-List EnableThirdPartyAddress. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings' `
+        -ErrorMessage 'Get-ReportSubmissionPolicy did not return an EnableThirdPartyAddress value.'
+}
 else {
     # Built-in button, reports to Microsoft (with or without custom mailbox)
     New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `

@@ -10,7 +10,7 @@ catch {
     return
 }
 
-if (-not $atpGlobal -or -not $atpGlobal.PSObject.Properties['EnableATPForSPOTeamsODB']) {
+if (-not $atpGlobal -or -not $atpGlobal.PSObject.Properties['EnableATPForSPOTeamsODB'] -or $null -eq $atpGlobal.EnableATPForSPOTeamsODB) {
     New-METCheckResult -CheckId 'MET-Teams002' -Category Teams -Name 'Safe Attachments for Teams' `
         -Result NotApplicable -Severity High -AffectedObject 'Global Safe Attachments Settings' `
         -Finding 'The EnableATPForSPOTeamsODB property was not returned by the global Safe Attachments policy, so whether Safe Attachments protects files shared via Teams was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.' `

@@ -33,7 +33,7 @@ For the global SharePoint / OneDrive / Teams setting:
 | Pass | `EnableATPForSPOTeamsODB` is `$true` |
 | Fail | `EnableATPForSPOTeamsODB` is `$false` |
 | Warning | `Get-AtpPolicyForO365` could not be read - the setting was not established; the failure is carried in `Error` |
-| NotApplicable | The policy returned no `EnableATPForSPOTeamsODB` property - the setting was not established; recorded in `Error` |
+| NotApplicable | The policy returned no `EnableATPForSPOTeamsODB` property, or returned it present but `$null` - the setting was not established; recorded in `Error` |
 
 ## Recommendation
 

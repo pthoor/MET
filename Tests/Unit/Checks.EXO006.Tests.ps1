@@ -12,10 +12,13 @@ Describe 'MET-EXO006 Submission Policy' {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO006-SubmissionPolicy.ps1'
     }
 
+    # EnableThirdPartyAddress is explicit ($false) here so this context exercises the
+    # confirmed-built-in Pass path rather than the unconfirmed-report-button path added
+    # below, which must not reach Pass.
     Context 'Reporting to Microsoft enabled with submission mailbox' {
         BeforeAll {
             Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{ EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true }
+                [PSCustomObject]@{ EnableReportToMicrosoft = $true; EnableThirdPartyAddress = $false; EnableUserEmailNotification = $true }
             }
             Mock Get-ReportSubmissionRule {
                 [PSCustomObject]@{ SentTo = 'secops@contoso.com' }
@@ -24,6 +27,35 @@ Describe 'MET-EXO006 Submission Policy' {
         It 'Returns Pass' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    # EnableThirdPartyAddress was never returned, but EnableReportToMicrosoft is confirmed
+    # $true. Whether the button is the built-in one or a non-Microsoft add-in was never
+    # established - the check must not assert "built-in" on a value it never observed.
+    Context 'EnableReportToMicrosoft is confirmed true but EnableThirdPartyAddress is absent' {
+        BeforeAll {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{ EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true }
+            }
+            Mock Get-ReportSubmissionRule {
+                [PSCustomObject]@{ SentTo = 'secops@contoso.com' }
+            }
+        }
+
+        It 'Does not return Pass on a report-button mode it never observed' {
+            $results = @(& $checkFile)
+            $buttonResult = $results | Where-Object { $_.Name -match 'Report Button' }
+            $buttonResult | Should -Not -BeNullOrEmpty
+            $buttonResult.Result | Should -Be 'NotApplicable'
+            $buttonResult.Error  | Should -Not -BeNullOrEmpty
+            $buttonResult.Finding | Should -Not -Match 'built-in Microsoft report button is active'
+        }
+
+        It 'States why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $buttonResult = $results | Where-Object { $_.Name -match 'Report Button' }
+            $buttonResult.Finding | Should -Match 'reported as unassessed rather than a pass'
         }
     }
 

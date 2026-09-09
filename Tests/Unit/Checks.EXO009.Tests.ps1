@@ -325,4 +325,44 @@ Describe 'MET-EXO009 Quarantine Policy Verdict Alignment' {
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # The Fail branch previously built its Finding from $fails alone, dropping a
+    # co-occurring retrieval failure from a different policy family entirely - the
+    # same asymmetry commit f91583d already closed for $permissionWarnings.
+    Context 'One assignment is a confirmed Fail and a different policy family failed to retrieve' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                @(
+                    New-METQuarantinePolicy -Name 'CustomFullAccess' -PermissionToRelease $true
+                )
+            }
+            Mock Get-HostedContentFilterPolicy {
+                @(
+                    [PSCustomObject]@{
+                        Name                              = 'Custom Anti-Spam Policy'
+                        HighConfidencePhishQuarantineTag  = 'CustomFullAccess'
+                        PhishQuarantineTag                = $null
+                        HighConfidenceSpamQuarantineTag   = $null
+                        SpamQuarantineTag                 = $null
+                        BulkQuarantineTag                 = $null
+                    }
+                )
+            }
+            Mock Get-MalwareFilterPolicy { @() }
+            Mock Get-AntiPhishPolicy { @() }
+            Mock Get-SafeAttachmentPolicy { throw 'Access denied' }
+        }
+
+        It 'Returns Fail and names both the confirmed failure and the retrieval failure, with Error populated' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'Custom Anti-Spam Policy'
+            $results[0].Finding | Should -Match 'High-Confidence Phish'
+            $results[0].Finding | Should -Match 'could not be retrieved'
+            $results[0].Finding | Should -Match 'rather than a confirmed failure'
+            $results[0].Finding | Should -Match 'Access denied'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'Access denied'
+        }
+    }
 }

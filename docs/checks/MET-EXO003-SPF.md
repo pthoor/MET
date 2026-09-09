@@ -9,6 +9,7 @@ For each authoritative accepted domain:
 - SPF TXT record is present
 - Record's `all` mechanism (if any) does not resolve to `+all` (permit all) or `?all` (neutral)
 - Record uses `-all` (hard fail) rather than `~all` (soft fail)
+- Record with no `all` term at all and no `redirect=` deferral is treated as no protection, same as a missing record
 - Total DNS lookup count stays within the RFC 7208 limit of 10, and was actually possible to count in full
 
 ## Why it matters

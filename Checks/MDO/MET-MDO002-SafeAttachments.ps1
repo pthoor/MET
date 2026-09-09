@@ -16,7 +16,7 @@ if ($atpRetrievalError) {
         -Recommendation 'Ensure the account has Security Reader or higher permissions, then rerun the assessment to establish the SharePoint, OneDrive and Microsoft Teams setting. The Safe Attachments policy results in this report cover email only and do not speak for that setting.' `
         -ReferenceUrl 'https://aka.ms/mdo-safeattachments' -ErrorMessage $atpRetrievalError
 }
-elseif (-not $atpGlobal -or -not $atpGlobal.PSObject.Properties['EnableATPForSPOTeamsODB']) {
+elseif (-not $atpGlobal -or -not $atpGlobal.PSObject.Properties['EnableATPForSPOTeamsODB'] -or $null -eq $atpGlobal.EnableATPForSPOTeamsODB) {
     New-METCheckResult -CheckId 'MET-MDO002' -Category MDO -Name 'Safe Attachments' `
         -Result NotApplicable -Severity High -AffectedObject 'Global Safe Attachments Settings' `
         -Finding 'The EnableATPForSPOTeamsODB property was not returned by the global Safe Attachments policy, so whether Safe Attachments protects SharePoint, OneDrive and Microsoft Teams file sharing was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.' `

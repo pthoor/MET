@@ -325,6 +325,50 @@ Describe 'MET-Teams005 Teams User Reporting' {
             $results[0].Severity | Should -Be 'Medium'
             $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
         }
+
+        It 'States why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
+        }
+
+        It 'Reports the zero-policies Error accurately rather than claiming one or more policies were read' {
+            $results = @(& $checkFile)
+            $results[0].Error | Should -Match 'no Teams messaging policies'
+            $results[0].Error | Should -Not -Match 'one or more'
+        }
+    }
+
+    # This is the live false Pass this wave exists to close: a messaging policy that
+    # returns AllowSecurityEndUserReporting as $null is neither confirmed enabled nor
+    # confirmed disabled, so it must not satisfy the Pass condition the way an absent
+    # property already correctly does not.
+    Context 'A Teams messaging policy has AllowSecurityEndUserReporting present but explicitly $null' {
+        BeforeEach {
+            Mock Get-ReportSubmissionPolicy {
+                [PSCustomObject]@{
+                    ReportChatMessageEnabled                    = $true
+                    ReportChatMessageToCustomizedAddressEnabled = $true
+                }
+            }
+            Mock Get-CsTeamsMessagingPolicy {
+                @([PSCustomObject]@{ Identity = 'Global'; AllowSecurityEndUserReporting = $null })
+            }
+        }
+
+        It 'Warns instead of passing on a value it never observed, and names the policy' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Finding  | Should -Match 'Global'
+            $results[0].Finding  | Should -Not -Match 'all Teams messaging policies allow users to report'
+            $results[0].Error    | Should -Match 'AllowSecurityEndUserReporting'
+        }
+
+        It 'States why an unconfirmed state is not reported as a pass' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'reported as unassessed rather than a pass'
+        }
     }
 
     Context 'Every Teams messaging policy carries the property and allows reporting' {

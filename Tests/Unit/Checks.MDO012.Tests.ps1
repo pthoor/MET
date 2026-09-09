@@ -192,6 +192,49 @@ Describe 'MET-MDO012 Safe Documents' {
         }
     }
 
+    Context 'AllowSafeDocsOpen is present but explicitly $null' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 {
+                [PSCustomObject]@{ EnableSafeDocs = $true; AllowSafeDocsOpen = $null }
+            }
+        }
+
+        It 'Reports the control as unassessed rather than asserting click-through is blocked' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result   | Should -Be 'NotApplicable'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
+            $results[0].Finding  | Should -Not -Match 'click-through .* is blocked'
+        }
+
+        It 'Treats present-but-null the same as absent' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'AllowSafeDocsOpen was not returned'
+        }
+    }
+
+    Context 'EnableSafeDocs is present but explicitly $null' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 {
+                [PSCustomObject]@{ EnableSafeDocs = $null; AllowSafeDocsOpen = $false }
+            }
+        }
+
+        It 'Reports the control as unassessed rather than asserting Safe Documents is disabled' {
+            $results = @(& $checkFile)
+            $results[0].Result   | Should -Be 'NotApplicable'
+            $results[0].Severity | Should -Be 'Medium'
+            $results[0].Error    | Should -Not -BeNullOrEmpty
+            $results[0].Finding  | Should -Not -Match 'Safe Documents is disabled'
+        }
+
+        It 'Treats present-but-null the same as absent' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'EnableSafeDocs was not returned'
+        }
+    }
+
     Context 'Get-AtpPolicyForO365 returns nothing without throwing' {
         BeforeAll {
             Mock Get-AtpPolicyForO365 { }

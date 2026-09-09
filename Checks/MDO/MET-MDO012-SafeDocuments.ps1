@@ -20,8 +20,13 @@ if (-not $atpGlobal) {
 }
 
 $missingProps = [System.Collections.Generic.List[string]]::new()
-if (-not $atpGlobal.PSObject.Properties['EnableSafeDocs']) { $missingProps.Add('EnableSafeDocs') }
-if (-not $atpGlobal.PSObject.Properties['AllowSafeDocsOpen']) { $missingProps.Add('AllowSafeDocsOpen') }
+# A property present but $null was never observed by Exchange Online either - reading
+# it as $false would fabricate a Fail (EnableSafeDocs) or, worse, a Pass that tells the
+# reader click-through is blocked when nothing confirmed that (AllowSafeDocsOpen).
+$enableSafeDocsProperty = $atpGlobal.PSObject.Properties['EnableSafeDocs']
+$allowSafeDocsOpenProperty = $atpGlobal.PSObject.Properties['AllowSafeDocsOpen']
+if (-not $enableSafeDocsProperty -or $null -eq $enableSafeDocsProperty.Value) { $missingProps.Add('EnableSafeDocs') }
+if (-not $allowSafeDocsOpenProperty -or $null -eq $allowSafeDocsOpenProperty.Value) { $missingProps.Add('AllowSafeDocsOpen') }
 
 if ($missingProps.Count -gt 0) {
     $propList = $missingProps -join ' and '

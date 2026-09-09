@@ -111,15 +111,20 @@ catch {
 
 if ($issues.Count -gt 0) {
     # A confirmed failure on one tag must not swallow an unconfirmed permission
-    # on the other - the reader still needs to know that tag's state was never
-    # established, distinct from the confirmed failure so it is not mistaken
-    # for one.
+    # on the other, or a rule-retrieval failure - the reader still needs to know
+    # that second signal was never established, distinct from the confirmed
+    # failure so it is not mistaken for one.
     $finding = ($issues + $warningIssues) -join '; '
-    $failErrorMessage = $null
+    $failErrorParts = [System.Collections.Generic.List[string]]::new()
     if ($permissionWarnings.Count -gt 0) {
         $finding += ' Additionally, the following have an unconfirmed release permission rather than a confirmed failure: ' + ($permissionWarnings -join '; ') + '.'
-        $failErrorMessage = "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
+        $failErrorParts.Add("Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ').")
     }
+    if ($ruleRetrievalError) {
+        $finding += " Additionally, the Teams protection policy rules could not be retrieved, so any recipient exceptions narrowing ZAP coverage are unverified rather than a confirmed failure: $ruleRetrievalError"
+        $failErrorParts.Add($ruleRetrievalError)
+    }
+    $failErrorMessage = if ($failErrorParts.Count -gt 0) { $failErrorParts -join "`n" } else { $null }
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
         -Result Fail -Severity High -AffectedObject 'Teams Protection Policy' `
         -Finding $finding `
@@ -133,12 +138,18 @@ elseif ($permissionWarnings.Count -gt 0) {
     if ($warningIssues.Count -gt 0) {
         $finding += ' ' + ($warningIssues -join '; ')
     }
+    $warningErrorParts = [System.Collections.Generic.List[string]]::new()
+    $warningErrorParts.Add("Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ').")
+    if ($ruleRetrievalError) {
+        $finding += " Additionally, the Teams protection policy rules could not be retrieved, so any recipient exceptions narrowing ZAP coverage are unverified: $ruleRetrievalError"
+        $warningErrorParts.Add($ruleRetrievalError)
+    }
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `
         -Result Warning -Severity High -AffectedObject 'Teams Protection Policy' `
         -Finding $finding `
         -Recommendation 'Confirm the setting directly with: Get-QuarantinePolicy -Identity <tag name> | Select-Object -ExpandProperty EndUserQuarantinePermissions. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-zap' `
-        -ErrorMessage "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
+        -ErrorMessage ($warningErrorParts -join "`n")
 }
 elseif ($warningIssues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams004' -Category Teams -Name 'ZAP for Teams' `

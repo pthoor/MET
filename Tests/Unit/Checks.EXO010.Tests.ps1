@@ -90,6 +90,12 @@ Describe 'MET-EXO010 Direct Send' {
             $results[0].Finding | Should -Match 'RejectDirectSend was not returned'
             $results[0].Finding | Should -Not -Match 'RejectDirectSend is disabled'
         }
+
+        It 'Justifies the Fail with the platform default rather than a version-history aside' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'platform default for Direct Send is not blocked'
+            $results[0].Finding | Should -Not -Match 'not a hypothetical'
+        }
     }
 
     # Mutation verification: the absent path and the present-and-false path must both

@@ -262,4 +262,65 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             $results[0].Error | Should -Match 'ContosoHcpTag'
         }
     }
+
+    # The Fail branch, and separately the permissionWarnings Warning branch, previously
+    # built their Finding without $ruleRetrievalError - the same asymmetry commit
+    # f91583d already closed for $permissionWarnings in these same two files.
+    Context 'Malware tag is a confirmed Fail and the Teams protection policy rules failed to retrieve' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'AdminOnlyAccessPolicy'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { throw 'Run Connect-MicrosoftTeams before running this cmdlet.' }
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{
+                    Name                          = 'ContosoMalwareTag'
+                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                }
+            }
+        }
+
+        It 'Returns Fail and names both the confirmed failure and the rule retrieval failure, with Error populated' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'allows users to self-release quarantined messages'
+            $results[0].Finding | Should -Match 'could not be retrieved'
+            $results[0].Finding | Should -Match 'rather than a confirmed failure'
+            $results[0].Finding | Should -Match 'Connect-MicrosoftTeams'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'Connect-MicrosoftTeams'
+        }
+    }
+
+    Context 'Both tags have an unconfirmed permission and the Teams protection policy rules also failed to retrieve' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag              = 'ContosoMalwareTag'
+                    HighConfidencePhishQuarantineTag  = 'ContosoHcpTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { throw 'Run Connect-MicrosoftTeams before running this cmdlet.' }
+            Mock Get-QuarantinePolicy {
+                param($Identity)
+                [PSCustomObject]@{ Name = $Identity }
+            }
+        }
+
+        It 'Returns Warning naming both unconfirmed tags and the rule retrieval failure, with Error populated' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'Malware'
+            $results[0].Finding | Should -Match 'High-confidence phish'
+            $results[0].Finding | Should -Match 'could not be retrieved'
+            $results[0].Finding | Should -Match 'Connect-MicrosoftTeams'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+            $results[0].Error | Should -Match 'Connect-MicrosoftTeams'
+        }
+    }
 }

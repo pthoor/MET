@@ -20,7 +20,7 @@ Files shared via Teams channels and chats are a growing attack surface. Maliciou
 |---|---|
 | Pass | `EnableATPForSPOTeamsODB = $true` |
 | Fail | `EnableATPForSPOTeamsODB = $false`, or the setting could not be retrieved |
-| NotApplicable | `EnableATPForSPOTeamsODB` was not returned by `Get-AtpPolicyForO365`, so whether Safe Attachments protects files shared via Teams was not established |
+| NotApplicable | `EnableATPForSPOTeamsODB` was not returned by `Get-AtpPolicyForO365`, or was returned present but `$null`, so whether Safe Attachments protects files shared via Teams was not established |
 
 ## Recommendation
 

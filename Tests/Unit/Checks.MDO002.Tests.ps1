@@ -10,6 +10,25 @@ BeforeAll {
     $checkFile = Join-Path $root 'Checks' 'MDO' 'MET-MDO002-SafeAttachments.ps1'
 }
 
+Describe 'MET-MDO002 Safe Attachments - global SPO/OneDrive/Teams toggle' {
+    Context 'EnableATPForSPOTeamsODB is present but explicitly $null' {
+        BeforeAll {
+            Mock Get-AtpPolicyForO365 { [PSCustomObject]@{ EnableATPForSPOTeamsODB = $null } }
+            Mock Get-SafeAttachmentRule   { @() }
+            Mock Get-SafeAttachmentPolicy { [PSCustomObject]@{ Name = 'Built-In Protection Policy'; Enable = $true; Action = 'Block' } }
+        }
+
+        It 'Reports NotApplicable rather than a Pass or Fail on a value it never observed' {
+            $results = @(& $checkFile)
+            $globalResult = $results | Where-Object { $_.AffectedObject -eq 'Global Safe Attachments Settings' }
+            $globalResult | Should -Not -BeNullOrEmpty
+            $globalResult.Result | Should -Be 'NotApplicable'
+            $globalResult.Error  | Should -Not -BeNullOrEmpty
+            $globalResult.Finding | Should -Not -Match 'EnableATPForSPOTeamsODB = \$'
+        }
+    }
+}
+
 Describe 'MET-MDO002 Safe Attachments - per-policy Enable/Action assessment' {
 
     BeforeEach {

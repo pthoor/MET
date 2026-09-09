@@ -18,9 +18,10 @@ User-reported messages are one of the highest-signal sources of threat intellige
 
 | Result | Condition |
 |---|---|
-| Pass | Reporting to Microsoft on, notification on, custom mailbox configured |
+| Pass | Reporting to Microsoft on, `EnableThirdPartyAddress` confirmed `$false` (built-in button), notification on, custom mailbox configured |
 | Fail | Reporting to Microsoft disabled - either confirmed disabled, or `EnableReportToMicrosoft`/`EnableThirdPartyAddress` was not returned by `Get-ReportSubmissionPolicy` and no other reporting flow is active, so whether reporting is enabled was not established |
 | Warning | Reporting enabled but no custom mailbox or notifications off |
+| NotApplicable | `EnableReportToMicrosoft` is confirmed `$true` (so the check does not fall into the Fail row above), but `EnableThirdPartyAddress` was not returned - whether reports come from the built-in Microsoft report button or a non-Microsoft add-in was not established, so the check does not assert "built-in" |
 
 ## Recommendation
 

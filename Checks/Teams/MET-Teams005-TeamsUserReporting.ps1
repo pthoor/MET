@@ -44,10 +44,10 @@ $messagingPolicyUnreportedMessage = $null
 try {
     $messagingPolicies = @(Get-CsTeamsMessagingPolicy -ErrorAction Stop)
 
-    # A property must be present to say anything about its value - a policy that never
-    # returned AllowSecurityEndUserReporting is neither "enabled" nor "disabled", it is
-    # unobserved, so it is tracked separately from $disabledPolicies rather than folded
-    # into the -eq $false filter below.
+    # A property must be present AND non-null to say anything about its value - a policy
+    # that never returned AllowSecurityEndUserReporting, or returned it as $null, is
+    # neither "enabled" nor "disabled", it is unobserved, so it is tracked separately
+    # from $disabledPolicies rather than folded into the -eq $false filter below.
     $disabledPolicies = @(
         $messagingPolicies | Where-Object {
             $_.PSObject.Properties['AllowSecurityEndUserReporting'] -and
@@ -55,7 +55,10 @@ try {
         }
     )
     $unreportedPolicies = @(
-        $messagingPolicies | Where-Object { -not $_.PSObject.Properties['AllowSecurityEndUserReporting'] }
+        $messagingPolicies | Where-Object {
+            -not $_.PSObject.Properties['AllowSecurityEndUserReporting'] -or
+            $null -eq $_.AllowSecurityEndUserReporting
+        }
     )
 
     if ($disabledPolicies.Count -gt 0) {
@@ -65,10 +68,12 @@ try {
 
     if ($messagingPolicies.Count -eq 0) {
         $messagingPolicyUnreportedMessage = 'Get-CsTeamsMessagingPolicy returned no Teams messaging policies, so whether the "Report a security concern" button is enabled for any user was not established.'
+        $messagingPolicyUnreportedErrorMessage = 'Get-CsTeamsMessagingPolicy returned no Teams messaging policies.'
     }
     elseif ($unreportedPolicies.Count -gt 0) {
         $unreportedNames = ($unreportedPolicies | Select-Object -ExpandProperty Identity) -join ', '
         $messagingPolicyUnreportedMessage = "AllowSecurityEndUserReporting was not returned for the following Teams messaging policy/policies: $unreportedNames - whether the `"Report a security concern`" button is enabled for users assigned to them was not established."
+        $messagingPolicyUnreportedErrorMessage = "AllowSecurityEndUserReporting was not returned by Get-CsTeamsMessagingPolicy for the following Teams messaging policy/policies: $unreportedNames."
     }
 }
 catch {
@@ -101,10 +106,10 @@ elseif ($messagingPolicyError) {
 elseif ($messagingPolicyUnreportedMessage) {
     New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `
         -Result Warning -Severity Medium -AffectedObject 'Teams User Reporting Settings' `
-        -Finding "Teams user reporting is correctly configured in the Defender portal, but $messagingPolicyUnreportedMessage" `
+        -Finding "Teams user reporting is correctly configured in the Defender portal, but $messagingPolicyUnreportedMessage An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant where every user can report a security concern from one where some cannot." `
         -Recommendation 'Confirm "Report a security concern" is enabled for every Teams messaging policy directly in the Teams admin center (admin.teams.microsoft.com), or update MicrosoftTeams to a version that returns AllowSecurityEndUserReporting from Get-CsTeamsMessagingPolicy and rerun.' `
         -ReferenceUrl 'https://aka.ms/mdo-teams-user-reporting' `
-        -ErrorMessage 'AllowSecurityEndUserReporting was not returned by Get-CsTeamsMessagingPolicy for one or more Teams messaging policies.'
+        -ErrorMessage $messagingPolicyUnreportedErrorMessage
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `
