@@ -17,7 +17,8 @@ When the tag is disabled, users see no visual distinction between mail from cowo
 | Result | Condition |
 |---|---|
 | Pass | External sender tagging is enabled |
-| Warning | External sender tagging is disabled |
+| Warning | External sender tagging is disabled; or `Enabled` was not returned by `Get-ExternalInOutlook`, so whether the tag is on was not established |
+| Fail | Unable to retrieve external sender tag configuration |
 
 ## Recommendation
 

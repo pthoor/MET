@@ -19,7 +19,7 @@ User-reported messages are one of the highest-signal sources of threat intellige
 | Result | Condition |
 |---|---|
 | Pass | Reporting to Microsoft on, notification on, custom mailbox configured |
-| Fail | Reporting to Microsoft disabled |
+| Fail | Reporting to Microsoft disabled - either confirmed disabled, or `EnableReportToMicrosoft`/`EnableThirdPartyAddress` was not returned by `Get-ReportSubmissionPolicy` and no other reporting flow is active, so whether reporting is enabled was not established |
 | Warning | Reporting enabled but no custom mailbox or notifications off |
 
 ## Recommendation

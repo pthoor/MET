@@ -30,7 +30,7 @@ Weak spam actions mean malicious mail reaches users' inboxes rather than being q
 |---|---|
 | Pass | Every mailbox receives an effective policy that meets the Standard baseline |
 | Fail | One or more mailboxes receive an effective policy below baseline |
-| Warning | Effective coverage is incomplete because data could not be retrieved |
+| Warning | Effective coverage is incomplete because data could not be retrieved; or every mailbox meets the baseline but one or more effective policies did not return `BulkThreshold`, so the bulk complaint level could not be compared against the recommended maximum of 6 |
 | NotApplicable | No assessable mailboxes were found |
 
 ## Reference

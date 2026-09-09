@@ -77,6 +77,14 @@ $withProperty    = @($items | Where-Object { $null -ne $_.PSObject.Properties['S
 $withoutProperty = @($items | Where-Object { $null -eq $_.PSObject.Properties['Setting'] -or  $null -eq $_.Setting })
 ```
 
+#### Rule 2 - a fail-closed verdict must not describe a value it did not observe
+
+Reaching the right `Result` on an absent property is not enough - the `Finding` text must not assert a value that was never returned. Don't write "Safe Attachments for Teams is disabled (`EnableATPForSPOTeamsODB = $false`)" when the property was absent; say instead that whether it is enabled was not established.
+
+On any branch that resolves to `NotApplicable` or `Warning` because of an absent property, the `Finding` must also say *why* an unconfirmed state is not graded as a pass, not just stop at "was not established" - `Get-METReport`'s HTML card collapses `Recommendation` behind "How to fix," so a reader scanning cards sees only the `Finding`. This scoping is deliberate: the "reported as unassessed rather than a pass" clause belongs on `NotApplicable`/`Warning` branches, not on branches that still resolve to `Fail` - on a `Fail` branch nothing is being reported as unassessed, so the sentence would be false there.
+
+`MET-MDO002` (`Checks/MDO/MET-MDO002-SafeAttachments.ps1`) is the reference implementation for this shape.
+
 ### 4. Write Pester tests
 
 Add tests to the appropriate file in `Tests/Unit/`:
@@ -141,6 +149,7 @@ Invoke-Pester -Configuration $config
 - **Error handling** - `try/catch` on all remote calls; surface in `Error` field, never throw
 - **No plain-text secrets** - all auth through `Connect-METSession`
 - **An absent property never yields `Pass`** - `Warning` when it is absent on only some objects, `NotApplicable` with `-ErrorMessage` when absent on all
+- **Rule 2: a fail-closed verdict must not describe a value it did not observe** - on a `NotApplicable`/`Warning` branch, say what was not established, never name a value nothing returned; also say why that is not graded as a pass. Not on `Fail` branches - see above
 - **No external HTTP calls inside check scripts** - DNS lookups via `Resolve-DnsName` are allowed for email auth checks
 
 ---

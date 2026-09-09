@@ -19,7 +19,8 @@ DKIM (DomainKeys Identified Mail) cryptographically signs outbound messages, all
 | Result | Condition |
 |---|---|
 | Pass | Enabled, key ≥ 2048 bits, status `Valid` |
-| Fail | Disabled, key < 2048, status not `Valid`, or no configs found |
+| Fail | Disabled (or `Enabled` was not returned, so signing state was not established), key < 2048, status not `Valid`, or no configs found |
+| Warning | Signing is enabled and status is `Valid`, but neither `Selector1KeySize` nor `Selector2KeySize` was returned, so the key length could not be verified against the 2048-bit minimum |
 
 ## Recommendation
 

@@ -32,7 +32,7 @@ A custom quarantine policy that grants end users permission to act on quarantine
 | Result | Condition |
 |---|---|
 | Pass | No custom quarantine policies exist (only built-ins), or a custom policy's notification setting is consistent with its granted permissions |
-| Warning | A custom policy grants end-user permissions (`EndUserQuarantinePermissionsValue > 0`) but has `ESNEnabled = $false` |
+| Warning | A custom policy grants end-user permissions (`EndUserQuarantinePermissionsValue > 0`) but has `ESNEnabled = $false`; or `ESNEnabled` and/or `EndUserQuarantinePermissionsValue` was not returned by `Get-QuarantinePolicy` for this policy, so whether its notification setting is consistent with its granted permissions was not established |
 | Fail | `Get-QuarantinePolicy` could not be retrieved |
 
 ## Recommendation

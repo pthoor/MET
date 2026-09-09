@@ -24,6 +24,7 @@ Per Safe Attachments policy:
 |---|---|
 | Pass | Policy enabled with `Block` or `DynamicDelivery` |
 | Fail | Policy disabled, action is `Allow`, or no policies exist |
+| Warning | `Enable` was not returned for this policy, so whether Safe Attachments is enabled was not established; or `Enable` is confirmed `$true` but `Action` was not returned, so whether attachments are blocked, dynamically delivered, or allowed through was not established |
 
 For the global SharePoint / OneDrive / Teams setting:
 
