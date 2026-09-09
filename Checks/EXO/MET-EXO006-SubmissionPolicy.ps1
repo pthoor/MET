@@ -44,8 +44,16 @@ if ($additionalMailboxes.Count -gt 0) {
 # $false                   $false (+ custom mbx)    Built-in tools, custom mailbox ONLY - MS gets nothing
 # $false                   $true                    Third-party add-in → custom mailbox only; NOT in Defender Submissions
 # $false                   $false (no custom mbx)   Reporting completely disabled
-$reportsToMicrosoft = $policy.EnableReportToMicrosoft  -eq $true
-$thirdPartyMode     = $policy.EnableThirdPartyAddress   -eq $true
+# (absent)                 any                      Reporting mode not returned - not confirmed disabled (see below)
+# any                      (absent)                 Reporting mode not returned - not confirmed disabled (see below)
+$reportToMicrosoftProperty = $policy.PSObject.Properties['EnableReportToMicrosoft']
+$thirdPartyAddressProperty = $policy.PSObject.Properties['EnableThirdPartyAddress']
+$reportToMicrosoftUnknown  = -not $reportToMicrosoftProperty -or $null -eq $reportToMicrosoftProperty.Value
+$thirdPartyAddressUnknown  = -not $thirdPartyAddressProperty -or $null -eq $thirdPartyAddressProperty.Value
+$reportingModeUnknown      = $reportToMicrosoftUnknown -or $thirdPartyAddressUnknown
+
+$reportsToMicrosoft = -not $reportToMicrosoftUnknown -and $reportToMicrosoftProperty.Value -eq $true
+$thirdPartyMode     = -not $thirdPartyAddressUnknown -and $thirdPartyAddressProperty.Value -eq $true
 $junkToCustom       = $policy.ReportJunkToCustomizedAddress    -eq $true
 $notJunkToCustom    = $policy.ReportNotJunkToCustomizedAddress -eq $true
 $phishToCustom      = $policy.ReportPhishToCustomizedAddress   -eq $true
@@ -54,7 +62,19 @@ $anyFlowToCustom    = $junkToCustom -or  $notJunkToCustom -or  $phishToCustom
 $reportingDisabled  = -not $reportsToMicrosoft -and -not $thirdPartyMode -and -not $anyFlowToCustom
 
 # ── Check 1: Report button mode and Microsoft feedback loop ───────────────────
-if ($reportingDisabled) {
+if ($reportingDisabled -and $reportingModeUnknown) {
+    $unknownProps = [System.Collections.Generic.List[string]]::new()
+    if ($reportToMicrosoftUnknown) { $unknownProps.Add('EnableReportToMicrosoft') }
+    if ($thirdPartyAddressUnknown) { $unknownProps.Add('EnableThirdPartyAddress') }
+    New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+        -Name 'User Reported Message Settings - Report Button' `
+        -Result Fail -Severity High -AffectedObject 'Report Submission Policy' `
+        -Finding "$($unknownProps -join ' and ') $(if ($unknownProps.Count -eq 1) { 'was' } else { 'were' }) not returned by the report submission policy, so whether user reporting in Outlook is enabled, and whether reports reach Microsoft or a SecOps mailbox, was not established." `
+        -Recommendation "Confirm the setting directly with: Get-ReportSubmissionPolicy | Format-List EnableReportToMicrosoft, EnableThirdPartyAddress. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment. In the Defender portal go to Settings > Email & collaboration > User reported settings to confirm reporting is configured; the recommended configuration is the built-in Microsoft report button sending to both Microsoft and a custom SecOps mailbox." `
+        -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings' `
+        -ErrorMessage "Get-ReportSubmissionPolicy did not return $($unknownProps -join ' and ')."
+}
+elseif ($reportingDisabled) {
     New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
         -Name 'User Reported Message Settings - Report Button' `
         -Result Fail -Severity High -AffectedObject 'Report Submission Policy' `

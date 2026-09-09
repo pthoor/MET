@@ -213,17 +213,18 @@ Describe 'MET-MDO005/006/007 absent-property handling' {
             $result.Result | Should -Not -Be 'Pass'
         }
 
-        # Pins current behaviour, whose wording is wrong: the check reports malware ZAP and
-        # the common attachment filter as disabled on the strength of properties Exchange
-        # Online never returned. The verdict is fail-closed and safe, but the sentence
-        # states an observation that was not made. Left pinned rather than corrected here
-        # so the defect is visible and cannot change unnoticed.
-        It 'Currently states both settings are disabled rather than that they were not returned' {
+        # The check now branches on absence before the falsy test, so it states that
+        # ZapEnabled and EnableFileFilter were not returned rather than asserting they
+        # are disabled. See Tests/Unit/Checks.MDO005.Tests.ps1 for the mutation-verified
+        # coverage of this fix; this test keeps the verdict assertion this file already
+        # carried for the two properties.
+        It 'States both settings were not returned rather than asserting they are disabled' {
             $result = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
             $result.Result | Should -Be 'Fail'
-            $result.Finding | Should -Match 'ZAP for malware is disabled'
-            $result.Finding | Should -Match 'Common attachment filter is disabled'
-            $result.Finding | Should -Not -Match 'not returned'
+            $result.Finding | Should -Match 'ZapEnabled was not returned'
+            $result.Finding | Should -Match 'EnableFileFilter was not returned'
+            $result.Finding | Should -Not -Match 'ZAP for malware is disabled'
+            $result.Finding | Should -Not -Match 'Common attachment filter is disabled'
         }
     }
 

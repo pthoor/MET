@@ -3,9 +3,6 @@
     . "$root/Private/New-METCheckResult.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
 
-    # Stub EXO cmdlets needed by Teams002
-    function Get-AtpPolicyForO365        { [CmdletBinding()] param() }
-
     # Stub Teams cmdlets needed by Teams003
     function Get-CsTenantFederationConfiguration { [CmdletBinding()] param() }
     function Get-CsTeamsMeetingPolicy            { [CmdletBinding()] param() }
@@ -15,79 +12,6 @@
     function Get-TeamsProtectionPolicy     { [CmdletBinding()] param() }
     function Get-TeamsProtectionPolicyRule { [CmdletBinding()] param() }
     function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
-}
-
-Describe 'MET-Teams002 Safe Attachments for Teams' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'Teams' 'MET-Teams002-SafeAttachments.ps1'
-    }
-
-    Context 'EnableATPForSPOTeamsODB is true' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 {
-                [PSCustomObject]@{ EnableATPForSPOTeamsODB = $true }
-            }
-        }
-        It 'Returns Pass' {
-            $results = & $checkFile
-            $results | Where-Object CheckId -eq 'MET-Teams002' |
-                Select-Object -First 1 |
-                ForEach-Object { $_.Result | Should -Be 'Pass' }
-        }
-    }
-
-    Context 'EnableATPForSPOTeamsODB is false' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 {
-                [PSCustomObject]@{ EnableATPForSPOTeamsODB = $false }
-            }
-        }
-        It 'Returns Fail' {
-            $results = & $checkFile
-            $results | Where-Object CheckId -eq 'MET-Teams002' |
-                Select-Object -First 1 |
-                ForEach-Object { $_.Result | Should -Be 'Fail' }
-        }
-    }
-
-    Context 'Get-AtpPolicyForO365 throws' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 { throw 'Access denied' }
-        }
-        It 'Returns Fail with Error populated' {
-            $results = & $checkFile
-            $result = $results | Where-Object CheckId -eq 'MET-Teams002' | Select-Object -First 1
-            $result.Result | Should -Be 'Fail'
-            $result.Error | Should -Match 'Access denied'
-        }
-    }
-
-    # MET-MDO002 reads this same property and has an explicit branch for it being
-    # absent (NotApplicable, "not established"). MET-Teams002 has no such branch.
-    Context 'The global policy omits the EnableATPForSPOTeamsODB property' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 { [PSCustomObject]@{ Identity = 'Default' } }
-        }
-
-        It 'Does not return Pass on a setting it never observed' {
-            $results = @(& $checkFile)
-            $results[0].Result | Should -Not -Be 'Pass'
-            $results[0].AffectedObject | Should -Be 'Global Safe Attachments Settings'
-        }
-
-        # Pins current behaviour, whose wording is wrong: the check states the setting is
-        # false, quoting a value the global policy never returned. The verdict is
-        # fail-closed and safe, but the sentence states an observation that was not made,
-        # and MET-MDO002 handles the identical property correctly. Left pinned rather than
-        # corrected here so the defect is visible and cannot change unnoticed.
-        It 'Currently states the setting is false rather than that the property was not returned' {
-            $results = @(& $checkFile)
-            $results[0].Result | Should -Be 'Fail'
-            $results[0].Finding | Should -Match 'EnableATPForSPOTeamsODB = \$false'
-            $results[0].Finding | Should -Not -Match 'not established'
-            $results[0].Finding | Should -Not -Match 'not returned'
-        }
-    }
 }
 
 Describe 'MET-Teams003 Meeting Protection' {

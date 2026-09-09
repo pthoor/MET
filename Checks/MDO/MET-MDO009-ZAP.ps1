@@ -21,8 +21,23 @@ $evaluate = {
     param($policy, $policyType)
     $issues = [System.Collections.Generic.List[string]]::new()
     if (-not $policy) { $issues.Add('Policy settings could not be retrieved'); return $issues.ToArray() }
-    if (-not $policy.SpamZapEnabled) { $issues.Add('ZAP for spam is disabled') }
-    if (-not $policy.PhishZapEnabled) { $issues.Add('ZAP for phishing is disabled') }
+
+    $spamZapProperty = $policy.PSObject.Properties['SpamZapEnabled']
+    if (-not $spamZapProperty -or $null -eq $spamZapProperty.Value) {
+        $issues.Add('SpamZapEnabled was not returned for this policy, so whether ZAP for spam is enabled was not established')
+    }
+    elseif (-not $spamZapProperty.Value) {
+        $issues.Add('ZAP for spam is disabled')
+    }
+
+    $phishZapProperty = $policy.PSObject.Properties['PhishZapEnabled']
+    if (-not $phishZapProperty -or $null -eq $phishZapProperty.Value) {
+        $issues.Add('PhishZapEnabled was not returned for this policy, so whether ZAP for phishing is enabled was not established')
+    }
+    elseif (-not $phishZapProperty.Value) {
+        $issues.Add('ZAP for phishing is disabled')
+    }
+
     $issues.ToArray()
 }
 New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO009' -Name 'ZAP Effective Coverage' -ProtectionType 'ZAP' -Severity High -Subjects $allMailboxes -Resolution $resolution -GetPolicyIssues $evaluate -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-zap' -Recommendation 'Enable ZAP for spam and phishing in the effective inbound anti-spam policy for every affected recipient.'

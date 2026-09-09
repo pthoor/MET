@@ -102,15 +102,41 @@ Describe 'MET-EXO015 External Sender Tag' {
             $results[0].AffectedObject | Should -Be 'External Sender Tag Configuration'
         }
 
-        # Pins current behaviour, whose wording is wrong: the check states external sender
-        # tagging is disabled on the strength of a property Exchange Online never returned.
-        # The verdict is a Warning either way, so this is a reporting defect rather than a
-        # false Pass. Left pinned so it cannot change unnoticed.
-        It 'Currently states tagging is disabled rather than that the property was not returned' {
+        It 'States the property was not returned rather than that tagging is disabled' {
             $results = @(& $checkFile)
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'External sender tagging is disabled'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Match 'was not returned'
+            $results[0].Finding | Should -Not -Match 'External sender tagging is disabled'
+        }
+    }
+
+    Context 'Get-ExternalInOutlook returns $null' {
+        BeforeAll {
+            Mock Get-ExternalInOutlook { $null }
+        }
+
+        It 'Does not return Pass, and states the configuration was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'was not returned'
+        }
+    }
+
+    # Mutation verification: the absent-property path and the present-and-false path must
+    # both stay Warning, with different Findings.
+    Context 'Enabled absent vs. present and false' {
+        It 'Produces different Findings for the same Warning verdict' {
+            Mock Get-ExternalInOutlook { [PSCustomObject]@{ Identity = 'Default'; AllowList = @() } }
+            $absent = (& $checkFile)[0]
+            $absent.Result | Should -Be 'Warning'
+            $absent.Finding | Should -Match 'was not returned'
+            $absent.Finding | Should -Not -Match 'External sender tagging is disabled'
+
+            Mock Get-ExternalInOutlook { [PSCustomObject]@{ Enabled = $false; AllowList = @() } }
+            $present = (& $checkFile)[0]
+            $present.Result | Should -Be 'Warning'
+            $present.Finding | Should -Match 'External sender tagging is disabled'
+            $present.Finding | Should -Not -Match 'was not returned'
         }
     }
 }

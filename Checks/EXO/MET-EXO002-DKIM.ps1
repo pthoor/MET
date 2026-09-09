@@ -22,7 +22,11 @@ if (-not $dkimConfigs) {
 foreach ($config in $dkimConfigs) {
     $issues = [System.Collections.Generic.List[string]]::new()
 
-    if (-not $config.Enabled) {
+    $enabledProperty = $config.PSObject.Properties['Enabled']
+    if (-not $enabledProperty -or $null -eq $enabledProperty.Value) {
+        $issues.Add('Enabled was not returned for this domain, so whether DKIM signing is on was not established')
+    }
+    elseif (-not $enabledProperty.Value) {
         $issues.Add('DKIM signing is disabled for this domain')
     }
 

@@ -84,16 +84,29 @@ Describe 'MET-EXO010 Direct Send' {
             $results[0].AffectedObject | Should -Be 'Organization Configuration'
         }
 
-        # Pins current behaviour, whose wording is wrong: the check states RejectDirectSend
-        # is disabled, quoting a property the organization configuration never returned.
-        # The verdict is fail-closed and safe, but the sentence states an observation that
-        # was not made. Left pinned rather than corrected here so the defect is visible and
-        # cannot change unnoticed.
-        It 'Currently states RejectDirectSend is disabled rather than that it was not returned' {
+        It 'States RejectDirectSend was not returned rather than asserting it is disabled' {
             $results = @(& $checkFile)
             $results[0].Result | Should -Be 'Fail'
-            $results[0].Finding | Should -Match 'RejectDirectSend is disabled'
-            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Match 'RejectDirectSend was not returned'
+            $results[0].Finding | Should -Not -Match 'RejectDirectSend is disabled'
+        }
+    }
+
+    # Mutation verification: the absent path and the present-and-false path must both
+    # fail closed, with different Findings.
+    Context 'RejectDirectSend absent vs. present and false' {
+        It 'Produces different Findings for the same Fail verdict' {
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ Name = 'contoso.onmicrosoft.com' } }
+            $absent = (& $checkFile)[0]
+            $absent.Result | Should -Be 'Fail'
+            $absent.Finding | Should -Match 'RejectDirectSend was not returned'
+            $absent.Finding | Should -Not -Match 'RejectDirectSend is disabled'
+
+            Mock Get-OrganizationConfig { [PSCustomObject]@{ RejectDirectSend = $false } }
+            $present = (& $checkFile)[0]
+            $present.Result | Should -Be 'Fail'
+            $present.Finding | Should -Match 'RejectDirectSend is disabled'
+            $present.Finding | Should -Not -Match 'RejectDirectSend was not returned'
         }
     }
 
