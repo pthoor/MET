@@ -253,8 +253,10 @@ function Connect-METSession {
                 $servicesConnected.Add('ExchangeOnline')
             }
             catch {
-                $onWindowsRetry = if ($IsWindows) { "On Windows try: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose" }
-                                   else { "On a headless host with no reachable browser try: Connect-METSession -UseDeviceAuthentication -Verbose`nOtherwise try: Connect-METSession -DisableWAM -Verbose" }
+                $onWindowsRetry = if ($IsWindows) {
+                    "On Windows, a WAM broker error (0x80070520 'A specified logon session does not exist') usually means the session is not an interactive desktop one - most often an elevated 'Run as administrator' prompt, or a remote/service/scheduled-task session. Retry from a normal non-elevated PowerShell window, or bypass WAM: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose"
+                }
+                else { "On a headless host with no reachable browser try: Connect-METSession -UseDeviceAuthentication -Verbose`nOtherwise try: Connect-METSession -DisableWAM -Verbose" }
                 throw "Failed to connect to Exchange Online: $_`n$onWindowsRetry"
             }
         }
