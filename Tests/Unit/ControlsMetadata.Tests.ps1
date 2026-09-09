@@ -29,8 +29,8 @@ BeforeAll {
         }
 
     # Identifiers a description names - cmdlet names and Pascal/camel-cased property names.
-    # A description naming a property the check does not read is the drift D-7 describes, and
-    # it is the only part of a free-text description that can be verified mechanically.
+    # A description naming a property the check does not read is the drift this file exists to
+    # catch, and it is the only part of a free-text description that can be verified mechanically.
     function Get-METDescribedIdentifier {
         param([string] $Description)
         [regex]::Matches(
