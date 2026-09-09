@@ -19,11 +19,11 @@ Including obsolete, compromised, or unnecessary sealers in the trusted list crea
 
 | Result | Condition |
 |---|---|
-| Info | `ArcTrustedSealers` was returned as an empty list, or with one or more sealers |
-| NotApplicable | `Get-ArcConfig` did not return a value for `ArcTrustedSealers` (absent, or present as `$null`) - whether any sealers are configured was not established, so this is reported as unassessed rather than as "none configured" |
+| Info | `Get-ArcConfig` returned no output (Microsoft's documented signal for "no trusted ARC sealers configured"), or returned `ArcTrustedSealers` as an empty list, or with one or more sealers |
+| NotApplicable | `Get-ArcConfig` returned a configuration object but `ArcTrustedSealers` was absent from it, or present as `$null` - whether any sealers are configured was not established, so this is reported as unassessed rather than as "none configured" |
 | Fail | Unable to retrieve ARC configuration (access issue or cmdlet failure) |
 
-Note: This check returns `Info` in both successful list cases (empty or populated) because both can be legitimate - the decision to use ARC and which sealers to trust is configuration-specific, not a security stance that MET judges as Pass/Fail. An empty list is a genuine observation; a property that was never returned is not, and the two are not conflated.
+Note: This check returns `Info` in every successful case (no output, empty list, or populated) because all can be legitimate - the decision to use ARC and which sealers to trust is configuration-specific, not a security stance that MET judges as Pass/Fail. Per Microsoft's documentation, `Get-ArcConfig` "returns no results" when no trusted ARC sealers are configured, so an empty return is a genuine "none configured" observation. Only a configuration object that comes back *missing* the `ArcTrustedSealers` member is treated as unreadable.
 
 ## Recommendation
 

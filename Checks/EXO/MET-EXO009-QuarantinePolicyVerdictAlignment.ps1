@@ -126,22 +126,20 @@ foreach ($a in $assignments) {
         continue
     }
 
-    # EndUserQuarantinePermissions.PermissionToRelease is a nested property: absent on
-    # either level, or present-but-$null on either level, reads as $null just like a
-    # confirmed $false would. Distinguish "not returned" from "returned and false" before
-    # branching, so an unobserved permission cannot be reported as a prevented one.
-    $permissionsProperty = $qp.PSObject.Properties['EndUserQuarantinePermissions']
-    $releaseProperty = $null
-    if ($permissionsProperty -and $null -ne $permissionsProperty.Value) {
-        $releaseProperty = $permissionsProperty.Value.PSObject.Properties['PermissionToRelease']
-    }
+    # Get-QuarantinePolicy returns EndUserQuarantinePermissions as a formatted string, so
+    # $qp.EndUserQuarantinePermissions.PermissionToRelease is always $null regardless of
+    # the real value. Get-METEndUserQuarantinePermission parses the string; it returns
+    # $null (and .PermissionToRelease returns $null) when nothing could be read. Distinguish
+    # "not returned" from "returned and false" before branching, so an unobserved permission
+    # cannot be reported as a prevented one.
+    $permissions = Get-METEndUserQuarantinePermission -QuarantinePolicy $qp
 
-    if (-not $permissionsProperty -or $null -eq $permissionsProperty.Value -or -not $releaseProperty -or $null -eq $releaseProperty.Value) {
+    if ($null -eq $permissions -or $null -eq $permissions.PermissionToRelease) {
         $null = $permissionWarnings.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses quarantine tag '$($a.Tag)' whose EndUserQuarantinePermissions.PermissionToRelease was not returned by Get-QuarantinePolicy, so whether users can self-release quarantined messages via this tag was not established")
         continue
     }
 
-    if ($releaseProperty.Value) {
+    if ($permissions.PermissionToRelease) {
         $null = $fails.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses '$($a.Tag)' which allows users to self-release quarantined messages")
     }
 }

@@ -25,6 +25,8 @@ If a custom (admin-created) quarantine policy is mistakenly assigned to the Malw
 
 Earlier versions of this check also treated impersonation (`Impersonated User`/`Impersonated Domain`) as high-risk (Fail) and Phish/Mailbox Intelligence Phish/Spoof as medium-risk (Warning) if self-release was allowed. That contradicted Microsoft's own Strict preset, which uses full-access quarantine policies for all five of those verdicts - so the older logic flagged Microsoft's own recommended configuration as a misconfiguration on any tenant with Standard or Strict assigned to anyone. This was corrected in the 2026-08 quarantine-policy accuracy pass.
 
+`Get-QuarantinePolicy` returns `EndUserQuarantinePermissions` as a formatted string, not a typed object, so `$policy.EndUserQuarantinePermissions.PermissionToRelease` is always `$null` regardless of the real setting. A revision that read it that way reported every restricted-verdict tag - built-ins included - as an unconfirmed permission on every tenant. The check now resolves `PermissionToRelease` through `Get-METEndUserQuarantinePermission`, which parses that string.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |

@@ -11,12 +11,24 @@ catch {
     return
 }
 
-# ArcTrustedSealers absent, or present but $null, was never observed by Get-ArcConfig -
-# that is distinct from an empty list, which is a genuine "none configured" observation.
-# Reading either the same as an empty list would report "nothing to review" about a
-# property this check could not read, when ARC sealers can bypass DMARC/DKIM checks for
-# anything they seal.
-$sealersProperty = if ($arcConfig) { $arcConfig.PSObject.Properties['ArcTrustedSealers'] } else { $null }
+# Get-ArcConfig returns no output at all when no trusted ARC sealers are configured -
+# Microsoft documents this: "If no trusted ARC sealers are configured, the command
+# returns no results." That is a genuine "none configured" observation, not an unreadable
+# state. A real retrieval failure throws and is caught above, so an empty return here is
+# unambiguous.
+if (-not $arcConfig) {
+    New-METCheckResult -CheckId 'MET-EXO016' -Category EXO -Name 'ARC Trusted Sealers Review' `
+        -Result Info -Severity Low -AffectedObject 'ARC Trusted Sealers' `
+        -Finding 'Get-ArcConfig returned no configuration, which is how Exchange Online reports that no trusted ARC sealers are configured - nothing to review' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/email-authentication-arc-configure'
+    return
+}
+
+# An object was returned but ArcTrustedSealers is absent, or present but $null - distinct
+# from the empty-return case above and from an empty list. Reading it the same as an empty
+# list would report "nothing to review" about a property this check could not read, when
+# ARC sealers can bypass DMARC/DKIM checks for anything they seal.
+$sealersProperty = $arcConfig.PSObject.Properties['ArcTrustedSealers']
 
 if (-not $sealersProperty -or $null -eq $sealersProperty.Value) {
     New-METCheckResult -CheckId 'MET-EXO016' -Category EXO -Name 'ARC Trusted Sealers Review' `

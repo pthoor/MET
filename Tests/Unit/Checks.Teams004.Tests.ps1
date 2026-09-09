@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
 
     function Get-TeamsProtectionPolicy     { [CmdletBinding()] param() }
     function Get-TeamsProtectionPolicyRule { [CmdletBinding()] param() }
@@ -69,7 +70,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
                     Name                          = 'ContosoMalwareTag'
-                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                    EndUserQuarantinePermissions  = "[PermissionToRelease: True`nPermissionToDelete: True]"
                 }
             }
         }
@@ -93,7 +94,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
                     Name                          = 'ContosoMalwareTag'
-                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $false }
+                    EndUserQuarantinePermissions  = "[PermissionToRelease: False`nPermissionToDelete: True]"
                 }
             }
         }
@@ -160,7 +161,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
                     Name                          = 'ContosoHcpTag'
-                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                    EndUserQuarantinePermissions  = "[PermissionToRelease: True`nPermissionToDelete: True]"
                 }
             }
         }
@@ -184,7 +185,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
                     Name                          = 'ContosoHcpTag'
-                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $false }
+                    EndUserQuarantinePermissions  = "[PermissionToRelease: False`nPermissionToDelete: True]"
                 }
             }
         }
@@ -244,7 +245,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
                 if ($Identity -eq 'ContosoMalwareTag') {
                     return [PSCustomObject]@{
                         Name                          = 'ContosoMalwareTag'
-                        EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                        EndUserQuarantinePermissions  = "[PermissionToRelease: True`nPermissionToDelete: True]"
                     }
                 }
                 return [PSCustomObject]@{ Name = 'ContosoHcpTag' }
@@ -279,7 +280,7 @@ Describe 'MET-Teams004 ZAP for Teams - quarantine release permission observation
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
                     Name                          = 'ContosoMalwareTag'
-                    EndUserQuarantinePermissions  = [PSCustomObject]@{ PermissionToRelease = $true }
+                    EndUserQuarantinePermissions  = "[PermissionToRelease: True`nPermissionToDelete: True]"
                 }
             }
         }

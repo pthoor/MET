@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METWorstSeverity.ps1"
     . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
     . "$root/Private/Expand-METGroupMembership.ps1"
@@ -163,9 +164,9 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
             # the check itself, so all three of these reach the aggregation.
             Mock Get-QuarantinePolicy {
                 @(
-                    [PSCustomObject]@{ Name = 'CustomNoNotify1'; ESNEnabled = $false; EndUserQuarantinePermissionsValue = 23 }
-                    [PSCustomObject]@{ Name = 'CustomHealthy';   ESNEnabled = $true;  EndUserQuarantinePermissionsValue = 23 }
-                    [PSCustomObject]@{ Name = 'CustomNoNotify2'; ESNEnabled = $false; EndUserQuarantinePermissionsValue = 7 }
+                    [PSCustomObject]@{ Name = 'CustomNoNotify1'; ESNEnabled = $false; EndUserQuarantinePermissions = "[PermissionToRelease: False`nPermissionToDelete: True`nPermissionToPreview: True]" }
+                    [PSCustomObject]@{ Name = 'CustomHealthy';   ESNEnabled = $true;  EndUserQuarantinePermissions = "[PermissionToRelease: False`nPermissionToDelete: True`nPermissionToPreview: True]" }
+                    [PSCustomObject]@{ Name = 'CustomNoNotify2'; ESNEnabled = $false; EndUserQuarantinePermissions = "[PermissionToRelease: False`nPermissionToRequestRelease: True`nPermissionToPreview: True]" }
                 )
             }
         }

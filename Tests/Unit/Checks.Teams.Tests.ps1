@@ -1,6 +1,7 @@
 ﻿BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
 
     # Stub Teams cmdlets needed by Teams003

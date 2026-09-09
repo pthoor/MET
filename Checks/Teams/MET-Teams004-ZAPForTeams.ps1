@@ -39,24 +39,22 @@ function Test-QuarantineTagPermission {
         return [PSCustomObject]@{ Severity = 'Fail'; Message = "Unable to retrieve quarantine policy '$TagName' for $Label - cannot verify user release permissions" }
     }
 
-    # EndUserQuarantinePermissions.PermissionToRelease is a nested property: absent on
-    # either level, or present-but-$null on either level, reads as $null just like a
-    # confirmed $false would. Distinguish "not returned" from "returned and false" before
-    # branching, so an unobserved permission cannot be reported as a prevented one.
-    $permissionsProperty = $policy.PSObject.Properties['EndUserQuarantinePermissions']
-    $releaseProperty = $null
-    if ($permissionsProperty -and $null -ne $permissionsProperty.Value) {
-        $releaseProperty = $permissionsProperty.Value.PSObject.Properties['PermissionToRelease']
-    }
+    # Get-QuarantinePolicy returns EndUserQuarantinePermissions as a formatted string, so
+    # $policy.EndUserQuarantinePermissions.PermissionToRelease is always $null regardless of
+    # the real value. Get-METEndUserQuarantinePermission parses the string; it returns $null
+    # (and .PermissionToRelease returns $null) when nothing could be read. Distinguish
+    # "not returned" from "returned and false" before branching, so an unobserved permission
+    # cannot be reported as a prevented one.
+    $permissions = Get-METEndUserQuarantinePermission -QuarantinePolicy $policy
 
-    if (-not $permissionsProperty -or $null -eq $permissionsProperty.Value -or -not $releaseProperty -or $null -eq $releaseProperty.Value) {
+    if ($null -eq $permissions -or $null -eq $permissions.PermissionToRelease) {
         return [PSCustomObject]@{
             Severity = 'Warning'
             Message  = "$Label quarantine policy '$TagName' whose EndUserQuarantinePermissions.PermissionToRelease was not returned by Get-QuarantinePolicy, so whether users can self-release quarantined messages via this tag was not established"
         }
     }
 
-    if ($releaseProperty.Value) {
+    if ($permissions.PermissionToRelease) {
         return [PSCustomObject]@{ Severity = 'Fail'; Message = "$Label quarantine policy '$TagName' allows users to self-release quarantined messages - set PermissionToRelease to false or use AdminOnlyAccessPolicy" }
     }
 

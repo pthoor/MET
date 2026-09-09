@@ -1,6 +1,7 @@
 ﻿BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
     . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
 
@@ -10,6 +11,31 @@
     function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }
+
+    # Get-QuarantinePolicy returns EndUserQuarantinePermissions as a formatted string,
+    # never a typed object and never an EndUserQuarantinePermissionsValue integer.
+    function New-METPermString {
+        param(
+            [bool] $PermissionToRelease        = $false,
+            [bool] $PermissionToRequestRelease = $false,
+            [bool] $PermissionToDelete         = $false,
+            [bool] $PermissionToPreview        = $false,
+            [bool] $PermissionToAllowSender    = $false,
+            [bool] $PermissionToBlockSender    = $false,
+            [bool] $PermissionToDownload       = $false,
+            [bool] $PermissionToViewHeader     = $false
+        )
+        @"
+[PermissionToViewHeader: $PermissionToViewHeader
+PermissionToDownload: $PermissionToDownload
+PermissionToAllowSender: $PermissionToAllowSender
+PermissionToBlockSender: $PermissionToBlockSender
+PermissionToRequestRelease: $PermissionToRequestRelease
+PermissionToRelease: $PermissionToRelease
+PermissionToPreview: $PermissionToPreview
+PermissionToDelete: $PermissionToDelete]
+"@
+    }
 }
 
 Describe 'MET-EXO004 Quarantine Policies' {
@@ -22,14 +48,14 @@ Describe 'MET-EXO004 Quarantine Policies' {
             Mock Get-QuarantinePolicy {
                 @(
                     [PSCustomObject]@{
-                        Name                              = 'AdminOnlyAccessPolicy'
-                        EndUserQuarantinePermissionsValue = 0
-                        ESNEnabled                         = $false
+                        Name                         = 'AdminOnlyAccessPolicy'
+                        EndUserQuarantinePermissions = (New-METPermString)
+                        ESNEnabled                   = $false
                     }
                     [PSCustomObject]@{
-                        Name                              = 'DefaultFullAccessPolicy'
-                        EndUserQuarantinePermissionsValue = 39
-                        ESNEnabled                         = $false
+                        Name                         = 'DefaultFullAccessPolicy'
+                        EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true -PermissionToAllowSender $true)
+                        ESNEnabled                   = $false
                     }
                 )
             }
@@ -50,9 +76,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoCustomPolicy'
-                    EndUserQuarantinePermissionsValue = 23
-                    ESNEnabled                         = $false
+                    Name                         = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString -PermissionToBlockSender $true -PermissionToPreview $true -PermissionToDelete $true)
+                    ESNEnabled                   = $false
                 }
             }
         }
@@ -67,9 +93,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoCustomPolicy'
-                    EndUserQuarantinePermissionsValue = 23
-                    ESNEnabled                         = $true
+                    Name                         = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString -PermissionToBlockSender $true -PermissionToPreview $true -PermissionToDelete $true)
+                    ESNEnabled                   = $true
                 }
             }
         }
@@ -83,9 +109,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoNoAccessPolicy'
-                    EndUserQuarantinePermissionsValue = 0
-                    ESNEnabled                         = $false
+                    Name                         = 'ContosoNoAccessPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString)
+                    ESNEnabled                   = $false
                 }
             }
         }
@@ -107,10 +133,10 @@ Describe 'MET-EXO004 Quarantine Policies' {
     }
 
     # A reduced Get-QuarantinePolicy object omits both properties this check reads.
-    # -not $null is $true and $null -gt 0 is $false, so the policy used to fall through to
-    # the else branch and be graded on two values that were never read. Fixed: absence on
-    # either side is now checked structurally before the conjunction runs.
-    Context 'A custom quarantine policy omits ESNEnabled and EndUserQuarantinePermissionsValue' {
+    # -not $null is $true, so the policy used to fall through to the else branch and be
+    # graded on values that were never read. Fixed: absence on either side is now checked
+    # structurally before the "permission granted" test runs.
+    Context 'A custom quarantine policy omits ESNEnabled and EndUserQuarantinePermissions' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{ Name = 'ContosoCustomPolicy' }
@@ -133,17 +159,17 @@ Describe 'MET-EXO004 Quarantine Policies' {
     Context 'Inverted-sense regression guard' {
         It 'Warns only when ESNEnabled is false while end-user permissions are granted' {
             Mock Get-QuarantinePolicy {
-                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 23; ESNEnabled = $false }
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true); ESNEnabled = $false }
             }
             (& $checkFile)[0].Result | Should -Be 'Warning'
 
             Mock Get-QuarantinePolicy {
-                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 23; ESNEnabled = $true }
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true); ESNEnabled = $true }
             }
             (& $checkFile)[0].Result | Should -Be 'Pass'
 
             Mock Get-QuarantinePolicy {
-                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissionsValue = 0; ESNEnabled = $false }
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString); ESNEnabled = $false }
             }
             (& $checkFile)[0].Result | Should -Be 'Pass'
         }

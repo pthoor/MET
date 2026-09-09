@@ -14,6 +14,8 @@ Reviews the tenant's Teams protection policy via `Get-TeamsProtectionPolicy` and
 
 ZAP retroactively removes messages already delivered once Defender for Office 365's cloud detection catches up - useful because detection engines improve continuously and a message judged clean at delivery time can be reclassified minutes or hours later. Without ZAP for Teams, a malicious link or file shared in a Teams chat stays visible and clickable indefinitely after the fact, even though the equivalent email would have been purged. The quarantine-tag checks close a related but separate gap: ZAP moving a message to quarantine is meaningless as a control if the assigned quarantine policy then lets the recipient release it themselves, undoing the ZAP action. Rule exceptions matter because a tenant-wide `ZapEnabled = $true` can still leave specific recipients, groups, or domains silently uncovered if a policy rule excepts them - the aggregate flag alone does not guarantee blanket coverage.
 
+`Get-QuarantinePolicy` returns `EndUserQuarantinePermissions` as a formatted string, not a typed object, so `$policy.EndUserQuarantinePermissions.PermissionToRelease` is always `$null`. The check resolves `PermissionToRelease` through `Get-METEndUserQuarantinePermission`, which parses that string; a revision that read the property directly reported the release permission as unconfirmed for every non-`AdminOnlyAccessPolicy` tag on every tenant.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |

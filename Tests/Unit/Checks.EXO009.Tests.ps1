@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METPresetSecurityPolicyTier.ps1"
     . "$root/Private/Test-METIsPresetSecurityPolicyName.ps1"
 
@@ -13,8 +14,20 @@ BeforeAll {
     function New-METQuarantinePolicy {
         param([string] $Name, [bool] $PermissionToRelease)
         [PSCustomObject]@{
-            Name                        = $Name
-            EndUserQuarantinePermissions = [PSCustomObject]@{ PermissionToRelease = $PermissionToRelease }
+            Name = $Name
+            # The real Get-QuarantinePolicy shape: EndUserQuarantinePermissions is a
+            # formatted System.String, not a typed object. Reading .PermissionToRelease
+            # off it directly always yields $null - the production bug this check hit.
+            EndUserQuarantinePermissions = @"
+[PermissionToViewHeader: False
+PermissionToDownload: False
+PermissionToAllowSender: False
+PermissionToBlockSender: False
+PermissionToRequestRelease: $(-not $PermissionToRelease)
+PermissionToRelease: $PermissionToRelease
+PermissionToPreview: True
+PermissionToDelete: True]
+"@
         }
     }
 }
