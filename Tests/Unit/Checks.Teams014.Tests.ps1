@@ -14,46 +14,52 @@ BeforeAll {
 
 Describe 'MET-Teams014 Cross-Tenant Access' {
 
-    Context 'Graph cmdlets not found (module absent)' {
+    Context 'Graph cmdlets not found (module absent / -SkipGraph)' {
         BeforeEach {
             Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-MgPolicyCrossTenantAccessPolicyDefault' }
         }
 
-        It 'Returns a single NotApplicable result with ErrorMessage populated' {
+        It 'Returns a single NotApplicable result and does NOT populate Error' {
             $results = & $checkFile
             $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'NotApplicable'
             $results[0].Severity | Should -Be 'Medium'
             $results[0].CheckId | Should -Be 'MET-Teams014'
-            $results[0].Error | Should -Not -BeNullOrEmpty
-            $results[0].Finding | Should -Match 'Microsoft Graph'
+            $results[0].Finding | Should -Match 'Microsoft Graph was not connected'
+        }
+
+        It 'Leaves Error null so a routine -SkipGraph run does not land in the report Error bucket' {
+            $results = & $checkFile
+            $results[0].Error | Should -BeNullOrEmpty
         }
     }
 
-    Context 'Graph cmdlet throws (connected but call fails)' {
+    Context 'Graph cmdlet reports itself unknown at call time (CommandNotFoundException)' {
+        BeforeEach {
+            Mock Get-MgPolicyCrossTenantAccessPolicyDefault {
+                throw [System.Management.Automation.CommandNotFoundException]::new('not recognized')
+            }
+        }
+
+        It 'Treats it as Graph-not-connected: NotApplicable, no Error' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'NotApplicable'
+            $results[0].Error | Should -BeNullOrEmpty
+            $results[0].Finding | Should -Match 'Microsoft Graph was not connected'
+        }
+    }
+
+    Context 'Graph connected but the policy call fails (missing Policy.Read.All)' {
         BeforeEach {
             Mock Get-MgPolicyCrossTenantAccessPolicyDefault { throw 'Graph request failed: Forbidden' }
         }
 
-        It 'Returns a single NotApplicable result and does not throw' {
+        It 'Returns NotApplicable with Error populated, since Graph was reachable' {
             $results = & $checkFile
             $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'NotApplicable'
             $results[0].Error | Should -Match 'Forbidden'
-        }
-    }
-
-    Context 'Graph cmdlets entirely absent from the session (CommandNotFoundException)' {
-        BeforeEach {
-            Mock Get-MgPolicyCrossTenantAccessPolicyDefault {
-                throw [System.Management.Automation.CommandNotFoundException]::new('The term Get-MgPolicyCrossTenantAccessPolicyDefault is not recognized')
-            }
-        }
-
-        It 'Never throws and returns a NotApplicable result' {
-            { & $checkFile } | Should -Not -Throw
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'NotApplicable'
+            $results[0].Finding | Should -Match 'Microsoft Graph is connected'
         }
     }
 

@@ -11,7 +11,7 @@ Reviews Entra ID's cross-tenant access configuration via Microsoft Graph:
 
 Property presence is checked defensively (`PSObject.Properties` existence checks, never a direct dotted access on an assumed shape) before any value is read, so an unexpected or evolving Graph object shape produces an `Info` result surfacing that the data could not be evaluated, rather than a wrong Pass/Fail guess or a crash.
 
-**This is the first MET check with a direct, non-degrading-to-EXO Microsoft Graph dependency.** Every prior Graph call site lives inside the private `Expand-METGroupMembership` helper, which itself falls back to Exchange Online cmdlets when Graph is unavailable. No Exchange Online or native Teams-module cmdlet exposes Entra's cross-tenant access policy, so there is no non-Graph data source to fall back to here. Per `CLAUDE.md`'s "Connection Requirements for New Checks," this check therefore degrades to a single `NotApplicable` result - not a thrown error - whenever Graph is unavailable (module not installed, `Connect-METSession -SkipGraph` was used, the session's Graph connection failed, or the call itself throws for any other reason). It never aborts `Invoke-METTriage`.
+**This is the first MET check with a direct, non-degrading-to-EXO Microsoft Graph dependency.** Every prior Graph call site lives inside the private `Expand-METGroupMembership` helper, which itself falls back to Exchange Online cmdlets when Graph is unavailable. No Exchange Online or native Teams-module cmdlet exposes Entra's cross-tenant access policy, so there is no non-Graph data source to fall back to here. Per `CLAUDE.md`'s "Connection Requirements for New Checks," this check therefore degrades to a single `NotApplicable` result - not a thrown error - whenever Graph is unavailable. It never aborts `Invoke-METTriage`. It distinguishes two cases: Graph not connected at all (module not installed, `-SkipGraph`, or a failed Graph connection) is a routine outcome and leaves the `Error` field empty; Graph connected but a policy call failing (typically a missing `Policy.Read.All` scope) populates `Error` so the gap is not silently swallowed.
 
 This is a **distinct control plane** from two existing Teams checks that sound similar:
 
@@ -30,7 +30,8 @@ Cross-tenant access settings are the outermost gate for B2B collaboration. Micro
 | Pass | The default cross-tenant access policy is customized (`IsServiceDefault = $false`) or its inbound settings are explicitly evaluated and not open, and `AllowInvitesFrom` is not `everyone` |
 | Warning | The default policy is unmodified (`IsServiceDefault = $true`), inbound B2B collaboration/direct connect is `Allowed` with no target restriction, and/or `AllowInvitesFrom` is `everyone` |
 | Info | Graph returned data but no recognizable property (`IsServiceDefault`, an inbound `AccessType`, or `AllowInvitesFrom`) could be found to evaluate - manual review needed |
-| NotApplicable | Microsoft Graph is unavailable - module not installed, `Connect-METSession` was run with `-SkipGraph`, the Graph connection failed, or the underlying cmdlet call threw |
+| NotApplicable (no `Error`) | Microsoft Graph was not connected for the run - `Connect-METSession -SkipGraph`, the `Microsoft.Graph.Identity.SignIns` module not installed, or the Graph connection could not be established. This is an expected, routine outcome, so the `Error` field is left empty and the check does not appear in the report's Error bucket. |
+| NotApplicable (with `Error`) | Graph **was** connected but retrieving the policy failed - almost always a missing `Policy.Read.All` scope. The `Error` field carries the detail so the gap is visible. |
 
 ## Recommendation
 
