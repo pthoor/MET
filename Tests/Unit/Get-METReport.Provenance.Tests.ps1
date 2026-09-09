@@ -131,4 +131,24 @@ Describe 'Get-METReport tenant provenance' {
             ($warnings | Where-Object { $_ -match 'tenant' }) | Should -BeNullOrEmpty
         }
     }
+
+    Context 'Results from two different tenants are piped into one report' {
+        It 'Refuses rather than labelling the mixed set with one tenant' {
+            $mixed = @(
+                New-StampedResult -Tenant 'customer-a.onmicrosoft.com'
+                New-StampedResult -Tenant 'customer-b.onmicrosoft.com'
+            )
+            { $mixed | Get-METReport -Format JSON -WarningAction SilentlyContinue } |
+                Should -Throw -ExpectedMessage '*more than one tenant*'
+        }
+
+        It 'Refuses even when an explicit -TenantName is supplied' {
+            $mixed = @(
+                New-StampedResult -Tenant 'customer-a.onmicrosoft.com'
+                New-StampedResult -Tenant 'customer-b.onmicrosoft.com'
+            )
+            { $mixed | Get-METReport -Format JSON -TenantName 'explicit.example.com' -WarningAction SilentlyContinue } |
+                Should -Throw -ExpectedMessage '*more than one tenant*'
+        }
+    }
 }

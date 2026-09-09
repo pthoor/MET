@@ -48,6 +48,7 @@
         # bind-utils and dnsutils. Use DNS-over-HTTPS rather than treating that
         # missing local tooling as proof that a DNS record does not exist.
         $resolver = $env:MET_DOH_RESOLVER
+        if ($resolver) { $resolver = $resolver.Trim() }
         if ($resolver -and $resolver -eq 'none') {
             throw "DNS lookup for '$Name' requires the DNS-over-HTTPS fallback because neither Resolve-DnsName, dig nor nslookup is available on this host, but MET_DOH_RESOLVER is set to 'none'. Install dnsutils/bind-utils, or unset MET_DOH_RESOLVER to allow the fallback."
         }

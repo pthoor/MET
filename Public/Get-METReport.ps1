@@ -47,15 +47,28 @@ function Get-METReport {
     end {
       $effectiveTenantName = $TenantName
       $provenanceDisagreesWithLiveSession = $false
+
+      # Every distinct tenant these results were gathered against. More than one means
+      # two customers' checks were piped into a single report - it would be labelled with
+      # one customer's identity while carrying another's configuration, the same
+      # cross-customer exposure the per-run provenance stamp exists to prevent. Refuse it
+      # outright rather than pick one label; this holds even when -TenantName is passed,
+      # because an explicit label cannot make a mixed result set represent one tenant.
+      $provenanceTenants = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTenant')) {
+            [string]$_.Metadata['METRunTenant']
+          }
+        } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique)
+
+      if ($provenanceTenants.Count -gt 1) {
+        throw "These results were gathered against more than one tenant ($($provenanceTenants -join ', ')). A single report cannot represent multiple tenants - one customer's checks would appear under another customer's identity. Run Get-METReport once per tenant's result set."
+      }
+
       if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
-        $provenanceTenant = $allResults |
-          ForEach-Object {
-            if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTenant')) {
-              [string]$_.Metadata['METRunTenant']
-            }
-          } |
-          Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-          Select-Object -First 1
+        $provenanceTenant = $provenanceTenants | Select-Object -First 1
 
         $liveTenant = $null
         try {

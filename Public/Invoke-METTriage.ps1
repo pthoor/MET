@@ -221,8 +221,13 @@
             continue
         }
 
-        # Determine which items are noteworthy
-        $badItems    = if ($failItems.Count -gt 0) { $failItems } elseif ($warnItems.Count -gt 0) { $warnItems } else { $errorItems }
+        # Every noteworthy item: failures, warnings, and any item carrying an Error
+        # (a High "could not assess" NotApplicable/Info among them). An errored item whose
+        # Result kept it out of the fail/warn sets still contributes its severity and its
+        # Finding - dropping the severity let a High unassessed result co-occurring with a
+        # Medium warning score the aggregate at Medium, hiding the more serious signal.
+        $noteworthyItems = @($failItems) + @($warnItems) +
+            @($errorItems | Where-Object { $_ -notin $failItems -and $_ -notin $warnItems })
         $worstResult = if ($failItems.Count -gt 0) { 'Fail' } elseif ($warnItems.Count -gt 0) { 'Warning' } else { 'Fail' }
         $first       = $items[0]
         $noun        = Get-METAggregationNoun -CheckId $first.CheckId
@@ -234,15 +239,15 @@
         # aggregate Informational, whose scoring weight is 0, which removes the finding
         # from both the numerator and the denominator of the posture score: a real DMARC
         # failure would disappear from the score entirely.
-        $worstSeverity = Get-METWorstSeverity -Severity ($badItems | ForEach-Object { $_.Severity })
+        $worstSeverity = Get-METWorstSeverity -Severity ($noteworthyItems | ForEach-Object { $_.Severity })
 
-        $findingLines = $badItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
+        $findingLines = $noteworthyItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
         $errorMessage = @($errorItems | ForEach-Object Error | Where-Object { $_ }) -join "`n"
 
         $aggregated.Add((New-METCheckResult `
             -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
             -Result $worstResult -Severity $worstSeverity `
-            -AffectedObject "$($badItems.Count) of $($items.Count) $noun" `
+            -AffectedObject "$($noteworthyItems.Count) of $($items.Count) $noun" `
             -Finding ($findingLines -join "`n") `
             -Recommendation $first.Recommendation `
             -ReferenceUrl $first.ReferenceUrl `

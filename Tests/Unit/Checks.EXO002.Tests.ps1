@@ -79,6 +79,22 @@ Describe 'MET-EXO002 DKIM' {
         }
     }
 
+    Context 'Both selectors are 2048-bit but the active selector cannot be determined' {
+        BeforeAll {
+            Mock Get-DkimSigningConfig {
+                # SelectorBeforeRotateOnDate / SelectorAfterRotateOnDate absent -> the
+                # check cannot tell which selector is active. Both keys are compliant.
+                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; Status = 'Valid'
+                    Selector1KeySize = 2048; Selector2KeySize = 2048 }
+            }
+        }
+        It 'Passes without claiming either selector signs after the next rotation' {
+            $results = & $checkFile
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'will sign after the next key rotation'
+        }
+    }
+
     Context 'Neither selector reports a key size' {
         BeforeAll {
             Mock Get-DkimSigningConfig {

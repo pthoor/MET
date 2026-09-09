@@ -103,5 +103,14 @@ Describe 'Resolve-METDnsName DNS-over-HTTPS disclosure and control' {
             { Resolve-METDnsName -Name 'contoso.com' -Type TXT -WarningAction SilentlyContinue } | Should -Throw -ExpectedMessage '*MET_DOH_RESOLVER*'
             Should -Invoke Invoke-RestMethod -Exactly 0
         }
+
+        It 'Honours the disable switch regardless of case or surrounding whitespace' {
+            foreach ($value in @('None', 'NONE', '  none  ')) {
+                $env:MET_DOH_RESOLVER = $value
+                { Resolve-METDnsName -Name 'contoso.com' -Type TXT -WarningAction SilentlyContinue } |
+                    Should -Throw -ExpectedMessage '*MET_DOH_RESOLVER*'
+            }
+            Should -Invoke Invoke-RestMethod -Exactly 0
+        }
     }
 }

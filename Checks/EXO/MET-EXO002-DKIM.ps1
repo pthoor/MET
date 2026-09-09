@@ -61,11 +61,18 @@ foreach ($config in $dkimConfigs) {
         $issues.Add("DKIM key size is $activeKeySize bits - minimum recommended is 2048 bits")
     }
 
+    # Only assert which selector signs "after the next rotation" when the active selector
+    # is actually known. With SelectorBeforeRotateOnDate/SelectorAfterRotateOnDate absent,
+    # [string]$activeSelector is '' and every selector would compare as inactive - a
+    # misleading rotation note. (The <2048 case reaches the Fail branch via the key-size
+    # fallback above regardless, so this guard is defensive, not a live-bug fix.)
     $inactiveNote = @()
-    foreach ($sel in @('selector1', 'selector2')) {
-        $size = $selectorSizes[$sel]
-        if ($null -ne $size -and $sel -ne [string]$activeSelector -and $size -lt 2048) {
-            $inactiveNote += "$sel is $size-bit and will sign after the next key rotation"
+    if ($activeSelector) {
+        foreach ($sel in @('selector1', 'selector2')) {
+            $size = $selectorSizes[$sel]
+            if ($null -ne $size -and $sel -ne [string]$activeSelector -and $size -lt 2048) {
+                $inactiveNote += "$sel is $size-bit and will sign after the next key rotation"
+            }
         }
     }
 

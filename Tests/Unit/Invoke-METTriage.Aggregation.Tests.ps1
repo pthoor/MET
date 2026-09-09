@@ -24,6 +24,8 @@ BeforeAll {
     function Get-QuarantinePolicy         { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
     function Get-AtpPolicyForO365         { [CmdletBinding()] param([string]$Identity) }
     function Get-SafeAttachmentPolicy     { [CmdletBinding()] param([string]$Identity) }
+    function Get-EmailTenantSettings      { [CmdletBinding()] param() }
+    function Get-User                     { [CmdletBinding()] param([switch]$IsVIP,[string]$ResultSize) }
 }
 
 Describe 'Invoke-METTriage default aggregation' {
@@ -220,6 +222,35 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
             $results[0].Error          | Should -Match 'did not return an EnableATPForSPOTeamsODB value'
             $results[0].Finding        | Should -Match 'Global Safe Attachments Settings'
             $results[0].Finding        | Should -Not -Match 'Built-In Protection Policy'
+        }
+    }
+
+    Context 'A Warning item co-occurs with a higher-severity errored item under one CheckId' {
+        BeforeEach {
+            # MET-MDO010 emits two results: the protection toggle (High) and the tagging
+            # sub-check (Medium). Here the toggle property is absent -> NotApplicable/High
+            # carrying an Error, and no user is tagged -> Warning/Medium. The aggregate
+            # must take the worst severity across BOTH, not just the warning.
+            Mock Get-EmailTenantSettings { [PSCustomObject]@{ Identity = 'contoso' } }
+            Mock Get-User { @() }
+        }
+
+        It 'Emits the two underlying results with the expected severities' {
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO010' -Detailed -WarningAction SilentlyContinue)
+            $results.Count | Should -Be 2
+            ($results | Where-Object { $_.Result -eq 'NotApplicable' }).Severity | Should -Be 'High'
+            ($results | Where-Object { $_.Result -eq 'Warning' }).Severity | Should -Be 'Medium'
+        }
+
+        It 'Scores the aggregate at the errored item severity (High), not the warning (Medium)' {
+            $results = @(Invoke-METTriage -CheckId 'MET-MDO010' -WarningAction SilentlyContinue)
+
+            $results.Count       | Should -Be 1
+            $results[0].Result   | Should -Be 'Warning'
+            $results[0].Severity | Should -Be 'High'
+            $results[0].Error    | Should -Match 'did not return an EnablePriorityAccountProtection value'
+            $results[0].Finding  | Should -Match 'was not returned by Get-EmailTenantSettings'
+            $results[0].Finding  | Should -Match 'No users have the Priority Account tag'
         }
     }
 }

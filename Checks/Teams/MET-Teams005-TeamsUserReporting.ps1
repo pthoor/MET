@@ -89,12 +89,22 @@ if ($messagingPolicyUnreportedMessage -and $issues.Count -gt 0) {
     $issues.Add($messagingPolicyUnreportedMessage)
 }
 
+# A confirmed Defender-portal failure must not swallow a Teams-side retrieval failure on
+# a different control - the reader still needs to know that leg was never assessed,
+# marked as unverified rather than a second confirmed failure.
+$failErrorMessage = $null
+if ($messagingPolicyError -and $issues.Count -gt 0) {
+    $issues.Add("Additionally, the Teams messaging policies could not be retrieved, so whether every user can report a security concern is unverified rather than a confirmed failure: $messagingPolicyError")
+    $failErrorMessage = $messagingPolicyError
+}
+
 if ($issues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `
         -Result Fail -Severity Medium -AffectedObject 'Teams User Reporting Settings' `
         -Finding ($issues -join '; ') `
         -Recommendation "1. In the Defender portal go to Settings > Email & collaboration > User reported settings and enable `"Monitor reported items in Microsoft Teams`" and route Teams reports to your SecOps mailbox.`n2. In the Teams admin center (admin.teams.microsoft.com) ensure `"Report a security concern`" is enabled in all active messaging policies." `
-        -ReferenceUrl 'https://aka.ms/mdo-teams-user-reporting'
+        -ReferenceUrl 'https://aka.ms/mdo-teams-user-reporting' `
+        -ErrorMessage $failErrorMessage
 }
 elseif ($messagingPolicyError) {
     New-METCheckResult -CheckId 'MET-Teams005' -Category Teams -Name 'Teams User Reporting' `

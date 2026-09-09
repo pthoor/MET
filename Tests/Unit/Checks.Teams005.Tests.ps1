@@ -192,6 +192,13 @@ Describe 'MET-Teams005 Teams User Reporting' {
             $results[0].Result  | Should -Be 'Fail'
             $results[0].Finding | Should -Match 'Monitor reported items in Microsoft Teams'
         }
+
+        It 'Still surfaces that the Teams messaging-policy leg could not be assessed' {
+            $results = @(& $checkFile)
+            $results[0].Finding | Should -Match 'messaging policies could not be retrieved'
+            $results[0].Finding | Should -Match 'unverified rather than a confirmed failure'
+            $results[0].Error   | Should -Match 'Connect-MicrosoftTeams'
+        }
     }
 
     Context 'The report submission policy omits ReportChatMessageEnabled' {
