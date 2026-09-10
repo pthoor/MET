@@ -179,3 +179,39 @@ Describe 'Get-METReport output path reporting' {
         Should -Invoke -ModuleName 'MET' -CommandName 'Start-Process' -Times 0
     }
 }
+
+Describe 'Get-METReport format and path combinations' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # -Format All already errors correctly here. HTML dumped 1178 lines of markup to
+    # the console instead. JSON to stdout is left alone - piping it is genuinely useful.
+    It 'throws for -Format HTML with no -OutputPath' {
+        { $script:Sample | Get-METReport -Format HTML } |
+            Should -Throw -ExpectedMessage '*-OutputPath*'
+    }
+
+    It 'still allows -Format JSON with no -OutputPath' {
+        { $script:Sample | Get-METReport -Format JSON } | Should -Not -Throw
+    }
+
+    It 'warns that -OutputPath is ignored for -Format Console' {
+        $warnings = @()
+        $script:Sample | Get-METReport -Format Console -OutputPath (Join-Path $TestDrive 'ignored') `
+            -WarningVariable warnings -WarningAction SilentlyContinue 6>&1 | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'Console'
+        ($warnings -join ' ') | Should -Match 'ignored'
+    }
+
+    It 'does not create the directory it was told to ignore' {
+        $ignored = Join-Path $TestDrive 'ignored2'
+        $script:Sample | Get-METReport -Format Console -OutputPath $ignored `
+            -WarningAction SilentlyContinue 6>&1 | Out-Null
+
+        Test-Path -LiteralPath $ignored | Should -BeFalse
+    }
+}

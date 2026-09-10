@@ -86,7 +86,10 @@ Describe 'Posture score arithmetic' {
             ($results | Get-METReport -Format JSON -TenantName 'contoso.com' | ConvertFrom-Json).postureScore |
                 Should -Be $case.Score
 
-            $html = $results | Get-METReport -Format HTML -TenantName 'contoso.com' -NoLaunch | Out-String
+            $folder = Join-Path $TestDrive "band-$($case.Result)"
+            $results | Get-METReport -Format HTML -OutputPath $folder -TenantName 'contoso.com' -NoLaunch | Out-Null
+            $generated = Get-ChildItem -Path $folder -Recurse -Filter '*.html' | Select-Object -First 1
+            $html = Get-Content -Path $generated.FullName -Raw
             $html | Should -Match $case.Band -Because "a score of $($case.Score) is documented as $($case.Band)"
         }
     }

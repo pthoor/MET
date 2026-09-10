@@ -184,6 +184,20 @@ function Get-METReport {
         $assessmentFolderAnnounced = $false
         $writtenFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
 
+        if ($wantsHtml -and -not $OutputPath) {
+            $PSCmdlet.ThrowTerminatingError(
+                [System.Management.Automation.ErrorRecord]::new(
+                    [System.ArgumentException]::new(
+                        '-Format HTML requires -OutputPath. The report is a single self-contained file over a thousand lines long; writing it to the console is never what was wanted. Pass -OutputPath <folder>.'),
+                    'METOutputPathRequired',
+                    [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                    $Format))
+        }
+
+        if ($OutputPath -and -not ($wantsJson -or $wantsHtml)) {
+            Write-Warning '-OutputPath was given but -Format is Console, which writes to the host only. The path is ignored and no directory was created. Use -Format JSON, HTML or All to write files.'
+        }
+
         if ($OutputPath -and ($wantsJson -or $wantsHtml)) {
           $outputIsDirectory = Test-Path $OutputPath -PathType Container
           $hasExtension = [System.IO.Path]::HasExtension($OutputPath)
