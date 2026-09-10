@@ -48,6 +48,9 @@ function Connect-METSession {
         if ($CertificateThumbprint -and $CertificatePath) {
             throw 'Specify either -CertificateThumbprint or -CertificatePath, not both.'
         }
+        if ($CertificateThumbprint -and -not $IsWindows) {
+            throw "-CertificateThumbprint reads the Windows certificate store and is Windows-only, per Microsoft's own documentation. On Linux/macOS use -CertificatePath <pfx> -CertificatePassword <securestring>."
+        }
         if (-not $CertificateThumbprint -and -not $CertificatePath) {
             throw 'ServicePrincipal authentication requires either -CertificateThumbprint (Windows certificate store) or -CertificatePath (works on any platform, including Linux/macOS/Codespaces).'
         }
@@ -256,7 +259,10 @@ function Connect-METSession {
                 $servicesConnected.Add('ExchangeOnline')
             }
             catch {
-                $onWindowsRetry = if ($IsWindows) {
+                $onWindowsRetry = if ($PSCmdlet.ParameterSetName -ne 'Interactive') {
+                    'Re-run with -Verbose for detail. For app-only authentication, check that the certificate is valid and not expired, that the app registration carries the required application permissions, and that admin consent has been granted.'
+                }
+                elseif ($IsWindows) {
                     if ("$_" -match '0x80070520|logon session does not exist|\bWAM\b|broker') {
                         "This is a WAM broker error (0x80070520 'A specified logon session does not exist'), which usually means the session is not an interactive desktop one - most often an elevated 'Run as administrator' prompt, or a remote/service/scheduled-task session. Retry from a normal non-elevated PowerShell window, or bypass WAM: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose"
                     }

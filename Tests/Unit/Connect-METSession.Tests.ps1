@@ -127,7 +127,7 @@ Describe 'Connect-METSession Teams leg' {
     }
 
     Context 'Service principal with certificate' {
-        It 'Resolves the thumbprint to an X509Certificate2 and passes -Certificate' {
+        It 'Resolves the thumbprint to an X509Certificate2 and passes -Certificate' -Skip:(-not $IsWindows) {
             $fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
             Mock Get-METCertificateByThumbprint { $fakeCert }
 
@@ -390,12 +390,17 @@ Describe 'Connect-METSession tenant-scoped session reuse - EXO' {
                 [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = 'admin@contoso.com' }
             }
             $fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
-            Mock Get-METCertificateByThumbprint { $fakeCert }
+            Mock Get-METCertificateFromFile { $fakeCert }
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
 
             { Connect-METSession -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $certFile `
+                    -CertificatePassword $securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*interactively*'
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
@@ -439,7 +444,11 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
         Mock Connect-MgGraph {}
         Mock Connect-MicrosoftTeams {}
         $script:fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
-        Mock Get-METCertificateByThumbprint { $script:fakeCert }
+        Mock Get-METCertificateFromFile { $script:fakeCert }
+        $script:securePassword = New-Object System.Security.SecureString
+        'p@ssw0rd'.ToCharArray() | ForEach-Object { $script:securePassword.AppendChar($_) }
+        $script:certFile = Join-Path $TestDrive 'met-ci.pfx'
+        New-Item -Path $script:certFile -ItemType File -Force | Out-Null
     }
 
     Context 'Graph already connected to a different tenant' {
@@ -449,7 +458,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa*'
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -463,7 +473,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipGraph `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa*'
 
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
@@ -478,7 +489,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Not -Throw
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -493,7 +505,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -508,7 +521,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipGraph `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
 
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
@@ -724,10 +738,15 @@ Describe 'Connect-METSession certificate file authentication' {
 
     Context '-TenantId is a GUID while Exchange Online is being connected' {
         It 'Throws before attempting any connection, naming the primary domain requirement' {
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
+
             { Connect-METSession -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' -ErrorAction Stop } |
+                    -CertificatePath $certFile -CertificatePassword $securePassword -ErrorAction Stop } |
                 Should -Throw -ExpectedMessage '*.onmicrosoft.com*'
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
@@ -736,10 +755,15 @@ Describe 'Connect-METSession certificate file authentication' {
 
     Context '-TenantId is a GUID but -SkipExchangeOnline is set' {
         It 'Does not throw, since Graph/Teams accept a GUID tenant ID' {
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
+
             { Connect-METSession -SkipExchangeOnline -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' -ErrorAction Stop } | Should -Not -Throw
+                    -CertificatePath $certFile -CertificatePassword $securePassword -ErrorAction Stop } | Should -Not -Throw
         }
     }
 }
@@ -965,5 +989,29 @@ Describe 'Connect-METSession concurrent session verification' {
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
         }
+    }
+}
+
+Describe 'Connect-METSession certificate thumbprint platform guard' {
+    # Produced 'A parameter cannot be found that matches parameter name
+    # CertificateThumbprint' deep inside Connect-ExchangeOnline, then suggested
+    # -UseDeviceAuthentication and -DisableWAM - both irrelevant to a service
+    # principal certificate problem, and one is the phishing vector the module works
+    # elsewhere to de-emphasise.
+    It 'throws before connecting when -CertificateThumbprint is used off Windows' -Skip:($IsWindows) {
+        { Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+              -TenantId 'contoso.onmicrosoft.com' -CertificateThumbprint 'ABCD1234' } |
+            Should -Throw -ExpectedMessage '*Windows-only*'
+    }
+
+    It 'points at -CertificatePath in the message' -Skip:($IsWindows) {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com' -CertificateThumbprint 'ABCD1234'
+        } catch { $caught = $_ }
+
+        $caught.Exception.Message | Should -Match '-CertificatePath'
+        $caught.Exception.Message | Should -Not -Match 'UseDeviceAuthentication'
     }
 }
