@@ -28,7 +28,7 @@ BeforeAll {
     function Get-METTestHtml {
         param([object[]] $Results, [string] $Folder, [string] $TenantName = 'contoso.onmicrosoft.com')
 
-        $Results | Get-METReport -Format HTML -OutputPath $Folder -TenantName $TenantName | Out-Null
+        $Results | Get-METReport -Format HTML -OutputPath $Folder -TenantName $TenantName -NoLaunch | Out-Null
         $generated = Get-ChildItem -Path $Folder -Recurse -Filter '*.html' | Select-Object -First 1
         $generated | Should -Not -BeNullOrEmpty
         Get-Content -Path $generated.FullName -Raw

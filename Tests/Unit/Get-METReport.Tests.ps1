@@ -13,7 +13,7 @@ Describe 'Get-METReport structured metadata' {
             Metadata = @{ DetailType = 'EffectivePolicyCoverage'; ProtectionType = 'Safe Links'; TotalRecipients = 2; OrderingObservations = @(@{ Severity='Warning'; Message='Catch-all shadows a specialized policy' }); CoverageRecommendations=@('Add a compliant catch-all after specialized policies'); Policies = @(@{ PolicyName = 'Strict custom'; EffectiveRecipientCount = 2; OrderingObservations=@('Catch-all shadows a specialized policy') }) }
         }
 
-        $result | Get-METReport -Format All -OutputPath $output -TenantName 'contoso.com'
+        $result | Get-METReport -Format All -OutputPath $output -TenantName 'contoso.com' -NoLaunch
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $json = Get-Content (Join-Path $folder.FullName 'MET-report.json') -Raw | ConvertFrom-Json
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
@@ -82,7 +82,7 @@ Describe 'Get-METReport structured metadata' {
             }
         )
 
-        $results | Get-METReport -Format HTML -OutputPath $output -TenantName 'contoso.com'
+        $results | Get-METReport -Format HTML -OutputPath $output -TenantName 'contoso.com' -NoLaunch
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
 

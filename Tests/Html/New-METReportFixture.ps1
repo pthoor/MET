@@ -286,7 +286,7 @@ $staging = Join-Path ([System.IO.Path]::GetTempPath()) ('met-html-fixture-' + [g
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 
 try {
-    $fixtures | Get-METReport -Format HTML -OutputPath $staging -TenantName 'contoso.onmicrosoft.com' | Out-Null
+    $fixtures | Get-METReport -Format HTML -OutputPath $staging -TenantName 'contoso.onmicrosoft.com' -NoLaunch | Out-Null
 
     $generated = Get-ChildItem -Path $staging -Recurse -Filter '*.html' | Select-Object -First 1
     if (-not $generated) {
