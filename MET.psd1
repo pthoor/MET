@@ -15,6 +15,7 @@
     #           falls back to Exchange Online cmdlets when Graph is missing or fails to connect.
     # Optional: MicrosoftTeams 6.x+ (latest: 7.x) - Teams checks skip gracefully if not present.
     RootModule           = 'MET.psm1'
+    FormatsToProcess     = @('MET.Format.ps1xml')
     FunctionsToExport    = @(
         'Connect-METSession'
         'Disconnect-METSession'

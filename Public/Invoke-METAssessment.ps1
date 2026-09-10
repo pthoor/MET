@@ -143,6 +143,7 @@
         catch {
             $checkIdPart = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
             $errResult = [PSCustomObject]@{
+                PSTypeName     = 'MET.CheckResult'
                 CheckId        = $checkIdPart
                 Category       = $file.Directory.Name
                 Name           = $file.BaseName
