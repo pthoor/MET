@@ -18,6 +18,7 @@ function Connect-METSession {
         # Must be the tenant's primary .onmicrosoft.com domain name, not the tenant GUID, when
         # connecting Exchange Online - Connect-ExchangeOnline's -Organization parameter for
         # app-only authentication rejects GUIDs outright. Graph and Teams accept either form.
+        [Parameter(ParameterSetName = 'ManagedIdentity', Mandatory)]
         [Parameter(ParameterSetName = 'ServicePrincipal', Mandatory)]
         [string] $TenantId,
 
@@ -32,6 +33,9 @@ function Connect-METSession {
 
         [Parameter(ParameterSetName = 'ManagedIdentity', Mandatory)]
         [switch] $ManagedIdentity,
+
+        [Parameter(ParameterSetName = 'ManagedIdentity')]
+        [string] $ManagedIdentityAccountId,
 
         [Parameter()]
         [string] $DelegatedOrganization,
@@ -71,9 +75,12 @@ function Connect-METSession {
             }
             $CertificatePath = $resolvedCertPath
         }
-        if (-not $SkipExchangeOnline -and $TenantId -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
-            throw "-TenantId must be the tenant's primary .onmicrosoft.com domain name (e.g. 'contoso.onmicrosoft.com'), not the tenant GUID - Connect-ExchangeOnline's -Organization parameter for app-only authentication rejects GUIDs. Find it in the Entra admin center under Overview > 'Primary domain', or pass -SkipExchangeOnline if you only need Graph/Teams."
-        }
+    }
+
+    if ($PSCmdlet.ParameterSetName -in @('ServicePrincipal', 'ManagedIdentity') -and
+        -not $SkipExchangeOnline -and
+        $TenantId -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
+        throw "-TenantId must be the tenant's primary .onmicrosoft.com domain name (e.g. 'contoso.onmicrosoft.com'), not the tenant GUID - Connect-ExchangeOnline's -Organization parameter for app-only authentication rejects GUIDs. Find it in the Entra admin center under Overview > 'Primary domain', or pass -SkipExchangeOnline if you only need Graph/Teams."
     }
 
     # Storm-2372 and follow-on campaigns (Microsoft Security Blog, Feb 2025 - Apr 2026) abuse the
@@ -193,6 +200,13 @@ function Connect-METSession {
             }
             'ManagedIdentity' {
                 $exoParams['ManagedIdentity'] = $true
+                # Microsoft documents -Organization as required for managed identity.
+                # Without it the connection aborts, and an EXO failure is fatal, so the
+                # entire parameter set was unusable.
+                $exoParams['Organization']    = $TenantId
+                if ($ManagedIdentityAccountId) {
+                    $exoParams['ManagedIdentityAccountId'] = $ManagedIdentityAccountId
+                }
             }
         }
 
@@ -341,6 +355,9 @@ function Connect-METSession {
                 }
                 'ManagedIdentity' {
                     $graphParams = @{ Identity = $true; NoWelcome = $true }
+                    if ($ManagedIdentityAccountId) {
+                        $graphParams['ClientId'] = $ManagedIdentityAccountId
+                    }
                 }
             }
 

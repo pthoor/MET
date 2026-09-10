@@ -145,7 +145,10 @@ Describe 'Connect-METSession Teams leg' {
 
     Context 'Managed identity' {
         It 'Passes -Identity rather than -ManagedIdentity' {
-            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity
+            # -TenantId became mandatory in the ManagedIdentity set (Task 18, C-7) so
+            # Connect-ExchangeOnline -ManagedIdentity -Organization can actually connect;
+            # supplying it here does not change what this test asserts about Teams.
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity -TenantId 'contoso.onmicrosoft.com'
 
             Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
                 $Identity -eq $true
@@ -424,7 +427,9 @@ Describe 'Connect-METSession tenant-scoped session reuse - EXO' {
                 [PSCustomObject]@{ State = 'Connected'; Organization = $null; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
             }
 
-            { Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity -ErrorAction Stop } | Should -Not -Throw
+            # -TenantId became mandatory in the ManagedIdentity set (Task 18, C-7); supplying
+            # it here does not change the reuse behavior this test asserts.
+            { Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -ErrorAction Stop } | Should -Not -Throw
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
         }
     }
@@ -1095,5 +1100,52 @@ Describe 'Connect-METSession -DisableWAM capability probe (C-22)' {
 
             Test-METExoSupportsDisableWam | Should -BeFalse
         }
+    }
+}
+
+Describe 'Connect-METSession managed identity parameters' {
+    # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+    # which defines a same-named function ahead of the module import below. Left in
+    # place, that shadow breaks Get-Command/-Module resolution for the module's own
+    # copy, so it has to go before the real module is loaded - same as the two
+    # -DisableWAM Describe blocks above.
+    BeforeAll {
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # Microsoft documents Connect-ExchangeOnline -ManagedIdentity -Organization
+    # <domain>.onmicrosoft.com as required. -Organization was only ever set in the
+    # ServicePrincipal branch, and the MI set had no -TenantId, so with EXO failure
+    # fatal the whole parameter set aborted.
+    It 'accepts -TenantId in the ManagedIdentity set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['TenantId']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain 'ManagedIdentity'
+    }
+
+    It 'requires -TenantId in the ManagedIdentity set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['TenantId']
+        $mandatory = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and
+                           $_.ParameterSetName -eq 'ManagedIdentity' } |
+            ForEach-Object { $_.Mandatory }
+
+        $mandatory | Should -Contain $true
+    }
+
+    It 'exposes -ManagedIdentityAccountId for user-assigned identities' {
+        (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters.Keys |
+            Should -Contain 'ManagedIdentityAccountId'
+    }
+
+    It 'rejects a GUID -TenantId for managed identity, as it does for app-only' {
+        { Connect-METSession -ManagedIdentity `
+              -TenantId '00000000-0000-0000-0000-000000000001' } |
+            Should -Throw -ExpectedMessage '*onmicrosoft.com*'
     }
 }
