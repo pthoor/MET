@@ -34,7 +34,13 @@ function Get-METReport {
         [string] $OutputPath,
 
         [Parameter()]
-        [string] $TenantName = ''
+        [string] $TenantName = '',
+
+        [Parameter()]
+        [switch] $NoLaunch,
+
+        [Parameter()]
+        [switch] $PassThru
     )
 
     begin {
@@ -176,6 +182,7 @@ function Get-METReport {
         $resolvedHtmlPath = $null
         $assessmentOutputFolder = $null
         $assessmentFolderAnnounced = $false
+        $writtenFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
 
         if ($OutputPath -and ($wantsJson -or $wantsHtml)) {
           $outputIsDirectory = Test-Path $OutputPath -PathType Container
@@ -364,6 +371,8 @@ function Get-METReport {
 
                 New-METRestrictedFile -Path $dest
                 $json | Set-Content -Path $dest -Encoding UTF8
+                Write-Host "  Report written: $dest" -ForegroundColor Cyan
+                $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "JSON report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
                   Write-Verbose "Assessment output folder: $assessmentOutputFolder"
@@ -1643,16 +1652,30 @@ document.getElementById('btn-collapse-all').textContent = 'Expand All';
 
                 New-METRestrictedFile -Path $dest
                 $html | Set-Content -Path $dest -Encoding UTF8
+                Write-Host "  Report written: $dest" -ForegroundColor Cyan
+                $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "HTML report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
                   Write-Verbose "Assessment output folder: $assessmentOutputFolder"
                   $assessmentFolderAnnounced = $true
                 }
 
-                try { Start-Process $dest } catch { Write-Verbose "Could not auto-open browser: $_" }
+                if (-not $NoLaunch) {
+                    # Start-Process has no handler on a headless Linux host and throws.
+                    # Swallowing it into Write-Verbose left the user with no path and no
+                    # browser, which reads as the command having done nothing at all.
+                    try {
+                        Start-Process $dest
+                    }
+                    catch {
+                        Write-Warning "Could not open the report automatically. Open it manually: $dest"
+                    }
+                }
             } else {
                 $html
             }
         }
+
+        if ($PassThru) { return $writtenFiles.ToArray() }
     }
 }

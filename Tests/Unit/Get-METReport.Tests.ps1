@@ -134,3 +134,48 @@ Describe 'Get-METReport structured metadata' {
         $total | Should -Be 3
     }
 }
+
+Describe 'Get-METReport output path reporting' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # The file lands in <OutputPath>/<timestamp>-<tenant>/MET-report.html - a subfolder
+    # the user never named and was never told about, because both announcements used
+    # Write-Verbose. This is README Quickstart step 5.
+    It 'announces the resolved path on the host stream' {
+        $output = Join-Path $TestDrive 'q1'
+        $hostOutput = @($script:Sample | Get-METReport -Format HTML -OutputPath $output -NoLaunch 6>&1) -join "`n"
+
+        $hostOutput | Should -Match 'MET-report\.html'
+        $hostOutput | Should -Match ([regex]::Escape($output))
+    }
+
+    It 'returns the written files with -PassThru' {
+        $output = Join-Path $TestDrive 'q2'
+        $written = $script:Sample | Get-METReport -Format All -OutputPath $output -NoLaunch -PassThru
+
+        @($written).Count | Should -Be 2
+        @($written | ForEach-Object { $_.Name }) | Should -Contain 'MET-report.json'
+        @($written | ForEach-Object { $_.Name }) | Should -Contain 'MET-report.html'
+        foreach ($file in $written) { Test-Path -LiteralPath $file.FullName | Should -BeTrue }
+    }
+
+    It 'returns nothing without -PassThru' {
+        $output = Join-Path $TestDrive 'q3'
+        $written = $script:Sample | Get-METReport -Format JSON -OutputPath $output -NoLaunch
+
+        $written | Should -BeNullOrEmpty
+    }
+
+    It 'does not launch a browser with -NoLaunch' {
+        Mock -ModuleName 'MET' -CommandName 'Start-Process' -MockWith { }
+        $output = Join-Path $TestDrive 'q4'
+
+        $script:Sample | Get-METReport -Format HTML -OutputPath $output -NoLaunch | Out-Null
+
+        Should -Invoke -ModuleName 'MET' -CommandName 'Start-Process' -Times 0
+    }
+}
