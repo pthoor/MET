@@ -27,8 +27,9 @@
     # Every MDO and EXO check needs Exchange Online, and Teams001/002/004 call
     # Exchange-hosted cmdlets too. Without a session the run took 95 seconds to
     # produce 51 results scoring 11/Critical, 45 of them errors - an artifact that
-    # reads as a genuine assessment. Fail at the door instead.
-    if (-not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
+    # reads as a genuine assessment. Fail at the door instead. -ListChecks is
+    # exempt: it is a documented dry-run that must work before connecting.
+    if (-not $ListChecks -and -not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
         $PSCmdlet.ThrowTerminatingError(
             [System.Management.Automation.ErrorRecord]::new(
                 [System.InvalidOperationException]::new(

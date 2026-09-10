@@ -45,6 +45,22 @@ Describe 'Invoke-METAssessment connection preflight' {
 
         Should -Invoke -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -Times 0
     }
+
+    It 'allows -ListChecks with no connection, as a documented dry run' {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith { }
+
+        $checks = Invoke-METAssessment -ListChecks
+
+        @($checks).Count | Should -BeGreaterThan 0
+        @($checks)[0].PSObject.Properties.Name | Should -Contain 'CheckId'
+    }
+
+    It 'still refuses a real run with no connection' {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith { }
+
+        { Invoke-METAssessment -CheckId 'MET-MDO001' } |
+            Should -Throw -ExpectedMessage '*Connect-METSession*'
+    }
 }
 
 Describe 'Invoke-METAssessment check selection' {
