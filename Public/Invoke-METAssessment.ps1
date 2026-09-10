@@ -40,8 +40,9 @@
 
     $checksRoot = Join-Path $PSScriptRoot '..' 'Checks'
 
-    $checkFiles = Get-ChildItem -Path $checksRoot -Recurse -Filter 'MET-*.ps1' |
+    $allCheckFiles = Get-ChildItem -LiteralPath $checksRoot -Recurse -Filter 'MET-*.ps1' |
         Sort-Object Name
+    $checkFiles = $allCheckFiles
 
     if ($Category) {
         $checkFiles = $checkFiles | Where-Object {
@@ -61,6 +62,18 @@
             $id = ($_.BaseName -split '-')[0..1] -join '-'
             $ExcludeCheckId -notcontains $id
         }
+    }
+
+    $knownCheckIds = @($allCheckFiles | ForEach-Object { ($_.BaseName -split '-')[0..1] -join '-' })
+
+    foreach ($requested in @($CheckId) + @($ExcludeCheckId)) {
+        if ($requested -and $knownCheckIds -notcontains $requested) {
+            Write-Warning "'$requested' matched no check. Run Get-METCheck to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
+        }
+    }
+
+    if (@($checkFiles).Count -eq 0) {
+        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Get-METCheck to list the available checks.'
     }
 
     if ($ListChecks) {

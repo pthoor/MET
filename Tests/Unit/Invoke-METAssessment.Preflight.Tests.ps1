@@ -46,3 +46,52 @@ Describe 'Invoke-METAssessment connection preflight' {
         Should -Invoke -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -Times 0
     }
 }
+
+Describe 'Invoke-METAssessment check selection' {
+    BeforeEach {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith {
+            [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com' }
+        }
+        Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }
+    }
+
+    # All three of these silently ran zero checks, and @() | Get-METReport then
+    # reported Posture Score: 0 / 100 [Critical] - a typo scored as catastrophic.
+    It 'warns when a CheckId matches no check script' {
+        $warnings = @()
+        Invoke-METAssessment -CheckId 'MET-XXX999' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'MET-XXX999'
+        ($warnings -join ' ') | Should -Match 'Get-METCheck'
+    }
+
+    It 'warns when a CheckId is missing the MET- prefix' {
+        $warnings = @()
+        Invoke-METAssessment -CheckId 'EXO010' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'EXO010'
+    }
+
+    It 'warns when an ExcludeCheckId matches no check script' {
+        $warnings = @()
+        Invoke-METAssessment -CheckId 'MET-MDO001' -ExcludeCheckId 'MET-XXX999' `
+            -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'MET-XXX999'
+    }
+
+    It 'warns when the selection resolves to zero checks' {
+        $warnings = @()
+        Invoke-METAssessment -CheckId 'MET-EXO010' -ExcludeCheckId 'MET-EXO010' `
+            -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'No checks'
+    }
+
+    It 'does not warn when every id matches' {
+        $warnings = @()
+        Invoke-METAssessment -CheckId 'MET-EXO010' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        ($warnings -join ' ') | Should -Not -Match 'matched no check'
+    }
+}
