@@ -4,7 +4,9 @@ function Connect-METSession {
         [Parameter(ParameterSetName = 'Interactive')]
         [string] $UserPrincipalName,
 
-        [Parameter(ParameterSetName = 'Interactive')]
+        # Valid in every set: WAM affects Managed Identity and app-only flows on
+        # Windows too, and the README documents it as a general remedy.
+        [Parameter()]
         [switch] $DisableWAM,
 
         [Parameter(ParameterSetName = 'Interactive')]
@@ -161,7 +163,12 @@ function Connect-METSession {
         }
 
         if ($DisableWAM) {
-            $exoParams['DisableWAM'] = $true
+            if (Test-METExoSupportsDisableWam) {
+                $exoParams['DisableWAM'] = $true
+            }
+            else {
+                Write-Warning '-DisableWAM was requested but this ExchangeOnlineManagement build does not declare it. WAM became the default authentication broker in 3.7.0 and this switch was added in 3.7.2. Connecting without it; upgrade the module if the connection fails with a WAM broker error.'
+            }
         }
 
         if ($UseDeviceAuthentication) {

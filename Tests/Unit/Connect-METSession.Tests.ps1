@@ -1015,3 +1015,85 @@ Describe 'Connect-METSession certificate thumbprint platform guard' {
         $caught.Exception.Message | Should -Not -Match 'UseDeviceAuthentication'
     }
 }
+
+Describe 'Connect-METSession -DisableWAM parameter sets' {
+    # The rest of this file dot-sources Public/Private scripts directly rather than
+    # importing the packaged module (see MET.Module.Tests.ps1's header comment), so the
+    # real MET module is not otherwise loaded in this session. These two Describe blocks
+    # need it for -Module/-InModuleScope introspection, so import it here.
+    BeforeAll {
+        # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+        # which defines a same-named function ahead of the module import below. Left in
+        # place, that shadow breaks Get-Command/-Module resolution for the module's own
+        # copy, so it has to go before the real module is loaded.
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # README presents -DisableWAM as a general remedy, but it was declared only in the
+    # Interactive set, so combining it with -AppId failed with 'Parameter set cannot be
+    # resolved' - naming no parameter at all.
+    It 'is valid in every parameter set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['DisableWAM']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain '__AllParameterSets'
+    }
+
+    It 'keeps -UseDeviceAuthentication scoped to Interactive' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['UseDeviceAuthentication']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain 'Interactive'
+        $sets | Should -Not -Contain '__AllParameterSets'
+    }
+}
+
+Describe 'Connect-METSession -DisableWAM capability probe (C-22)' {
+    BeforeAll {
+        # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+        # which defines a same-named function ahead of the module import below. Left in
+        # place, that shadow breaks Get-Command/-Module resolution for the module's own
+        # copy, so it has to go before the real module is loaded.
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # WAM became the EXO default broker in 3.7.0, but -DisableWAM shipped in 3.7.2, so on
+    # 3.0-3.6 passing it produces a raw parameter binding error. The Teams leg already
+    # probes for exactly this at :462-465; the EXO leg did not.
+    It 'reports false when the parameter is not declared' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith {
+                [PSCustomObject]@{ Parameters = @{} }
+            } -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeFalse
+        }
+    }
+
+    It 'reports true when the parameter is declared' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith {
+                [PSCustomObject]@{ Parameters = @{ 'DisableWAM' = $true } }
+            } -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeTrue
+        }
+    }
+
+    It 'reports false when Connect-ExchangeOnline is not present at all' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith { $null } `
+                -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeFalse
+        }
+    }
+}
