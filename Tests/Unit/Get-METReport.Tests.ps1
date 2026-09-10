@@ -215,3 +215,22 @@ Describe 'Get-METReport format and path combinations' {
         Test-Path -LiteralPath $ignored | Should -BeFalse
     }
 }
+
+Describe 'Get-METReport path and input handling' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # -Path interprets [ and ] as a wildcard character class, so a customer folder
+    # named 'Contoso [2026]' silently resolved to nothing.
+    It 'writes to a path containing square brackets' {
+        $bracketed = Join-Path $TestDrive 'Contoso [2026]'
+        $script:Sample | Get-METReport -Format JSON -OutputPath $bracketed -NoLaunch | Out-Null
+
+        $folder = Get-ChildItem -LiteralPath $bracketed -Directory | Select-Object -First 1
+        Test-Path -LiteralPath (Join-Path $folder.FullName 'MET-report.json') | Should -BeTrue
+    }
+
+}

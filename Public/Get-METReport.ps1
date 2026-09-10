@@ -151,7 +151,7 @@ function Get-METReport {
           'Critical'
         }
 
-        $categoryScores = @{}
+        $categoryScores = [ordered]@{}
         foreach ($cat in @('MDO','EXO','Teams')) {
             $catResults = $scorable | Where-Object { $_.Category -eq $cat }
             if ($catResults) {
@@ -199,22 +199,22 @@ function Get-METReport {
         }
 
         if ($OutputPath -and ($wantsJson -or $wantsHtml)) {
-          $outputIsDirectory = Test-Path $OutputPath -PathType Container
+          $outputIsDirectory = Test-Path -LiteralPath $OutputPath -PathType Container
           $hasExtension = [System.IO.Path]::HasExtension($OutputPath)
 
           if ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') {
             $baseFolder = $OutputPath
-            if (-not (Test-Path $baseFolder)) {
+            if (-not (Test-Path -LiteralPath $baseFolder)) {
               New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
             }
             $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
           }
           else {
-            $parentFolder = Split-Path -Path $OutputPath -Parent
+            $parentFolder = Split-Path -LiteralPath $OutputPath -Parent
             if ([string]::IsNullOrWhiteSpace($parentFolder)) {
               $parentFolder = (Get-Location).Path
             }
-            if (-not (Test-Path $parentFolder)) {
+            if (-not (Test-Path -LiteralPath $parentFolder)) {
               New-Item -ItemType Directory -Path $parentFolder -Force | Out-Null
             }
             $assessmentOutputFolder = Join-Path $parentFolder $assessmentFolderName
@@ -224,7 +224,7 @@ function Get-METReport {
 
           if ($wantsJson) {
             $jsonLeaf = if ($Format -eq 'JSON' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -Path $OutputPath -Leaf
+              Split-Path -LiteralPath $OutputPath -Leaf
             }
             else {
               'MET-report.json'
@@ -234,7 +234,7 @@ function Get-METReport {
 
           if ($wantsHtml) {
             $htmlLeaf = if ($Format -eq 'HTML' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -Path $OutputPath -Leaf
+              Split-Path -LiteralPath $OutputPath -Leaf
             }
             else {
               'MET-report.html'
@@ -313,10 +313,9 @@ function Get-METReport {
                 Write-Host "  Posture Score: $overallScore / 100  [$band]" -ForegroundColor $scoreColor
             }
 
-            $catLine = ($categoryScores.GetEnumerator() |
-                Where-Object { $null -ne $_.Value } |
-                Sort-Object Name |
-                ForEach-Object { "$($_.Key): $($_.Value)" }) -join '   '
+            $catLine = (@('MDO','EXO','Teams') |
+                Where-Object { $null -ne $categoryScores[$_] } |
+                ForEach-Object { "$($_): $($categoryScores[$_])" }) -join '   '
             if ($catLine) { Write-Host "  $catLine" -ForegroundColor Gray }
 
             Write-Host "  Pass: $($summary.Pass)  Fail: $($summary.Fail)  Warning: $($summary.Warning)  N/A: $($summary.NotApplicable)  Info: $($summary.Info)  Error: $($summary.Error)"
@@ -399,7 +398,7 @@ function Get-METReport {
                 $dest = $resolvedJsonPath
 
                 New-METRestrictedFile -Path $dest
-                $json | Set-Content -Path $dest -Encoding UTF8
+                $json | Set-Content -LiteralPath $dest -Encoding UTF8
                 Write-Host "  Report written: $dest" -ForegroundColor Cyan
                 $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "JSON report written to $dest"
@@ -1680,7 +1679,7 @@ document.getElementById('btn-collapse-all').textContent = 'Expand All';
                 $dest = $resolvedHtmlPath
 
                 New-METRestrictedFile -Path $dest
-                $html | Set-Content -Path $dest -Encoding UTF8
+                $html | Set-Content -LiteralPath $dest -Encoding UTF8
                 Write-Host "  Report written: $dest" -ForegroundColor Cyan
                 $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "HTML report written to $dest"
