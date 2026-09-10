@@ -20,8 +20,11 @@ function Get-METModuleVersion {
 function Get-METReport {
     [CmdletBinding(PositionalBinding = $false)]
     param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [PSCustomObject[]] $InputObject,
+        # Not Mandatory: a mandatory pipeline parameter prompts interactively when the
+        # pipeline is empty, which hangs a CI process rather than failing it.
+        [Parameter(ValueFromPipeline)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]] $InputObject = @(),
 
         [Parameter()]
         [ValidateSet('Console','JSON','HTML','All')]
@@ -123,7 +126,10 @@ function Get-METReport {
             if ($weightTotal -gt 0) { [int][math]::Round(($weightedSum / $weightTotal) * 100) } else { 0 }
         } else { 0 }
 
-        $band = if ($overallScore -ge 95) {
+        $band = if (-not $scorable) {
+          'None'
+        }
+        elseif ($overallScore -ge 95) {
           'Excellent'
         }
         elseif ($overallScore -ge 80) {
@@ -272,14 +278,19 @@ function Get-METReport {
             if ($authInfoLine) { Write-Host "  Auth:   $authInfoLine" -ForegroundColor Gray }
             Write-Host '══════════════════════════════════════════════════════' -ForegroundColor Cyan
 
-            $scoreColor = switch ($band) {
-                'Excellent' { 'Green' }
-                'Good'      { 'Green' }
-                'Fair'      { 'Yellow' }
-                'Poor'      { 'DarkYellow' }
-                default     { 'Red' }
+            if ($band -eq 'None') {
+                Write-Host '  No scorable results. Nothing was assessed - every result was Info or NotApplicable, or the set was empty.' -ForegroundColor Yellow
             }
-            Write-Host "  Posture Score: $overallScore / 100  [$band]" -ForegroundColor $scoreColor
+            else {
+                $scoreColor = switch ($band) {
+                    'Excellent' { 'Green' }
+                    'Good'      { 'Green' }
+                    'Fair'      { 'Yellow' }
+                    'Poor'      { 'DarkYellow' }
+                    default     { 'Red' }
+                }
+                Write-Host "  Posture Score: $overallScore / 100  [$band]" -ForegroundColor $scoreColor
+            }
 
             $catLine = ($categoryScores.GetEnumerator() |
                 Where-Object { $null -ne $_.Value } |

@@ -330,13 +330,14 @@ Describe 'Get-METReport HTML degenerate result sets' {
         $html | Should -Not -Match 'const CHECKS = ;'
     }
 
-    It 'produces a numeric score and a real band label for an empty result set' {
+    It 'produces a numeric score and reports None (not a false Critical) for an empty result set' {
         $html = Get-METTestHtml -Results @() -Folder (Join-Path $TestDrive 'empty-score') -TenantName 'empty.contoso.com'
 
         $html | Should -Match 'const INITIAL_SCORE = \d+;'
         $html | Should -Not -Match 'const INITIAL_SCORE = NaN'
-        [regex]::Match($html, 'id="score-band">([^<]*)<').Groups[1].Value |
-            Should -BeIn @('Critical', 'Poor', 'Fair', 'Good', 'Excellent')
+        # An empty set is an absent measurement, not a catastrophic tenant - it must not
+        # be presented as a real band on the 5-band ladder (see MET-Report band scoring).
+        [regex]::Match($html, 'id="score-band">([^<]*)<').Groups[1].Value | Should -Be 'None'
     }
 
     It 'serialises a single result as a one-element array, not a bare object' {
@@ -351,7 +352,7 @@ Describe 'Get-METReport HTML degenerate result sets' {
         $html | Should -Match 'const CHECKS = \[\{'
     }
 
-    It 'renders a single Info-only result with a valid score and band' {
+    It 'renders a single Info-only result with a valid score and reports None, not a false Critical' {
         $info = New-METTestResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
             -Severity 'Informational' -Score $null -AffectedObject 'Tenant' -Finding 'No trusted sealers configured'
 
@@ -360,7 +361,8 @@ Describe 'Get-METReport HTML degenerate result sets' {
         $html | Should -Match 'const INITIAL_SCORE = \d+;'
         [regex]::Match($html, 'id="donut-score-text">([^<]*)<').Groups[1].Value | Should -Match '^\d+$'
         $html | Should -Match '(?s)id="sum-info">1<'
-        [regex]::Match($html, 'id="score-band">([^<]*)<').Groups[1].Value |
-            Should -BeIn @('Critical', 'Poor', 'Fair', 'Good', 'Excellent')
+        # An all-Info set has nothing scorable - a real band label would misrepresent it
+        # as a catastrophic tenant rather than an unmeasured one.
+        [regex]::Match($html, 'id="score-band">([^<]*)<').Groups[1].Value | Should -Be 'None'
     }
 }

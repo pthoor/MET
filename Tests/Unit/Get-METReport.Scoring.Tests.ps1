@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     Import-Module (Join-Path $root 'MET.psd1') -Force
+    . (Join-Path $root 'Private' 'New-METCheckResult.ps1')
 
     function New-Result {
         param(
@@ -142,5 +143,24 @@ Describe 'Malformed results do not destroy the report' {
             (New-Result -CheckId 'MET-B' -Result 'Fail' -Severity $null  -Score 0)
         )
         $json.checks.Count | Should -Be 2
+    }
+}
+
+Describe 'Get-METReport with no scorable results' {
+    # An empty set is not a catastrophic tenant, it is an absent measurement.
+    It 'does not present an empty result set as 0 / Critical' {
+        $output = @(Get-METReport -InputObject @() -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'No scorable results'
+        $output | Should -Not -Match 'Critical'
+    }
+
+    It 'does not present an all-Info result set as 0 / Critical' {
+        $info = New-METCheckResult -CheckId 'MET-EXO016' -Category EXO -Name 'ARC Trusted Sealers Review' `
+            -Result Info -Severity Informational -AffectedObject 'Tenant' -Finding 'None configured.'
+
+        $output = @($info | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'No scorable results'
     }
 }
