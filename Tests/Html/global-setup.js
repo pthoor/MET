@@ -14,6 +14,8 @@ const SCENARIOS = [
   { scenario: 'RepeatedCheckId', file: 'report-repeated-checkid.html' },
   { scenario: 'SameAffectedObject', file: 'report-same-affected-object.html' },
   { scenario: 'ErrorBuckets', file: 'report-error-buckets.html' },
+  { scenario: 'InfoOnly', file: 'report-info-only.html' },
+  { scenario: 'FailPlusInfo', file: 'report-fail-plus-info.html' },
 ];
 
 function pwshExecutable() {

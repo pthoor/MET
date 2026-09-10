@@ -498,6 +498,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .band-fair{background:var(--sev-medium)}
 .band-poor{background:var(--sev-high)}
 .band-critical{background:var(--result-fail)}
+.band-none{background:var(--text2)}
 .band-info-icon{font-size:13px;color:var(--text3);cursor:default;user-select:none;line-height:1;transition:color .15s}
 .score-band-wrap:hover .band-info-icon{color:var(--text2)}
 .band-tooltip{position:absolute;left:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px 12px;min-width:190px;display:none;z-index:200;pointer-events:none}
@@ -893,6 +894,7 @@ function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
 function bandOf(score) {
+  if (score === null || score === undefined) return 'None';
   return score >= 95 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : score >= 40 ? 'Poor' : 'Critical';
 }
 function weightedScore(checks) {
@@ -908,8 +910,9 @@ function weightedScore(checks) {
   return wTotal > 0 ? Math.round((wSum / wTotal) * 100) : null;
 }
 function recalcScore() {
-  const score = weightedScore(CHECKS) ?? 0;
-  const band = bandOf(score);
+  const raw = weightedScore(CHECKS);
+  const score = raw ?? 0;
+  const band = bandOf(raw);
   document.getElementById('donut-score-text').textContent = score;
   const bandEl = document.getElementById('score-band');
   bandEl.textContent = band;

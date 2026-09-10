@@ -22,6 +22,13 @@
                        'Report Submission Policy'), distinguished only by Name. Regression
                        fixture for the residual collision: CheckId + AffectedObject alone
                        is not a unique key.
+    InfoOnly       - every result is Info (Score = $null). Nothing is scorable, but unlike
+                       Empty the CHECKS array is non-empty - exercises the band-band-on-load
+                       path for an unscorable-but-nonempty result set.
+    FailPlusInfo   - one scorable Fail plus an Info result. Accepting the Fail's risk in the
+                       browser leaves nothing scorable, which is the live client-side path
+                       (recalcScore/bandOf) that produced a false Critical band before the
+                       'None' band existed on that side too.
 #>
 [CmdletBinding()]
 param(
@@ -29,7 +36,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'InfoOnly', 'FailPlusInfo')]
     [string] $Scenario = 'Rich'
 )
 
@@ -191,6 +198,36 @@ $fixtures = switch ($Scenario) {
                 -Finding 'DMARC policy is set to none' `
                 -Recommendation 'Publish a DMARC record with p=quarantine.' `
                 -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure'
+        )
+    }
+
+    # Nothing scorable anywhere in the set (every Score is $null), but the CHECKS array is
+    # non-empty - distinct from Empty, which exercises the zero-element serialisation path.
+    'InfoOnly' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
+                -Severity 'Informational' -Score $null -AffectedObject 'Tenant' `
+                -Finding 'No trusted sealers configured'
+
+            New-FixtureResult -CheckId 'MET-EXO007' -Category 'EXO' -Name 'Transport Rule Audit' -Result 'Info' `
+                -Severity 'Informational' -Score $null -AffectedObject 'Mail flow rules' `
+                -Finding 'Two rules bypass spam filtering'
+        )
+    }
+
+    # One scorable Fail plus an Info result. Accepting the Fail's risk client-side removes
+    # the only scorable result, which must rescore the band to None, not Critical.
+    'FailPlusInfo' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO001' -Category 'EXO' -Name 'DMARC Record' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'contoso.com' `
+                -Finding 'DMARC policy is set to none' `
+                -Recommendation 'Publish a DMARC record with p=quarantine.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure'
+
+            New-FixtureResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
+                -Severity 'Informational' -Score $null -AffectedObject 'Tenant' `
+                -Finding 'No trusted sealers configured'
         )
     }
 
