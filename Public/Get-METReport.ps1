@@ -329,8 +329,12 @@ function Get-METReport {
                 Sort-Object -Property @{ Expression = { Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $_.Severity) }; Descending = $true },
                                       @{ Expression = 'CheckId'; Descending = $false }
             if ($actionable) {
+                $actionableRows = $actionable | Select-Object CheckId, Severity, AffectedObject,
+                    @{ Name = 'Result'; Expression = { if ($_.Error) { 'Error' } else { $_.Result } } },
+                    Finding
+
                 Write-Host '  Issues requiring attention:' -ForegroundColor Yellow
-                $actionable | Format-Table -AutoSize -Property @(
+                $actionableRows | Format-Table -AutoSize -Property @(
                     @{l='CheckId';       e={ $_.CheckId }}
                     @{l='Severity';      e={ $_.Severity }}
                     @{l='Result';        e={ $_.Result }}
@@ -340,6 +344,11 @@ function Get-METReport {
                         if ($f.Length -gt 80) { $f.Substring(0,77) + '...' } else { $f }
                     }}
                 ) | Out-String | Write-Host
+
+                $erroredCount = @($allResults | Where-Object { $_.Error }).Count
+                if ($erroredCount -gt 0) {
+                    Write-Host "  ($erroredCount check(s) could not run - see the Error column and the Error field on each result.)" -ForegroundColor DarkYellow
+                }
             } else {
                 Write-Host '  No Fail or Warning findings.' -ForegroundColor Green
             }

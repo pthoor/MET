@@ -192,3 +192,32 @@ Describe 'Get-METReport issues table ordering' {
         $positions[2] | Should -BeLessThan $positions[3]
     }
 }
+
+Describe 'Get-METReport error bucket consistency' {
+    BeforeAll {
+        $script:Errored = [PSCustomObject]@{
+            PSTypeName = 'MET.CheckResult'
+            CheckId = 'MET-EXO011'; Category = 'EXO'; Name = 'Mail Flow Connector Hygiene'
+            Result = 'Fail'; Severity = 'High'; Score = 0; AffectedObject = 'N/A'
+            Finding = 'Check script failed to execute'; Recommendation = ''; ReferenceUrl = ''
+            Timestamp = [datetime]::UtcNow; Error = 'Unable to reach the service.'; Metadata = $null
+        }
+    }
+
+    # Pass 0, Fail 0, Warning 4, Error 45 printed directly above 40 rows whose Result
+    # column read 'Fail'. Bucketing errored checks separately is the documented design;
+    # the table contradicting the summary above it is not.
+    It 'labels errored rows Error rather than Fail' {
+        $output = @($script:Errored | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'could not run'
+        $output | Should -Match 'MET-EXO011'
+    }
+
+    It 'counts an errored check once, in the Error bucket only' {
+        $json = $script:Errored | Get-METReport -Format JSON | ConvertFrom-Json
+
+        $json.summary.Error | Should -Be 1
+        $json.summary.Fail  | Should -Be 0
+    }
+}
