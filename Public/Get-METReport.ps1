@@ -18,7 +18,7 @@ function Get-METModuleVersion {
 }
 
 function Get-METReport {
-    [CmdletBinding()]
+    [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
         [PSCustomObject[]] $InputObject,

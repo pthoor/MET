@@ -1,5 +1,5 @@
 ﻿function Invoke-METAssessment {
-    [CmdletBinding()]
+    [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]
         [ValidateSet('MDO','EXO','Teams')]

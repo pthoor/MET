@@ -1,5 +1,5 @@
 function Connect-METSession {
-    [CmdletBinding(DefaultParameterSetName = 'Interactive')]
+    [CmdletBinding(DefaultParameterSetName = 'Interactive', PositionalBinding = $false)]
     param(
         [Parameter(ParameterSetName = 'Interactive')]
         [string] $UserPrincipalName,

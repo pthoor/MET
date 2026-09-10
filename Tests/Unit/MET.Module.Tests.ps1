@@ -238,3 +238,35 @@ Describe 'Exported aliases' {
         }
     }
 }
+
+Describe 'Parameter binding conventions' {
+    # CLAUDE.md: "No positional parameters on public functions". Invoke-METTriage
+    # MET-MDO001 previously bound to -Category and threw a ValidateSet error naming
+    # a parameter the caller never mentioned, which is worse than not binding at all.
+    It 'declares no positional parameters on <_>' -ForEach @(
+        'Connect-METSession'
+        'Disconnect-METSession'
+        'Invoke-METAssessment'
+        'Get-METReport'
+        'Test-METPrerequisites'
+    ) {
+        $command = Get-Command -Name $_ -Module 'MET'
+        $positional = $command.Parameters.Values |
+            Where-Object {
+                $_.Attributes |
+                    Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Position -ge 0 }
+            } |
+            ForEach-Object { $_.Name }
+
+        $positional | Should -BeNullOrEmpty -Because "$_ must be called with named parameters only"
+    }
+
+    It 'keeps Get-METReport -InputObject bound from the pipeline' {
+        $inputObject = (Get-Command -Name 'Get-METReport' -Module 'MET').Parameters['InputObject']
+        $attribute = $inputObject.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            Select-Object -First 1
+
+        $attribute.ValueFromPipeline | Should -BeTrue
+    }
+}
