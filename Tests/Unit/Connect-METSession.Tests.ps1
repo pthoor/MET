@@ -7,6 +7,7 @@ BeforeAll {
     . "$root/Private/Get-METAssemblyFileVersion.ps1"
     . "$root/Private/Test-METAssemblyLoadConflict.ps1"
     . "$root/Private/Resolve-METTenantGuid.ps1"
+    . "$root/Private/New-METErrorRecord.ps1"
 
     # Stubs mirror the real cmdlets' parameter names so that splatting a
     # non-existent parameter fails binding instead of silently passing.
@@ -1147,5 +1148,52 @@ Describe 'Connect-METSession managed identity parameters' {
         { Connect-METSession -ManagedIdentity `
               -TenantId '00000000-0000-0000-0000-000000000001' } |
             Should -Throw -ExpectedMessage '*onmicrosoft.com*'
+    }
+}
+
+Describe 'Connect-METSession error records' {
+    # throw '<string>' makes the FullyQualifiedErrorId the message text itself, so
+    # nothing can catch by id and any wording change breaks a caller's handler.
+    BeforeAll {
+        $script:ModuleRoot = Join-Path $PSScriptRoot '..' '..'
+    }
+
+    It 'names a stable error id for the certificate-selection failure' {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com'
+        } catch { $caught = $_ }
+
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METCertificateRequired*'
+    }
+
+    It 'names a stable error id for the both-certificates failure' {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -CertificateThumbprint 'ABCD' -CertificatePath './x.pfx'
+        } catch { $caught = $_ }
+
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METCertificateAmbiguous*'
+    }
+
+    # Every throw that represents one of MET's own guard decisions is converted. The
+    # three re-throws of an already-caught connection failure are deliberately left
+    # alone - wrapping them would bury the inner exception, which is the real error.
+    It 'leaves no guard decision throwing a bare string' {
+        $source = Get-Content -LiteralPath (Join-Path $script:ModuleRoot 'Public' 'Connect-METSession.ps1')
+
+        $bareThrows = $source |
+            Where-Object { $_ -match '^\s*throw\s+[''"]' } |
+            Where-Object { $_ -notmatch 'throw "Failed to connect' }
+
+        $bareThrows | Should -BeNullOrEmpty
+    }
+
+    It 'names a stable error id for the Graph tenant mismatch' {
+        $source = Get-Content -LiteralPath (Join-Path $script:ModuleRoot 'Public' 'Connect-METSession.ps1') -Raw
+        $source | Should -Match 'METGraphTenantMismatch'
     }
 }

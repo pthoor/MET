@@ -52,16 +52,28 @@ function Connect-METSession {
 
     if ($PSCmdlet.ParameterSetName -eq 'ServicePrincipal') {
         if ($CertificateThumbprint -and $CertificatePath) {
-            throw 'Specify either -CertificateThumbprint or -CertificatePath, not both.'
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message 'Specify either -CertificateThumbprint or -CertificatePath, not both.' `
+                -ErrorId 'METCertificateAmbiguous' `
+                -Category ([System.Management.Automation.ErrorCategory]::InvalidArgument)))
         }
         if ($CertificateThumbprint -and -not $IsWindows) {
-            throw "-CertificateThumbprint reads the Windows certificate store and is Windows-only, per Microsoft's own documentation. On Linux/macOS use -CertificatePath <pfx> -CertificatePassword <securestring>."
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message "-CertificateThumbprint reads the Windows certificate store and is Windows-only, per Microsoft's own documentation. On Linux/macOS use -CertificatePath <pfx> -CertificatePassword <securestring>." `
+                -ErrorId 'METCertificateThumbprintWindowsOnly' `
+                -Category ([System.Management.Automation.ErrorCategory]::InvalidArgument)))
         }
         if (-not $CertificateThumbprint -and -not $CertificatePath) {
-            throw 'ServicePrincipal authentication requires either -CertificateThumbprint (Windows certificate store) or -CertificatePath (works on any platform, including Linux/macOS/Codespaces).'
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message 'ServicePrincipal authentication requires either -CertificateThumbprint (Windows certificate store) or -CertificatePath (works on any platform, including Linux/macOS/Codespaces).' `
+                -ErrorId 'METCertificateRequired' `
+                -Category ([System.Management.Automation.ErrorCategory]::InvalidArgument)))
         }
         if ($CertificatePath -and -not $CertificatePassword) {
-            throw '-CertificatePath requires -CertificatePassword.'
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message '-CertificatePath requires -CertificatePassword.' `
+                -ErrorId 'METCertificatePasswordRequired' `
+                -Category ([System.Management.Automation.ErrorCategory]::InvalidArgument)))
         }
         if ($CertificatePath) {
             # Connect-ExchangeOnline's own CertificateFilePath validation calls the raw .NET
@@ -71,7 +83,10 @@ function Connect-METSession {
             # Resolving to an absolute path once here fixes it for the EXO, Graph, and Teams legs.
             $resolvedCertPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CertificatePath)
             if (-not (Test-Path -LiteralPath $resolvedCertPath -PathType Leaf)) {
-                throw "-CertificatePath '$CertificatePath' does not exist (resolved to '$resolvedCertPath')."
+                $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                    -Message "-CertificatePath '$CertificatePath' does not exist (resolved to '$resolvedCertPath')." `
+                    -ErrorId 'METCertificateNotFound' `
+                    -Category ([System.Management.Automation.ErrorCategory]::ObjectNotFound)))
             }
             $CertificatePath = $resolvedCertPath
         }
@@ -80,7 +95,10 @@ function Connect-METSession {
     if ($PSCmdlet.ParameterSetName -in @('ServicePrincipal', 'ManagedIdentity') -and
         -not $SkipExchangeOnline -and
         $TenantId -match '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
-        throw "-TenantId must be the tenant's primary .onmicrosoft.com domain name (e.g. 'contoso.onmicrosoft.com'), not the tenant GUID - Connect-ExchangeOnline's -Organization parameter for app-only authentication rejects GUIDs. Find it in the Entra admin center under Overview > 'Primary domain', or pass -SkipExchangeOnline if you only need Graph/Teams."
+        $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+            -Message "-TenantId must be the tenant's primary .onmicrosoft.com domain name (e.g. 'contoso.onmicrosoft.com'), not the tenant GUID - Connect-ExchangeOnline's -Organization parameter for app-only authentication rejects GUIDs. Find it in the Entra admin center under Overview > 'Primary domain', or pass -SkipExchangeOnline if you only need Graph/Teams." `
+            -ErrorId 'METTenantIdMustBeDomain' `
+            -Category ([System.Management.Automation.ErrorCategory]::InvalidArgument)))
     }
 
     # Storm-2372 and follow-on campaigns (Microsoft Security Blog, Feb 2025 - Apr 2026) abuse the
@@ -122,7 +140,10 @@ function Connect-METSession {
     if ($script:METConnection -and ($requestedMode -ne $script:METConnection.Mode -or $orgMismatch)) {
         $previousIdentity = if ($script:METConnection.Org) { $script:METConnection.Org } else { $script:METConnection.Mode }
         $newIdentity = if ($requestedOrg) { $requestedOrg } else { "$requestedMode (no organization specified)" }
-        throw "Connect-METSession already established a session in this PowerShell process for '$previousIdentity'. Requesting '$newIdentity' now would reuse that connection's Exchange Online/Graph/Teams sessions without actually switching tenant or auth mode. Run Disconnect-METSession first, then reconnect to the new organization."
+        $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+            -Message "Connect-METSession already established a session in this PowerShell process for '$previousIdentity'. Requesting '$newIdentity' now would reuse that connection's Exchange Online/Graph/Teams sessions without actually switching tenant or auth mode. Run Disconnect-METSession first, then reconnect to the new organization." `
+            -ErrorId 'METSessionIdentityMismatch' `
+            -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
     }
 
     # User.Read.All is deliberately not requested: the only Graph call sites are
@@ -155,7 +176,10 @@ function Connect-METSession {
         $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
             Where-Object { $_.Version -ge [version]'3.7.2' } | Select-Object -First 1
         if (-not $exoModule) {
-            throw "ExchangeOnlineManagement 3.7.2 or later is not installed. Run: Install-Module ExchangeOnlineManagement -Scope CurrentUser"
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message "ExchangeOnlineManagement 3.7.2 or later is not installed. Run: Install-Module ExchangeOnlineManagement -Scope CurrentUser" `
+                -ErrorId 'METExchangeModuleMissing' `
+                -Category ([System.Management.Automation.ErrorCategory]::NotInstalled)))
         }
 
         $exoParams = @{
@@ -229,7 +253,10 @@ function Connect-METSession {
         } | Where-Object { $_ } | Sort-Object -Unique)
 
         if ($distinctOrgs.Count -gt 1) {
-            throw "Exchange Online has $($connectedSessions.Count) live connections belonging to more than one organization ($($distinctOrgs -join ', ')). Cmdlet routing between them is ambiguous. Run Disconnect-METSession first, then reconnect to the correct organization."
+            $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                -Message "Exchange Online has $($connectedSessions.Count) live connections belonging to more than one organization ($($distinctOrgs -join ', ')). Cmdlet routing between them is ambiguous. Run Disconnect-METSession first, then reconnect to the correct organization." `
+                -ErrorId 'METMultipleOrganizations' `
+                -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
         }
 
         $existing = $connectedSessions | Select-Object -First 1
@@ -243,7 +270,10 @@ function Connect-METSession {
             # of which one applies for this auth mode, so checking both covers every case.
             if ($requestedOrg -and $existing.Organization -ne $requestedOrg -and $existing.DelegatedOrganization -ne $requestedOrg) {
                 $existingOrg = if ($existing.DelegatedOrganization) { $existing.DelegatedOrganization } else { $existing.Organization }
-                throw "Exchange Online is already connected to '$existingOrg' (as $($existing.UserPrincipalName)), not the requested organization '$requestedOrg'. Run Disconnect-METSession first, then reconnect to the correct organization."
+                $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                    -Message "Exchange Online is already connected to '$existingOrg' (as $($existing.UserPrincipalName)), not the requested organization '$requestedOrg'. Run Disconnect-METSession first, then reconnect to the correct organization." `
+                    -ErrorId 'METOrganizationMismatch' `
+                    -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
             }
             # CertificateAuthentication is only ever set for CBA connections (Microsoft's own
             # Get-ConnectionInformation docs: "the AppId parameter ... for CBA connections"), so it
@@ -251,7 +281,10 @@ function Connect-METSession {
             # is certificate-based. UserPrincipalName is populated for every interactive sign-in and
             # never for an app-only session (CBA or Managed Identity alike), so it works for both.
             if ($PSCmdlet.ParameterSetName -in @('ServicePrincipal', 'ManagedIdentity') -and $existing.UserPrincipalName) {
-                throw "Exchange Online is already connected interactively (as $($existing.UserPrincipalName)), not via app-only authentication. Run Disconnect-METSession first, then reconnect with -CertificateThumbprint/-CertificatePath or -ManagedIdentity."
+                $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                    -Message "Exchange Online is already connected interactively (as $($existing.UserPrincipalName)), not via app-only authentication. Run Disconnect-METSession first, then reconnect with -CertificateThumbprint/-CertificatePath or -ManagedIdentity." `
+                    -ErrorId 'METAuthModeMismatch' `
+                    -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
             }
         }
 
@@ -382,10 +415,16 @@ function Connect-METSession {
                     # outage) must not be treated as "no mismatch" - that would silently let a
                     # stale Graph session from a different customer be reused unverified, exactly
                     # the cross-customer leak this check exists to close.
-                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
+                    $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                        -Message "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name." `
+                        -ErrorId 'METGraphTenantMismatch' `
+                        -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
                 }
                 if ($mgContext.TenantId -ne $expectedTenantGuid) {
-                    throw "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
+                    $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                        -Message "Microsoft Graph is already connected to tenant '$($mgContext.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect." `
+                        -ErrorId 'METGraphTenantMismatch' `
+                        -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
                 }
             }
 
@@ -464,10 +503,16 @@ function Connect-METSession {
                     if (-not $expectedTenantGuid) {
                         # Fail closed - see the identical Graph-leg comment above for why an
                         # unresolvable GUID must not be treated as "no mismatch".
-                        throw "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name."
+                        $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                            -Message "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', but the requested tenant '$requestedOrg' could not be resolved to a GUID to verify they match (the OIDC discovery lookup failed - see -Verbose). Run Disconnect-METSession first, then reconnect, or pass -TenantId as a GUID instead of a domain name." `
+                            -ErrorId 'METTeamsTenantMismatch' `
+                            -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
                     }
                     if ($teamsConnection.TenantId -ne $expectedTenantGuid) {
-                        throw "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect."
+                        $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                            -Message "Microsoft Teams is already connected to tenant '$($teamsConnection.TenantId)', not the requested tenant '$requestedOrg' ($expectedTenantGuid). Run Disconnect-METSession first, then reconnect." `
+                            -ErrorId 'METTeamsTenantMismatch' `
+                            -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
                     }
                 }
 
