@@ -71,6 +71,15 @@ Describe 'New-METCheckResult' {
             $result.Error | Should -Be 'Connection refused'
         }
 
+        It 'Normalises an empty ErrorMessage to null rather than an empty string' {
+            $result = New-METCheckResult `
+                -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
+                -Result Warning -Severity Low -AffectedObject 'Obj' -Finding 'ok' `
+                -ErrorMessage (@() -join "`n")
+
+            $result.Error | Should -BeExactly $null
+        }
+
         It 'Error field is null when not provided' {
             $result = New-METCheckResult `
                 -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
@@ -91,14 +100,28 @@ Describe 'New-METCheckResult' {
         }
 
         It 'Timestamp is a UTC datetime' {
-            $before = [datetime]::UtcNow.AddSeconds(-1)
+            # Asserted on DateTimeKind rather than a wall-clock window: a window
+            # comparison passes for a local-time value taken in a UTC+0 region and
+            # is flaky on a loaded runner, while Kind states the actual contract -
+            # the JSON/HTML report renders this value as UTC without converting it.
             $result = New-METCheckResult `
                 -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
                 -Result Pass -Severity Low -AffectedObject 'Obj' -Finding 'ok'
-            $after = [datetime]::UtcNow.AddSeconds(1)
 
-            $result.Timestamp | Should -BeGreaterThan $before
-            $result.Timestamp | Should -BeLessThan $after
+            $result.Timestamp | Should -BeOfType [datetime]
+            $result.Timestamp.Kind | Should -Be ([System.DateTimeKind]::Utc)
+        }
+
+        It 'Timestamps the result at run time rather than from a fixed value' {
+            # An hour either side, not a second: the point is to catch a hardcoded,
+            # stale or epoch timestamp, and no amount of runner load moves a clock
+            # by an hour - so the bound never turns into a flake.
+            $result = New-METCheckResult `
+                -CheckId 'MET-MDO001' -Category MDO -Name 'Test' `
+                -Result Pass -Severity Low -AffectedObject 'Obj' -Finding 'ok'
+
+            $result.Timestamp | Should -BeGreaterThan ([datetime]::UtcNow.AddHours(-1))
+            $result.Timestamp | Should -BeLessThan ([datetime]::UtcNow.AddHours(1))
         }
     }
 

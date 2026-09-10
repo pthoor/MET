@@ -3,6 +3,10 @@ output/
 staging/
 .claude/
 superpowers/
+# Local-only working files (connection helpers, audit notes). Never committed:
+# this repo is public and these may reference unpatched security findings.
+*.local.ps1
+*.local.md
 
 # Pester and coverage output
 TestResults*.xml

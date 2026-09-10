@@ -8,12 +8,14 @@ BeforeAll {
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-SafeLinksRule { [CmdletBinding()] param() }
     function Get-SafeLinksPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
-    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-MgGroup { [CmdletBinding()] param([string]$Filter,[int]$Top) }
+    function Get-MgGroupTransitiveMember { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
+    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
+    function Get-UnifiedGroupLinks { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
 
     function New-TestSafeLinksForTeamsPolicy {
         param([string] $Name, [bool] $Compliant)
@@ -40,8 +42,8 @@ Describe 'MET-Teams001 effective recipient coverage' {
         $script:METContext = $null
         $script:checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'Teams' 'MET-Teams001-SafeLinks.ps1'
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@thoorsec.onmicrosoft.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@contoso.onmicrosoft.com' }
         }
         Mock Get-ATPProtectionPolicyRule { @() }
     }
@@ -76,7 +78,7 @@ Describe 'MET-Teams001 effective recipient coverage' {
     It 'fails only the recipient whose effective policy has Teams disabled, even though a rule assigns it' {
         Mock Get-SafeLinksRule {
             @(
-                New-TestSafeLinksRule -Name 'Teams domain policy' -Policy 'Teams domain policy' -Priority 0 -Domains @('thoor.tech')
+                New-TestSafeLinksRule -Name 'Teams domain policy' -Policy 'Teams domain policy' -Priority 0 -Domains @('contoso.com')
                 New-TestSafeLinksRule -Name 'Teams disabled fallback' -Policy 'Teams disabled fallback' -Priority 1
             )
         }
@@ -91,8 +93,8 @@ Describe 'MET-Teams001 effective recipient coverage' {
 
         $result.Result | Should -Be 'Fail'
         $result.Metadata.CompliantRecipients | Should -Be 1
-        $result.Metadata.AffectedRecipients | Should -Be @('bob@thoorsec.onmicrosoft.com')
-        $result.Finding | Should -Match 'bob@thoorsec.onmicrosoft.com'
+        $result.Metadata.AffectedRecipients | Should -Be @('bob@contoso.onmicrosoft.com')
+        $result.Finding | Should -Match 'bob@contoso.onmicrosoft.com'
         $result.Finding | Should -Match 'Safe Links for Teams is disabled'
     }
 
@@ -155,7 +157,7 @@ Describe 'MET-Teams001 effective recipient coverage' {
         # which PowerShell types as System.Object[] even though every element is a string. Passing
         # that straight to List[string].AddRange() throws, because Object[] does not satisfy
         # IEnumerable<string> - regardless of whether the array is empty or populated.
-        $mailbox = 'alice@thoor.tech'
+        $mailbox = 'alice@contoso.com'
         $script:METContext = @{
             AllMailboxes        = @([PSCustomObject]@{ PrimarySmtpAddress = $mailbox })
             SafeLinksResolution = [PSCustomObject]@{

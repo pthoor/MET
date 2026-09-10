@@ -193,23 +193,34 @@ Invoke-METTriage -CheckId MET-MDO001, MET-EXO001
 
 # All checks except transport rule audit (informational)
 Invoke-METTriage -ExcludeCheckId MET-EXO007
-
-# MSSP - run against a delegated tenant
-Invoke-METTriage -DelegatedOrganization contoso.onmicrosoft.com
 ```
 
-### Switching tenants (MSSP / delegated admin)
+### Multi-tenant / MSSP access
 
-`Connect-METSession` reuses a live Exchange Online/Graph/Teams connection rather than reconnecting on every call - but it verifies the reused connection actually belongs to the tenant you just asked for, and throws (naming the actually-connected org) if it doesn't, rather than silently handing back a report for the wrong customer. Before switching to a different `-DelegatedOrganization`, run `Disconnect-METSession` first:
+If you assess more than one customer tenant, decide how you get in first, then follow one rule: **one tenant per PowerShell process**.
+
+| Access model | When it fits | How you connect |
+|---|---|---|
+| **GDAP / delegated admin (CSP)** | You have a GDAP relationship with each customer from your partner tenant | Your own partner account, once, with `-DelegatedOrganization <customer>.onmicrosoft.com` per customer |
+| **App-only + certificate** (best for repeatable engagements) | You can get an app registration consented in each customer tenant | Per-customer `-AppId -TenantId <customer>.onmicrosoft.com -CertificatePath -CertificatePassword` - no interactive prompt |
+| **Guest / dedicated account per tenant** | The customer issued you an account with Security Reader plus the Exchange/Teams read roles | Interactive sign-in with that customer-specific account |
+
+For app-only auth **that includes Exchange Online**, `-TenantId` **must be the customer's `.onmicrosoft.com` domain, not the tenant GUID** - `Connect-ExchangeOnline`'s app-only `-Organization` rejects GUIDs, and `Connect-METSession` fails fast if you pass one. A GUID is accepted with `-SkipExchangeOnline` (Graph and Teams take either form).
+
+**One tenant per process.** `Connect-METSession` reuses a live Exchange Online/Graph/Teams connection rather than reconnecting on every call, but it verifies the reused connection belongs to the tenant you just asked for and throws (naming the actually-connected org) if it doesn't - so a forgotten disconnect can't silently hand you customer A's data in a report labelled customer B. It also refuses outright if Exchange Online has live sessions for more than one org. Beyond MET, the Exchange Online, Graph, and Teams modules share one MSAL assembly context per process, so tenant residue is a real risk. Between customers, either run `Disconnect-METSession` and reconnect, or - cleaner - use a fresh PowerShell window per customer.
 
 ```powershell
 Connect-METSession -DelegatedOrganization customerA.onmicrosoft.com
-$resultsA = Invoke-METTriage
+Invoke-METTriage | Get-METReport -Format All -OutputPath ./assessments/customerA-2026-09-09/
 
 Disconnect-METSession
 Connect-METSession -DelegatedOrganization customerB.onmicrosoft.com
-$resultsB = Invoke-METTriage
+Invoke-METTriage | Get-METReport -Format All -OutputPath ./assessments/customerB-2026-09-09/
 ```
+
+Give each customer its own `-OutputPath`. The report header (console/JSON/HTML) records the auth mode, tenant, and services used for the run, from state `Connect-METSession` sets on success - send that to the customer's SOC so they can reconcile your sign-in against a known MET run instead of triaging it as an incident.
+
+> `Invoke-METTriage -DelegatedOrganization` is a placeholder and does not scope anything yet - the delegation happens entirely at `Connect-METSession` time, and `Invoke-METTriage` then runs against whatever session is live. Under GDAP, Graph checks degrade non-fatally: group expansion falls back to Exchange Online cmdlets and `MET-Teams014` reports `NotApplicable` unless the delegated Graph roles are present.
 
 ### Skip a service
 
@@ -238,6 +249,8 @@ Connect-METSession -AppId $appId -TenantId $tenantId -CertificatePath './met-ci.
 # 4. Last resort - only on a genuinely headless host with no browser reachable at all
 Connect-METSession -SkipGraph -SkipTeams -UseDeviceAuthentication -Verbose
 ```
+
+**`Error Acquiring Token ... 0x80070520 'A specified logon session does not exist'`** on Windows is a WAM (Web Account Manager) broker error, not a MET fault. WAM needs an interactive desktop logon session to attach to; it fails with this code when the console has none - most often an **elevated ("Run as administrator") prompt** (the elevated token is a different logon session from your signed-in desktop), or a remote/service/scheduled-task session. None of the MET cmdlets need local admin. Retry from a **normal, non-elevated** PowerShell 7 window, or bypass the broker with `-DisableWAM` (step 1 above). For unattended or non-interactive hosts, use certificate auth (step 3).
 
 **`Failed to connect to Exchange Online: UnAuthorized`** with service-principal/certificate auth means the certificate and tenant were accepted, but the app itself isn't authorized: it is almost always the app registration missing the `Exchange.ManageAsApp` API permission (with admin consent granted) described in [App registration prerequisite: Exchange.ManageAsApp](#app-registration-prerequisite-exchangemanageasapp) above - a distinct requirement from any Exchange RBAC role or Entra directory role. A role assignment alone (Security Reader, View-Only Recipients, etc.) never fixes this error on its own.
 
@@ -512,7 +525,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO004 | Anti-Spoofing | High | Spoof intelligence, DMARC honor, auth failure action |
 | MET-MDO005 | Anti-Malware | High | ZAP, common attachment filter, admin notifications |
 | MET-MDO006 | Anti-Spam Inbound | Medium | Spam/phish actions, high-confidence thresholds, BCL |
-| MET-MDO007 | Anti-Spam Outbound | Medium | Auto-forward disabled, send limit action, admin alerts |
+| MET-MDO007 | Anti-Spam Outbound | High | Auto-forward disabled, send limit action, admin alerts |
 | MET-MDO008 | Preset Policy Coverage | Medium | % of mailboxes covered by Standard or Strict preset |
 | MET-MDO009 | Zero-Hour Auto Purge | High | ZAP enabled for spam and phishing in all policies |
 | MET-MDO010 | Priority Accounts | Medium | Priority Account tag usage + differentiated protection policy |
@@ -536,7 +549,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
 | MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
 | MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
-| MET-EXO012 | Mailbox Forwarding | Critical | Mailboxes with SMTP forwarding configured, flagging silent (no local copy) forwarding |
+| MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
 | MET-EXO013 | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
 | MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |

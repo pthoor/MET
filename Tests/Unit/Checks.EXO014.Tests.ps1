@@ -260,29 +260,116 @@ Describe 'MET-EXO014 Advanced Delivery Policy' {
 
         It 'Notes as Info when a SecOps mailbox is not tied to any reporting flow' {
             Mock Get-ExoSecOpsOverrideRule {
-                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@thoor.tech', 'adam@thoorsec.onmicrosoft.com') }
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@contoso.com', 'adam@contoso.onmicrosoft.com') }
             }
             Mock Get-ReportSubmissionPolicy { [PSCustomObject]@{ EnableReportToMicrosoft = $true; ReportJunkToCustomizedAddress = $false; ReportNotJunkToCustomizedAddress = $false; ReportPhishToCustomizedAddress = $false } }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@thoor.tech') } }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@contoso.com') } }
 
             $results = & $checkFile
             $purposeResult = $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - SecOps Mailbox Purpose' }
             $purposeResult | Should -Not -BeNullOrEmpty
             $purposeResult.Result | Should -Be 'Info'
             $purposeResult.Severity | Should -Be 'Low'
-            $purposeResult.Finding | Should -Match 'adam@thoorsec.onmicrosoft.com'
-            $purposeResult.Finding | Should -Not -Match 'pierre@thoor.tech'
+            $purposeResult.Finding | Should -Match 'adam@contoso.onmicrosoft.com'
+            $purposeResult.Finding | Should -Not -Match 'pierre@contoso.com'
         }
 
         It 'Does not note SecOps Mailbox Purpose when every SecOps mailbox is tied to reporting' {
             Mock Get-ExoSecOpsOverrideRule {
-                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@thoor.tech') }
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('pierre@contoso.com') }
             }
             Mock Get-ReportSubmissionPolicy { [PSCustomObject]@{ EnableReportToMicrosoft = $true; ReportJunkToCustomizedAddress = $false; ReportNotJunkToCustomizedAddress = $false; ReportPhishToCustomizedAddress = $false } }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@thoor.tech') } }
+            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = @('pierre@contoso.com') } }
 
             $results = & $checkFile
             $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - SecOps Mailbox Purpose' } | Should -BeNullOrEmpty
+        }
+    }
+
+    # Only rules whose Mode is 'Enforce' are counted by an -eq filter. A rule object that
+    # omits Mode, or returns it as $null, is neither enforced nor unenforced - it must
+    # still be assessed, and included in the broad-sender-range scan, rather than dropped.
+    Context 'Override rules omit the Mode property' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Domains = @('fabrikam.com'); SenderIpRanges = @('10.0.0.0/8') }
+            }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; SentTo = @('secops@contoso.com') }
+            }
+            Mock Get-ReportSubmissionPolicy { throw 'not configured' }
+            Mock Get-ReportSubmissionRule { throw 'not configured' }
+        }
+
+        It 'Assesses both rules and includes the phishing simulation rule in the broad sender-range scan' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+            $results[0].Finding | Should -Match 'fabrikam.com'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+            $results[0].Error | Should -Not -BeNullOrEmpty
+
+            $scopeResult = $results | Where-Object { $_.Name -match 'Sender Scope' }
+            $scopeResult | Should -Not -BeNullOrEmpty
+            $scopeResult.Finding | Should -Match '10.0.0.0/8'
+        }
+    }
+
+    Context 'A phishing simulation rule with no Mode and a broad sender range' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Domains = @('fabrikam.com'); SenderIpRanges = @('10.0.0.0/8') }
+            }
+            Mock Get-ExoSecOpsOverrideRule { @() }
+        }
+
+        It 'Flags the broad sender range even though Mode was not returned' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+
+            $scopeResult = $results | Where-Object { $_.Name -eq 'Advanced Delivery Policy - Phishing Simulation Sender Scope' }
+            $scopeResult | Should -Not -BeNullOrEmpty
+            $scopeResult.Result | Should -Be 'Warning'
+            $scopeResult.Finding | Should -Match '10.0.0.0/8'
+        }
+    }
+
+    Context 'A SecOps rule with no Mode' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule { @() }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; SentTo = @('secops@contoso.com') }
+            }
+        }
+
+        It 'Assesses the SecOps rule instead of dropping it' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'No enforceable Advanced Delivery'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+        }
+    }
+
+    Context 'All override rules have Mode = Enforce' {
+        BeforeAll {
+            Mock Get-ExoPhishSimOverrideRule {
+                [PSCustomObject]@{ Name = 'KnowBe4Sim'; Mode = 'Enforce'; Domains = @('fabrikam.com') }
+            }
+            Mock Get-ExoSecOpsOverrideRule {
+                [PSCustomObject]@{ Name = 'SecOpsOverrideRule'; Mode = 'Enforce'; SentTo = @('secops@contoso.com') }
+            }
+            Mock Get-ReportSubmissionPolicy { throw 'not configured' }
+            Mock Get-ReportSubmissionRule { throw 'not configured' }
+        }
+
+        It 'Keeps the existing Info result with no unestablished-mode wording' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Info'
+            $results[0].Finding | Should -Not -Match 'not returned'
+            $results[0].Finding | Should -Match 'fabrikam.com'
+            $results[0].Finding | Should -Match 'secops@contoso.com'
+            $results[0].Error | Should -BeNullOrEmpty
         }
     }
 }

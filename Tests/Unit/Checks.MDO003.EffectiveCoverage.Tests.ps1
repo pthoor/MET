@@ -8,10 +8,10 @@ BeforeAll {
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-AntiPhishRule { [CmdletBinding()] param() }
     function Get-AntiPhishPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
 
     function New-TestAntiPhishPolicy {
         param([string]$Name,[bool]$Compliant,[bool]$Default = $false)

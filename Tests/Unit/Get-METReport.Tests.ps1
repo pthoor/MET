@@ -71,7 +71,7 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Error | Should -Be 2
     }
 
-    It 'keeps the HTML report client-side recalculation from double-counting Error-tagged results in any bucket' {
+    It 'renders an HTML banner that counts an errored check once, under Error only' {
         $output = Join-Path $TestDrive 'reports-error-summary-html'
         $results = @(
             [PSCustomObject]@{
@@ -86,17 +86,18 @@ Describe 'Get-METReport structured metadata' {
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
 
-        # renderDonut() recomputes the summary counters and pie segments on every page load and
-        # every risk-acceptance toggle - every Result-based bucket (Fail/Warning/Pass/N-A/Info)
-        # must exclude Error-tagged items the same way the server-rendered initial summary does,
-        # with Error broken out as its own segment, or the counters/pie silently drift out of
-        # sync with the 'Error' badge.
-        $html | Should -Match "result === 'Fail' && !isAccepted\(c\.checkId\) && !c\.error"
-        $html | Should -Match "result === 'Warning' && !isAccepted\(c\.checkId\) && !c\.error"
-        $html | Should -Match "result === 'Pass' && !c\.error"
-        $html | Should -Match "result === 'NotApplicable' && !c\.error"
-        $html | Should -Match "result === 'Info' && !c\.error"
-        $html | Should -Match '!!c\.error'
+        # Error is its own bucket, mutually exclusive with every Result-based bucket: this
+        # result is a Fail that carries an Error, so it belongs to Error and to nothing else.
+        # This asserts the server-rendered half of that invariant - the numbers baked into the
+        # banner markup. The client half (renderDonut() recomputing the same buckets on load
+        # and on every risk-acceptance toggle) is only observable in a rendered document and is
+        # asserted at the DOM level in Tests/Html/summary-counters.spec.js.
+        $html | Should -Match '(?s)id="sum-err">1<'
+        $html | Should -Match '(?s)id="sum-fail">0<'
+        $html | Should -Match '(?s)id="sum-warn">0<'
+        $html | Should -Match '(?s)id="sum-pass">0<'
+        $html | Should -Match '(?s)id="sum-na">0<'
+        $html | Should -Match '(?s)id="sum-info">0<'
     }
 
     It 'counts Info results in the summary and includes them in the console/JSON total' {

@@ -21,11 +21,21 @@ if (-not $policy) {
 
 # Resolve the custom submission mailbox from the associated rule
 $submissionMailbox = $null
+$additionalMailboxes = @()
 try {
     $rule = Get-ReportSubmissionRule -ErrorAction Stop
-    if ($rule -and $rule.SentTo) { $submissionMailbox = $rule.SentTo }
+    if ($rule -and $rule.SentTo) {
+        $ruleRecipients = @($rule.SentTo)
+        $submissionMailbox = $ruleRecipients | Select-Object -First 1
+        $additionalMailboxes = @($ruleRecipients | Select-Object -Skip 1)
+    }
 }
 catch { Write-Verbose "Could not retrieve report submission rule: $_" }
+
+$additionalMailboxNote = ''
+if ($additionalMailboxes.Count -gt 0) {
+    $additionalMailboxNote = " The rule also routes reports to $($additionalMailboxes -join ', '); only the first address is compared against the policy's own reporting addresses."
+}
 
 # ── Determine reporting mode from the combination of two flags ────────────────
 # EnableReportToMicrosoft  EnableThirdPartyAddress  Meaning
@@ -34,8 +44,16 @@ catch { Write-Verbose "Could not retrieve report submission rule: $_" }
 # $false                   $false (+ custom mbx)    Built-in tools, custom mailbox ONLY - MS gets nothing
 # $false                   $true                    Third-party add-in → custom mailbox only; NOT in Defender Submissions
 # $false                   $false (no custom mbx)   Reporting completely disabled
-$reportsToMicrosoft = $policy.EnableReportToMicrosoft  -eq $true
-$thirdPartyMode     = $policy.EnableThirdPartyAddress   -eq $true
+# (absent)                 any                      Reporting mode not returned - not confirmed disabled (see below)
+# any                      (absent)                 Reporting mode not returned - not confirmed disabled (see below)
+$reportToMicrosoftProperty = $policy.PSObject.Properties['EnableReportToMicrosoft']
+$thirdPartyAddressProperty = $policy.PSObject.Properties['EnableThirdPartyAddress']
+$reportToMicrosoftUnknown  = -not $reportToMicrosoftProperty -or $null -eq $reportToMicrosoftProperty.Value
+$thirdPartyAddressUnknown  = -not $thirdPartyAddressProperty -or $null -eq $thirdPartyAddressProperty.Value
+$reportingModeUnknown      = $reportToMicrosoftUnknown -or $thirdPartyAddressUnknown
+
+$reportsToMicrosoft = -not $reportToMicrosoftUnknown -and $reportToMicrosoftProperty.Value -eq $true
+$thirdPartyMode     = -not $thirdPartyAddressUnknown -and $thirdPartyAddressProperty.Value -eq $true
 $junkToCustom       = $policy.ReportJunkToCustomizedAddress    -eq $true
 $notJunkToCustom    = $policy.ReportNotJunkToCustomizedAddress -eq $true
 $phishToCustom      = $policy.ReportPhishToCustomizedAddress   -eq $true
@@ -44,7 +62,19 @@ $anyFlowToCustom    = $junkToCustom -or  $notJunkToCustom -or  $phishToCustom
 $reportingDisabled  = -not $reportsToMicrosoft -and -not $thirdPartyMode -and -not $anyFlowToCustom
 
 # ── Check 1: Report button mode and Microsoft feedback loop ───────────────────
-if ($reportingDisabled) {
+if ($reportingDisabled -and $reportingModeUnknown) {
+    $unknownProps = [System.Collections.Generic.List[string]]::new()
+    if ($reportToMicrosoftUnknown) { $unknownProps.Add('EnableReportToMicrosoft') }
+    if ($thirdPartyAddressUnknown) { $unknownProps.Add('EnableThirdPartyAddress') }
+    New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+        -Name 'User Reported Message Settings - Report Button' `
+        -Result Fail -Severity High -AffectedObject 'Report Submission Policy' `
+        -Finding "$($unknownProps -join ' and ') $(if ($unknownProps.Count -eq 1) { 'was' } else { 'were' }) not returned by the report submission policy, so whether user reporting in Outlook is enabled, and whether reports reach Microsoft or a SecOps mailbox, was not established." `
+        -Recommendation "Confirm the setting directly with: Get-ReportSubmissionPolicy | Format-List EnableReportToMicrosoft, EnableThirdPartyAddress. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment. In the Defender portal go to Settings > Email & collaboration > User reported settings to confirm reporting is configured; the recommended configuration is the built-in Microsoft report button sending to both Microsoft and a custom SecOps mailbox." `
+        -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings' `
+        -ErrorMessage "Get-ReportSubmissionPolicy did not return $($unknownProps -join ' and ')."
+}
+elseif ($reportingDisabled) {
     New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
         -Name 'User Reported Message Settings - Report Button' `
         -Result Fail -Severity High -AffectedObject 'Report Submission Policy' `
@@ -79,6 +109,19 @@ elseif ($thirdPartyMode -and $reportsToMicrosoft) {
         -Recommendation 'Consider switching to the built-in Microsoft report button for a directly supported path. If keeping the add-in, verify it is current and that full message headers are preserved in forwarded copies.' `
         -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
 }
+elseif ($thirdPartyAddressUnknown) {
+    # $reportsToMicrosoft is confirmed true here (the reportingDisabled/reportingModeUnknown
+    # branch above already claimed every case where it wasn't), but whether the button is the
+    # built-in one or a non-Microsoft add-in was never observed. Reaching the Pass sentence
+    # below would assert "built-in" on a value this check did not confirm.
+    New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
+        -Name 'User Reported Message Settings - Report Button' `
+        -Result NotApplicable -Severity High -AffectedObject 'Report Submission Policy' `
+        -Finding 'EnableThirdPartyAddress was not returned by the report submission policy, so whether user reports come from the built-in Microsoft report button or a non-Microsoft add-in was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes the built-in report button from a third-party add-in, which needs its own verification that message headers are preserved.' `
+        -Recommendation 'Confirm the setting directly with: Get-ReportSubmissionPolicy | Format-List EnableThirdPartyAddress. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings' `
+        -ErrorMessage 'Get-ReportSubmissionPolicy did not return an EnableThirdPartyAddress value.'
+}
 else {
     # Built-in button, reports to Microsoft (with or without custom mailbox)
     New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
@@ -108,7 +151,7 @@ if (-not $reportingDisabled) {
         New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
             -Name 'User Reported Message Settings - SecOps Mailbox' `
             -Result Warning -Severity Low -AffectedObject "Report Submission Policy ($submissionMailbox)" `
-            -Finding "Custom mailbox '$submissionMailbox' is configured but the following report types are not routed to it: $($missingFlows -join ', ')." `
+            -Finding "Custom mailbox '$submissionMailbox' is configured but the following report types are not routed to it: $($missingFlows -join ', ').$additionalMailboxNote" `
             -Recommendation "In the Defender portal go to Settings > Email & collaboration > User reported settings and enable the custom mailbox for all three report types: Junk, Not Junk, and Phishing." `
             -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
     }
@@ -116,7 +159,7 @@ if (-not $reportingDisabled) {
         New-METCheckResult -CheckId 'MET-EXO006' -Category EXO `
             -Name 'User Reported Message Settings - SecOps Mailbox' `
             -Result Pass -Severity Medium -AffectedObject "Report Submission Policy ($submissionMailbox)" `
-            -Finding "All three report flows (Junk, Not Junk, Phishing) are routed to the SecOps mailbox '$submissionMailbox'." `
+            -Finding "All three report flows (Junk, Not Junk, Phishing) are routed to the SecOps mailbox '$submissionMailbox'.$additionalMailboxNote" `
             -ReferenceUrl 'https://aka.ms/mdo-user-reported-settings'
     }
 }

@@ -34,6 +34,7 @@ None of these expose a retention parameter on their respective `Set-*` cmdlets, 
 | Pass | Retention ≥ 30 days - for a Default/custom policy, an admin-tunable value at or above the recommended baseline; for a preset policy, the Microsoft-fixed value confirmed as expected |
 | Fail | Default or custom policy with retention < 30 days - admin-actionable via `Set-HostedContentFilterPolicy` |
 | Warning | A preset policy unexpectedly reporting retention < 30 days - not admin-actionable (the command would error against a preset), flagged for investigation as a Microsoft-side anomaly instead |
+| Warning | `QuarantineRetentionPeriod` was not returned for the policy - the retention window was not established, so it is reported as a gap rather than a pass |
 
 ## Recommendation
 

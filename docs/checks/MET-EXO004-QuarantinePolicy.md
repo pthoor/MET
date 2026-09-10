@@ -6,7 +6,9 @@
 
 Excludes the 4 Microsoft built-in, unmodifiable quarantine policies (`AdminOnlyAccessPolicy`, `DefaultFullAccessPolicy`, `DefaultFullAccessWithNotificationPolicy`, `NotificationEnabledPolicy` - detected via `Test-METIsBuiltInQuarantinePolicyName`) and evaluates only genuinely **custom** quarantine policies for one specific, narrow condition:
 
-- `ESNEnabled -eq $false` **and** `EndUserQuarantinePermissionsValue -gt 0` - end users have been granted permission to act on quarantined messages (review, release, delete, etc.), but end-user spam notifications (ESN) are disabled, so they are never told anything is quarantined and have no way to know to use that permission.
+- `ESNEnabled -eq $false` **and** at least one end-user permission granted - end users have been granted permission to act on quarantined messages (review, release, delete, etc.), but end-user spam notifications (ESN) are disabled, so they are never told anything is quarantined and have no way to know to use that permission.
+
+The granted permissions are read from `Get-QuarantinePolicy`'s `EndUserQuarantinePermissions` field, which the cmdlet returns as a formatted string (`[PermissionToRelease: False <newline> PermissionToDelete: True ...]`), not a typed object. `Get-METEndUserQuarantinePermission` parses that string into typed booleans. The cmdlet does **not** return an `EndUserQuarantinePermissionsValue` integer - that name is a `New-`/`Set-QuarantinePolicy` input parameter only - so the check never reads it.
 
 If a tenant has no custom quarantine policies at all - only the 4 built-ins - the check returns a single Pass; there is nothing to review.
 
@@ -23,6 +25,10 @@ All three of the removed conditions are redundant with, and less accurate than, 
 - **Retention** is correctly evaluated on the filter policy itself by [MET-EXO008](./MET-EXO008-QuarantineRetention.md).
 - **Verdict-to-quarantine-tag correctness** (including which verdicts require `PermissionToRelease = $false`) is evaluated per-verdict, preset-aware, by [MET-EXO009](./MET-EXO009-QuarantinePolicyVerdictAlignment.md).
 
+## Why it changed again
+
+An earlier revision read `EndUserQuarantinePermissionsValue` as a returned property and, when it was absent, reported the policy as unassessed. `Get-QuarantinePolicy` never returns that property - it is a `New-`/`Set-` input parameter only - so the check produced a Warning with a populated `Error` field on **every custom quarantine policy on every tenant**. The check now reads the `EndUserQuarantinePermissions` string that the cmdlet does return, parsed by `Get-METEndUserQuarantinePermission`.
+
 ## Why it matters
 
 A custom quarantine policy that grants end users permission to act on quarantined mail, but never notifies them that anything is quarantined, is a silent usability gap: the permission exists but is effectively unreachable. Note that `DefaultFullAccessPolicy` itself is "full permissions, no notification" by design - which is exactly why this check only evaluates genuinely custom policies, not the built-ins.
@@ -32,7 +38,7 @@ A custom quarantine policy that grants end users permission to act on quarantine
 | Result | Condition |
 |---|---|
 | Pass | No custom quarantine policies exist (only built-ins), or a custom policy's notification setting is consistent with its granted permissions |
-| Warning | A custom policy grants end-user permissions (`EndUserQuarantinePermissionsValue > 0`) but has `ESNEnabled = $false` |
+| Warning | A custom policy grants at least one end-user permission but has `ESNEnabled = $false`; or `ESNEnabled` and/or `EndUserQuarantinePermissions` was not returned (or could not be parsed) by `Get-QuarantinePolicy` for this policy, so whether its notification setting is consistent with its granted permissions was not established |
 | Fail | `Get-QuarantinePolicy` could not be retrieved |
 
 ## Recommendation

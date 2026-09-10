@@ -1,4 +1,4 @@
-﻿function Get-METModuleVersion {
+function Get-METModuleVersion {
     [CmdletBinding()]
     param()
 
@@ -46,18 +46,53 @@ function Get-METReport {
 
     end {
       $effectiveTenantName = $TenantName
+      $provenanceDisagreesWithLiveSession = $false
+
+      # Every distinct tenant these results were gathered against. More than one means
+      # two customers' checks were piped into a single report - it would be labelled with
+      # one customer's identity while carrying another's configuration, the same
+      # cross-customer exposure the per-run provenance stamp exists to prevent. Refuse it
+      # outright rather than pick one label; this holds even when -TenantName is passed,
+      # because an explicit label cannot make a mixed result set represent one tenant.
+      $provenanceTenants = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTenant')) {
+            [string]$_.Metadata['METRunTenant']
+          }
+        } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique)
+
+      if ($provenanceTenants.Count -gt 1) {
+        throw "These results were gathered against more than one tenant ($($provenanceTenants -join ', ')). A single report cannot represent multiple tenants - one customer's checks would appear under another customer's identity. Run Get-METReport once per tenant's result set."
+      }
+
       if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
+        $provenanceTenant = $provenanceTenants | Select-Object -First 1
+
+        $liveTenant = $null
         try {
           $defaultAcceptedDomain = Get-AcceptedDomain -ErrorAction Stop |
             Where-Object { $_.Default -eq $true } |
             Select-Object -First 1
 
           if ($defaultAcceptedDomain -and $defaultAcceptedDomain.DomainName) {
-            $effectiveTenantName = [string]$defaultAcceptedDomain.DomainName
+            $liveTenant = [string]$defaultAcceptedDomain.DomainName
           }
         }
         catch {
           Write-Verbose "Unable to discover default accepted domain: $($_.Exception.Message)"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($provenanceTenant)) {
+          $effectiveTenantName = $provenanceTenant
+          if (-not [string]::IsNullOrWhiteSpace($liveTenant) -and $liveTenant -ne $provenanceTenant) {
+            $provenanceDisagreesWithLiveSession = $true
+            Write-Warning "These results were gathered against '$provenanceTenant', but the live Exchange Online session is connected to '$liveTenant'. The report is labelled '$provenanceTenant'."
+          }
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($liveTenant)) {
+          $effectiveTenantName = $liveTenant
         }
       }
 
@@ -81,7 +116,7 @@ function Get-METReport {
             $weightedSum = 0
             $weightTotal = 0
             foreach ($r in $scorable) {
-                $w = Get-METCheckWeight -Severity $r.Severity
+                $w = Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $r.Severity)
                 $weightedSum += $r.Score * $w
                 $weightTotal += $w * 100
             }
@@ -110,7 +145,7 @@ function Get-METReport {
             if ($catResults) {
                 $ws = 0; $wt = 0
                 foreach ($r in $catResults) {
-                    $w = Get-METCheckWeight -Severity $r.Severity
+                    $w = Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $r.Severity)
                     $ws += $r.Score * $w
                     $wt += $w * 100
                 }
@@ -209,9 +244,13 @@ function Get-METReport {
         # deviceCodeFlow (or any) sign-in they see in their own logs with a known,
         # expected MET run instead of triaging it as a live incident. $null when
         # Get-METReport is called without ever going through Connect-METSession
-        # (e.g. piping hand-built result objects, as the unit tests do).
+        # (e.g. piping hand-built result objects, as the unit tests do), and also
+        # $null when the results carry provenance for a different tenant than the
+        # live session - $script:METSessionInfo describes whoever is connected
+        # *now*, not who gathered these results, and a wrong auth description is
+        # worse than none.
         $authInfoLine = $null
-        if ($script:METSessionInfo) {
+        if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
             $info = $script:METSessionInfo
             $modeLabel = switch ($info.AuthMode) {
                 'ServicePrincipal' { 'Service Principal (certificate)' }
@@ -277,7 +316,7 @@ function Get-METReport {
                 tenant         = $effectiveTenantName
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
-                authentication = if ($script:METSessionInfo) {
+                authentication = if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
                     [ordered]@{
                         authMode          = $script:METSessionInfo.AuthMode
                         deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
@@ -300,7 +339,7 @@ function Get-METReport {
                         finding        = $_.Finding
                         recommendation = $_.Recommendation
                         referenceUrl   = $_.ReferenceUrl
-                        timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                        timestamp      = if ($_.Timestamp) { $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null }
                         error          = $_.Error
                         metadata       = $_.Metadata
                     }
@@ -312,6 +351,7 @@ function Get-METReport {
             if ($OutputPath) {
                 $dest = $resolvedJsonPath
 
+                New-METRestrictedFile -Path $dest
                 $json | Set-Content -Path $dest -Encoding UTF8
                 Write-Verbose "JSON report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
@@ -342,7 +382,7 @@ function Get-METReport {
                     finding        = $_.Finding
                     recommendation = $_.Recommendation
                     referenceUrl   = $_.ReferenceUrl
-                    timestamp      = $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ')
+                    timestamp      = if ($_.Timestamp) { $_.Timestamp.ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null }
                     error          = $_.Error
                     metadata       = $_.Metadata
                 }
@@ -466,7 +506,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .cat-meter-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .cat-meter-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .cat-meter-bar{height:100%;border-radius:3px;transition:width .4s ease,background .3s}
-.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
+.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--text3)}
 .cat-meter-val{text-align:right;font-weight:700;color:var(--text2)}
 .score-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;padding-left:16px;border-left:1px solid var(--border)}
 .summary-item{display:flex;flex-direction:column;align-items:center;gap:2px}
@@ -542,7 +582,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
 .card-header:hover{background:var(--surface2)}
 .card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
-.sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0}
+.sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--sev-info)}
 .sev-critical{background:var(--sev-critical)}
 .sev-high{background:var(--sev-high)}
 .sev-medium{background:var(--sev-medium)}
@@ -550,7 +590,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .sev-informational{background:var(--sev-info)}
 .card-id{font-size:12px;font-family:monospace;color:var(--text2);flex-shrink:0}
 .card-name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.result-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff}
+.result-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff;background:var(--result-na)}
 .rb-pass{background:var(--result-pass)}
 .rb-fail{background:var(--result-fail)}
 .rb-warning{background:var(--result-warn)}
@@ -803,6 +843,20 @@ const CONTROLS_CATEGORIES = [
   { id: 'Teams', label: 'Microsoft Teams Protection',         cls: 'cat-teams' }
 ];
 
+// ── Result identity ──────────────────────────────────────────────
+// Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one per
+// domain/policy/mailbox). CheckId alone is not a unique identity for a result, so every
+// acceptance helper, cardMap, and click target below is keyed on resultKey(check) instead.
+// checkId + affectedObject alone is not enough either: MET-EXO006 emits ten independent
+// sections that all report AffectedObject 'Report Submission Policy', so several results can
+// share both fields in normal runs, not just in a hypothetical edge case. name is folded in
+// as a third component - it is already present on every check payload, is distinct across
+// EXO006's sections, and is exactly as stable across page loads/regenerations as checkId and
+// affectedObject are, so this preserves the stability property that ruled out a render-time
+// index (order can shift between runs, and the key must survive a reload for accepted state
+// to mean anything).
+function resultKey(c){ return c.checkId + '|' + (c.name || '') + '|' + (c.affectedObject || ''); }
+
 // ── localStorage helpers ─────────────────────────────────────────
 // Some browsers (notably Safari) throw a SecurityError accessing localStorage
 // on file:// pages. Fall back to an in-memory store so the report still
@@ -817,11 +871,14 @@ function lsSet(key, val) {
 function lsRemove(key) {
   try { localStorage.removeItem(key); } catch (e) { delete memStore[key]; }
 }
-function lsKey(checkId){ return 'MET_accepted_' + TENANT_ID + '_' + checkId; }
-function isAccepted(checkId){ return !!lsGet(lsKey(checkId)); }
-function getJustification(checkId){ return lsGet(lsKey(checkId)); }
-function setAccepted(checkId, justification){ lsSet(lsKey(checkId), justification || 'Accepted'); }
-function clearAccepted(checkId){ lsRemove(lsKey(checkId)); }
+// Deliberately NOT migrated from the legacy 'MET_accepted_<tenant>_<checkId>' scheme - those
+// entries are already collided under the CheckId-only scheme, so migrating would propagate a
+// wrong acceptance state into the new per-result scheme. Existing acceptances are dropped.
+function lsKey(key){ return 'MET_accepted_' + TENANT_ID + '_' + key; }
+function isAccepted(key){ return !!lsGet(lsKey(key)); }
+function getJustification(key){ return lsGet(lsKey(key)); }
+function setAccepted(key, justification){ lsSet(lsKey(key), justification || 'Accepted'); }
+function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
 function bandOf(score) {
@@ -832,7 +889,7 @@ function weightedScore(checks) {
   checks.forEach(function(c) {
     if (!['Pass','Fail','Warning'].includes(c.result)) return;
     if (c.score === null || c.score === undefined) return;
-    if (isAccepted(c.checkId)) return;
+    if (isAccepted(resultKey(c))) return;
     const w = SEV_WEIGHT[c.severity] || 0;
     wSum  += c.score * w;
     wTotal += w * 100;
@@ -899,8 +956,8 @@ function renderDonut() {
   // the server-rendered initial summary (Get-METReport.ps1's $summary hashtable). A result can
   // carry both a Result and a populated Error field (e.g. Teams014 when Graph is unreachable);
   // counting it under both would double-count it across the Error badge and its Result segment.
-  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(c.checkId) && !c.error; }).length;
-  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(c.checkId) && !c.error; }).length;
+  const fail  = CHECKS.filter(function(c) { return c.result === 'Fail' && !isAccepted(resultKey(c)) && !c.error; }).length;
+  const warn  = CHECKS.filter(function(c) { return c.result === 'Warning' && !isAccepted(resultKey(c)) && !c.error; }).length;
   const pass  = CHECKS.filter(function(c) { return c.result === 'Pass' && !c.error; }).length;
   const na    = CHECKS.filter(function(c) { return c.result === 'NotApplicable' && !c.error; }).length;
   const info  = CHECKS.filter(function(c) { return c.result === 'Info' && !c.error; }).length;
@@ -932,9 +989,21 @@ function renderDonut() {
 }
 
 // ── Escape HTML ──────────────────────────────────────────────────
+// Only null/undefined collapse to empty. A falsy-but-real value (0, false) must
+// still render - a policy at Priority 0 is the highest-precedence policy, and
+// blanking that cell hides exactly the row an operator is looking for.
 function esc(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// CSS class fragments are built from check-supplied Result/Severity/Category values
+// and interpolated into class="..." attributes. Lowercasing alone is not a defence -
+// every character needed to break out of an attribute survives it. Reduce to the
+// character set a class name can legitimately contain; anything else becomes
+// 'unknown', which the stylesheet renders with a visible neutral fallback.
+function slug(s) {
+  const out = String(s === null || s === undefined ? '' : s).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  return out || 'unknown';
 }
 // Format finding text into a structured bullet list.
 // Multi-policy findings arrive as "PolicyName: issue1; issue2\nPolicyName2: issue3".
@@ -1018,9 +1087,13 @@ function fmtEffectivePolicyCoverage(check) {
       '<th>Effective recipients</th><th>Configuration</th><th>Current impact</th><th>Ordering observations</th><th>Issues</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
+// Validating the scheme is not enough: the return value is interpolated into an
+// href="..." attribute, and new URL() accepts quotes and angle brackets in a path,
+// so an https: URL can still break out of the attribute and inject markup. The
+// validated URL must be HTML-escaped before it reaches the attribute.
 function safeHref(url) {
   if (!url) return '#';
-  try { const u = new URL(url); return (u.protocol === 'https:' || u.protocol === 'http:') ? url : '#'; }
+  try { const u = new URL(url); return (u.protocol === 'https:' || u.protocol === 'http:') ? esc(u.href) : '#'; }
   catch { return '#'; }
 }
 
@@ -1064,7 +1137,8 @@ function buildRecommendation(rec) {
 
 // ── Render a single card ─────────────────────────────────────────
 function createCard(check) {
-  const accepted   = isAccepted(check.checkId);
+  const key        = resultKey(check);
+  const accepted   = isAccepted(key);
   const hasError   = !!check.error;
   const isFailWarn = ['Fail','Warning'].includes(check.result);
   const showFix    = isFailWarn || hasError;
@@ -1076,12 +1150,13 @@ function createCard(check) {
   // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
   // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
   const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);
-  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : check.result.toLowerCase()));
+  const rbClass    = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(check.result)));
   const startOpen  = false;
 
   const card = document.createElement('div');
   card.className = 'card';
-  card.dataset.checkId  = check.checkId;
+  card.dataset.checkId   = check.checkId;
+  card.dataset.resultKey = key;
   card.dataset.category = check.category;
   card.dataset.result   = check.result;
   card.dataset.sev      = sevOf(check.severity);
@@ -1096,12 +1171,12 @@ function createCard(check) {
     actionsHtml += '<a class="btn-docs" href="' + safeHref(check.referenceUrl) + '" target="_blank" rel="noopener">&#x1F4D6; Microsoft Docs</a>';
   }
   if (['Fail','Warning'].includes(check.result) && !accepted) {
-    actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '">&#x2713; Accept Risk</button>';
+    actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">&#x2713; Accept Risk</button>';
   }
   if (accepted) {
-    const just = esc(getJustification(check.checkId));
+    const just = esc(getJustification(key));
     actionsHtml += '<span style="font-size:12px;color:var(--result-accepted)">Accepted: ' + just + '</span>';
-    actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '">Undo acceptance</button>';
+    actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">Undo acceptance</button>';
   }
 
   const errorHtml = check.error
@@ -1120,8 +1195,8 @@ function createCard(check) {
 
   card.innerHTML =
     '<div class="card-header" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
-      '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
-      '<span class="card-cat-chip cat-' + check.category.toLowerCase() + '">' + esc(check.category) + '</span>' +
+      '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+      '<span class="card-cat-chip cat-' + slug(check.category) + '">' + esc(check.category) + '</span>' +
       '<span class="card-id">' + esc(check.checkId) + '</span>' +
       '<span class="card-name">' + esc(check.name) + '</span>' +
       '<span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span>' +
@@ -1192,12 +1267,12 @@ const cardMap = {};
 sortedChecks.forEach(function(check) {
   const card = createCard(check);
   container.appendChild(card);
-  cardMap[check.checkId] = card;
+  cardMap[resultKey(check)] = card;
 });
 
 // ── Top 5 ────────────────────────────────────────────────────────
 function renderTop5() {
-  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(c.checkId); });
+  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)); });
   const resOrder   = {Fail:0, Warning:1};
   const top5 = actionable.slice().sort(function(a,b) {
     const rDiff = (resOrder[a.result] ?? 9) - (resOrder[b.result] ?? 9);
@@ -1215,9 +1290,11 @@ function renderTop5() {
     return;
   }
   top5.forEach(function(check, i) {
-    const rbClass = 'rb-' + check.result.toLowerCase();
+    const key = resultKey(check);
+    const rbClass = 'rb-' + slug(check.result);
     const row = document.createElement('div');
     row.className = 'top5-row';
+    row.dataset.resultKey = key;
     row.innerHTML =
       '<div class="top5-rank">' + (i+1) + '</div>' +
       '<div>' +
@@ -1227,10 +1304,10 @@ function renderTop5() {
       '<div class="top5-finding">' + fmtFinding(check.finding) + '</div>' +
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
         '<span class="result-badge ' + rbClass + '">' + esc(check.result.toUpperCase()) + '</span>' +
-        '<span class="sev-pill sev-' + sevOf(check.severity).toLowerCase() + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+        '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '</div>';
     row.addEventListener('click', function() {
-      const card = cardMap[check.checkId];
+      const card = cardMap[key];
       if (!card) return;
       const body = card.querySelector('.card-body');
       const chev = card.querySelector('.card-chevron');
@@ -1278,16 +1355,17 @@ function renderControlsRef() {
     html += '<div class="ctrl-section-header"><span class="cat-badge ' + cat.cls + '">' + esc(cat.id) + '</span><span>' + esc(cat.label) + '</span></div>';
     html += '<table class="ctrl-table"><thead><tr><th>ID</th><th>Name</th><th>Severity</th><th>What It Checks</th><th>Result</th><th>Docs</th></tr></thead><tbody>';
     checks.forEach(function(c) {
-      const accepted = isAccepted(c.checkId);
+      const key = resultKey(c);
+      const accepted = isAccepted(key);
       const hasError = !!c.error;
       // hasError wins over accepted - see the matching note in createCard().
       const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
-      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : c.result.toLowerCase()));
+      const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(c.result)));
       const desc = CONTROLS_META[c.checkId] || c.name;
-      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" title="Click to jump to check card">';
+      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
-      html += '<td><span class="sev-pill sev-' + sevOf(c.severity).toLowerCase() + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
+      html += '<td><span class="sev-pill sev-' + slug(sevOf(c.severity)) + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
       html += '<td class="ctrl-desc">' + esc(desc) + '</td>';
       html += '<td><span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span></td>';
       html += '<td>' + (c.referenceUrl ? '<a class="ctrl-doc-link" href="' + safeHref(c.referenceUrl) + '" target="_blank" rel="noopener">&#x1F4D6;</a>' : '') + '</td>';
@@ -1304,9 +1382,9 @@ function renderControlsRef() {
 
   el.querySelectorAll('.ctrl-row').forEach(function(row) {
     row.addEventListener('click', function() {
-      const checkId = this.dataset.checkid;
+      const key = this.dataset.resultKey;
       switchToTab('All');
-      const card = cardMap[checkId];
+      const card = cardMap[key];
       if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     });
   });
@@ -1451,13 +1529,17 @@ document.getElementById('btn-collapse-all').addEventListener('click', function()
 });
 
 // ── Accept risk ──────────────────────────────────────────────────
-let pendingCheckId = null;
+let pendingKey = null;
 
 document.addEventListener('click', function(e) {
   const acceptBtn = e.target.closest('.btn-accept');
   if (acceptBtn) {
-    pendingCheckId = acceptBtn.dataset.checkid;
-    document.getElementById('modal-desc').textContent = 'Accepting risk for ' + pendingCheckId + '. Provide a business justification.';
+    pendingKey = acceptBtn.dataset.resultKey;
+    const pendingCheck = CHECKS.find(function(c){ return resultKey(c) === pendingKey; });
+    const label = pendingCheck
+      ? pendingCheck.checkId + (pendingCheck.affectedObject ? ' (' + pendingCheck.affectedObject + ')' : '')
+      : acceptBtn.dataset.checkid;
+    document.getElementById('modal-desc').textContent = 'Accepting risk for ' + label + '. Provide a business justification.';
     document.getElementById('modal-text').value = '';
     document.getElementById('modal-confirm').disabled = true;
     document.getElementById('modal-overlay').classList.add('open');
@@ -1466,9 +1548,9 @@ document.addEventListener('click', function(e) {
 
   const undoBtn = e.target.closest('.btn-undo');
   if (undoBtn) {
-    const checkId = undoBtn.dataset.checkid;
-    clearAccepted(checkId);
-    rebuildCard(checkId);
+    const key = undoBtn.dataset.resultKey;
+    clearAccepted(key);
+    rebuildCard(key);
     updateTabCounts();
     recalcScore();
     renderTop5();
@@ -1482,34 +1564,34 @@ document.getElementById('modal-text').addEventListener('input', function() {
 
 document.getElementById('modal-cancel').addEventListener('click', function() {
   document.getElementById('modal-overlay').classList.remove('open');
-  pendingCheckId = null;
+  pendingKey = null;
 });
 
 document.getElementById('modal-confirm').addEventListener('click', function() {
-  if (!pendingCheckId) return;
+  if (!pendingKey) return;
   const just = document.getElementById('modal-text').value.trim();
-  setAccepted(pendingCheckId, just);
+  setAccepted(pendingKey, just);
   document.getElementById('modal-overlay').classList.remove('open');
-  rebuildCard(pendingCheckId);
+  rebuildCard(pendingKey);
   updateTabCounts();
   recalcScore();
   renderTop5();
   applyFilters();
-  pendingCheckId = null;
+  pendingKey = null;
 });
 
 document.getElementById('modal-overlay').addEventListener('click', function(e) {
   if (e.target === this) { document.getElementById('modal-cancel').click(); }
 });
 
-function rebuildCard(checkId) {
-  const check = CHECKS.find(function(c){ return c.checkId === checkId; });
+function rebuildCard(key) {
+  const check = CHECKS.find(function(c){ return resultKey(c) === key; });
   if (!check) return;
-  const oldCard = cardMap[checkId];
+  const oldCard = cardMap[key];
   if (!oldCard) return;
   const newCard = createCard(check);
   oldCard.parentNode.replaceChild(newCard, oldCard);
-  cardMap[checkId] = newCard;
+  cardMap[key] = newCard;
   const idx = allCards.indexOf(oldCard);
   if (idx !== -1) allCards[idx] = newCard;
 }
@@ -1545,6 +1627,7 @@ document.getElementById('btn-collapse-all').textContent = 'Expand All';
             if ($OutputPath) {
                 $dest = $resolvedHtmlPath
 
+                New-METRestrictedFile -Path $dest
                 $html | Set-Content -Path $dest -Encoding UTF8
                 Write-Verbose "HTML report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {

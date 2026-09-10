@@ -62,6 +62,29 @@ New-METCheckResult -CheckId 'MET-XXX999' -Category MDO -Name 'My Check' `
 | `Recommendation` | Actionable steps, imperative mood |
 | `ReferenceUrl` | `https://aka.ms/...` where possible |
 
+#### An absent property never yields `Pass`
+
+A property that the service did not return tells you nothing about the tenant's configuration. Never resolve a missing or `$null` property into a `Pass` - a green result nobody investigates is the most damaging outcome a posture scanner can produce.
+
+- Absent on some objects but present on others -> `Warning`, naming the objects whose property was absent
+- Absent on every object -> `NotApplicable`, with `-ErrorMessage` recording that the property was not returned - typically a module or service version that does not expose it
+- A check may escalate to `Fail` where absence has a specific, documented meaning for that control. `MET-EXO023` does this and explains why in its own `Finding`
+
+Test the property against the object as well as its value, so a property that is missing entirely is caught alongside one that is present but `$null`:
+
+```powershell
+$withProperty    = @($items | Where-Object { $null -ne $_.PSObject.Properties['Setting'] -and $null -ne $_.Setting })
+$withoutProperty = @($items | Where-Object { $null -eq $_.PSObject.Properties['Setting'] -or  $null -eq $_.Setting })
+```
+
+#### Rule 2 - a fail-closed verdict must not describe a value it did not observe
+
+Reaching the right `Result` on an absent property is not enough - the `Finding` text must not assert a value that was never returned. Don't write "Safe Attachments for Teams is disabled (`EnableATPForSPOTeamsODB = $false`)" when the property was absent; say instead that whether it is enabled was not established.
+
+On any branch that resolves to `NotApplicable` or `Warning` because of an absent property, the `Finding` must also say *why* an unconfirmed state is not graded as a pass, not just stop at "was not established" - `Get-METReport`'s HTML card collapses `Recommendation` behind "How to fix," so a reader scanning cards sees only the `Finding`. This scoping is deliberate: the "reported as unassessed rather than a pass" clause belongs on `NotApplicable`/`Warning` branches, not on branches that still resolve to `Fail` - on a `Fail` branch nothing is being reported as unassessed, so the sentence would be false there.
+
+`MET-MDO002` (`Checks/MDO/MET-MDO002-SafeAttachments.ps1`) is the reference implementation for this shape.
+
 ### 4. Write Pester tests
 
 Add tests to the appropriate file in `Tests/Unit/`:
@@ -77,6 +100,7 @@ Minimum test cases per check:
 1. All settings correct → `Pass`
 2. Primary failure case → `Fail` (assert `Finding` content)
 3. API failure (cmdlet throws) → `Fail` with `Error` populated
+4. The assessed property absent → never `Pass` (see above)
 
 ### 5. Write a check doc
 
@@ -124,6 +148,8 @@ Invoke-Pester -Configuration $config
 - **No positional parameters** on public functions
 - **Error handling** - `try/catch` on all remote calls; surface in `Error` field, never throw
 - **No plain-text secrets** - all auth through `Connect-METSession`
+- **An absent property never yields `Pass`** - `Warning` when it is absent on only some objects, `NotApplicable` with `-ErrorMessage` when absent on all
+- **Rule 2: a fail-closed verdict must not describe a value it did not observe** - on a `NotApplicable`/`Warning` branch, say what was not established, never name a value nothing returned; also say why that is not graded as a pass. Not on `Fail` branches - see above
 - **No external HTTP calls inside check scripts** - DNS lookups via `Resolve-DnsName` are allowed for email auth checks
 
 ---
@@ -133,7 +159,7 @@ Invoke-Pester -Configuration $config
 - [ ] New check file created with correct naming
 - [ ] `New-METCheckResult` used for all output
 - [ ] `try/catch` wraps all remote calls
-- [ ] Pester tests added (Pass, Fail, and API-error scenarios)
+- [ ] Pester tests added (Pass, Fail, API-error, and absent-property scenarios)
 - [ ] Check doc added to `docs/checks/`
 - [ ] README check inventory updated
 - [ ] All unit tests pass locally (`Invoke-Pester -Configuration $config`)

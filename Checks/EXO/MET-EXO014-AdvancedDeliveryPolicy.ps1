@@ -28,6 +28,16 @@ function Test-METSenderIpRangeIsBroad {
     return $false
 }
 
+function Test-METOverrideModeIsUnknown {
+    param([Parameter(Mandatory)][object] $Rule)
+
+    # A rule whose Mode was never returned is neither enforced nor unenforced - it is
+    # unobserved, and must not be silently dropped by an -eq 'Enforce' filter the way an
+    # absent or $null Mode would be.
+    $modeProperty = $Rule.PSObject.Properties['Mode']
+    return (-not $modeProperty -or $null -eq $modeProperty.Value)
+}
+
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 
 # Get-ExoPhishSimOverrideRule/Get-ExoSecOpsOverrideRule fail with a generic
@@ -65,10 +75,15 @@ if ($retrievalErrors.Count -gt 0) {
 }
 
 $activePhishSimulationRules = @($phishSimulationRules | Where-Object { $_.Mode -eq 'Enforce' })
+$unknownModePhishSimulationRules = @($phishSimulationRules | Where-Object { Test-METOverrideModeIsUnknown -Rule $_ })
 $activeSecOpsRules = @($secOpsRules | Where-Object { $_.Mode -eq 'Enforce' })
-$activeCount = $activePhishSimulationRules.Count + $activeSecOpsRules.Count
+$unknownModeSecOpsRules = @($secOpsRules | Where-Object { Test-METOverrideModeIsUnknown -Rule $_ })
 
-if ($activeCount -eq 0) {
+$activeCount = $activePhishSimulationRules.Count + $activeSecOpsRules.Count
+$unknownModeCount = $unknownModePhishSimulationRules.Count + $unknownModeSecOpsRules.Count
+$assessedCount = $activeCount + $unknownModeCount
+
+if ($assessedCount -eq 0) {
     New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy' `
         -Result Info -Severity Medium -AffectedObject 'Advanced Delivery Policy' `
         -Finding 'No enforceable Advanced Delivery phishing simulation or SecOps mailbox overrides are configured' `
@@ -77,10 +92,12 @@ if ($activeCount -eq 0) {
 else {
     $ruleDescriptions = [System.Collections.Generic.List[string]]::new()
     foreach ($rule in $activePhishSimulationRules) { $ruleDescriptions.Add("Phishing simulation (domains: $(@($rule.Domains) -join ', '))") }
+    foreach ($rule in $unknownModePhishSimulationRules) { $ruleDescriptions.Add("Phishing simulation (domains: $(@($rule.Domains) -join ', ')) - Mode was not returned, so whether this rule is enforced was not established") }
     foreach ($rule in $activeSecOpsRules) { $ruleDescriptions.Add("SecOps mailbox: $(@($rule.SentTo) -join ', ')") }
+    foreach ($rule in $unknownModeSecOpsRules) { $ruleDescriptions.Add("SecOps mailbox: $(@($rule.SentTo) -join ', ') - Mode was not returned, so whether this rule is enforced was not established") }
 
-    $hasPhishSim = $activePhishSimulationRules.Count -gt 0
-    $hasSecOps = $activeSecOpsRules.Count -gt 0
+    $hasPhishSim = ($activePhishSimulationRules.Count + $unknownModePhishSimulationRules.Count) -gt 0
+    $hasSecOps = ($activeSecOpsRules.Count + $unknownModeSecOpsRules.Count) -gt 0
 
     if ($hasSecOps -and $hasPhishSim) {
         $scopeRecommendation = 'Advanced Delivery overrides are legitimate for narrowly scoped third-party phishing simulations and dedicated SecOps mailboxes, but their bypass surfaces differ. SecOps mailbox overrides bypass anti-malware filtering AND zero-hour auto purge (ZAP) for malware - malware filtering is bypassed for SecOps mailboxes only, the widest bypass Advanced Delivery grants. Phishing simulation overrides do NOT bypass malware filtering; they bypass spam/phish filtering, Safe Links time-of-click blocking (URLs are still wrapped but never blocked), Safe Attachments detonation, default alerts, and Automated Investigation and Response (AIR). Periodically verify every rule is still required and correctly scoped; stale simulation infrastructure or an unintended SecOps recipient creates a filtering-bypass path. Review scope at https://security.microsoft.com > Email & collaboration > Policies & rules > Threat policies > Advanced delivery.'
@@ -92,32 +109,52 @@ else {
         $scopeRecommendation = 'Phishing simulation overrides do NOT bypass malware filtering; they bypass spam/phish filtering, Safe Links time-of-click blocking (URLs are still wrapped but never blocked), Safe Attachments detonation, default alerts, and Automated Investigation and Response (AIR). Periodically verify every rule is still required and correctly scoped to the simulation vendor''s published sending infrastructure; stale simulation infrastructure creates a filtering-bypass path. Review scope at https://security.microsoft.com > Email & collaboration > Policies & rules > Threat policies > Advanced delivery.'
     }
 
-    New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy' `
-        -Result Info -Severity Medium -AffectedObject "Advanced Delivery Policy ($activeCount override rule(s))" `
-        -Finding "$activeCount enforceable Advanced Delivery override rule(s) found: $($ruleDescriptions -join '; ') - matching messages bypass significant MDO/EOP filtering and ZAP actions" `
-        -Recommendation $scopeRecommendation `
-        -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
+    if ($unknownModeCount -gt 0) {
+        New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy' `
+            -Result Warning -Severity Medium -AffectedObject "Advanced Delivery Policy ($assessedCount override rule(s), $unknownModeCount with enforcement not established)" `
+            -Finding "$assessedCount Advanced Delivery override rule(s) found ($activeCount confirmed enforced, $unknownModeCount with Mode not returned): $($ruleDescriptions -join '; ') - matching messages may bypass significant MDO/EOP filtering and ZAP actions. An unconfirmed enforcement state is reported as a gap rather than a pass, because a rule this check cannot confirm is inactive is not assumed inactive, and its bypass surface still applies if it is enforced." `
+            -Recommendation $scopeRecommendation `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure' `
+            -ErrorMessage "Get-ExoPhishSimOverrideRule/Get-ExoSecOpsOverrideRule did not return a Mode value for $unknownModeCount override rule(s)."
+    }
+    else {
+        New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy' `
+            -Result Info -Severity Medium -AffectedObject "Advanced Delivery Policy ($activeCount override rule(s))" `
+            -Finding "$activeCount enforceable Advanced Delivery override rule(s) found: $($ruleDescriptions -join '; ') - matching messages bypass significant MDO/EOP filtering and ZAP actions" `
+            -Recommendation $scopeRecommendation `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
+    }
 }
 
-foreach ($rule in $activeSecOpsRules) {
+foreach ($rule in (@($activeSecOpsRules) + @($unknownModeSecOpsRules))) {
     $sentToCount = @($rule.SentTo).Count
     if ($sentToCount -gt 2) {
         $sentToList = @($rule.SentTo) -join ', '
+        $bypassClause = if (Test-METOverrideModeIsUnknown -Rule $rule) {
+            'Whether this rule is enforced was not established because Mode was not returned, so whether anti-malware filtering and malware ZAP are actually bypassed for these mailboxes is unconfirmed; it is flagged here rather than skipped because an override this check cannot confirm is inactive is not assumed inactive.'
+        }
+        else {
+            'Every mailbox in that list has anti-malware filtering and malware ZAP fully bypassed.'
+        }
         New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy - SecOps Mailbox Scope' `
             -Result Warning -Severity Medium -AffectedObject "SecOps mailboxes: $sentToList" `
-            -Finding "The SecOps override lists $sentToCount mailboxes in SentTo: $sentToList. Every mailbox in that list has anti-malware filtering and malware ZAP fully bypassed. This count is a MET-authored heuristic, not a Microsoft-documented limit - confirm the blast radius is still deliberate. Microsoft already blocks distribution groups as SentTo targets, so this only catches individually-added mailboxes, not group-based scope creep." `
+            -Finding "The SecOps override lists $sentToCount mailboxes in SentTo: $sentToList. $bypassClause This count is a MET-authored heuristic, not a Microsoft-documented limit - confirm the blast radius is still deliberate. Microsoft already blocks distribution groups as SentTo targets, so this only catches individually-added mailboxes, not group-based scope creep." `
             -Recommendation "Review the SecOps mailbox list ($sentToList) and remove any mailbox that no longer needs the malware-filtering bypass. Run Get-ExoSecOpsOverrideRule | Select-Object -ExpandProperty SentTo to view current scope, then Set-SecOpsOverridePolicy -Identity SecOpsOverridePolicy -RemoveSentTo <mailbox> to narrow it." `
             -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
     }
 }
 
-foreach ($rule in $activePhishSimulationRules) {
+foreach ($rule in (@($activePhishSimulationRules) + @($unknownModePhishSimulationRules))) {
     $broadEntries = @($rule.SenderIpRanges | Where-Object { $_ -and (Test-METSenderIpRangeIsBroad -Entry $_) })
     if ($broadEntries.Count -gt 0) {
         $domainList = @($rule.Domains) -join ', '
+        $enforcementClause = if (Test-METOverrideModeIsUnknown -Rule $rule) {
+            ' Whether this rule is enforced was not established because Mode was not returned by Get-ExoPhishSimOverrideRule; it is flagged as a precaution rather than skipped, because an override this check cannot confirm is inactive is not assumed inactive.'
+        }
+        else { '' }
         New-METCheckResult -CheckId 'MET-EXO014' -Category EXO -Name 'Advanced Delivery Policy - Phishing Simulation Sender Scope' `
             -Result Warning -Severity Medium -AffectedObject "Phishing simulation override (domains: $domainList)" `
-            -Finding "The phishing simulation override for domain(s) $domainList includes overly broad SenderIpRanges entries: $($broadEntries -join ', '). Microsoft's own guidance warns that overly broad sending infrastructure here effectively bypasses spam filtering for any internet sender who impersonates the domain specified." `
+            -Finding "The phishing simulation override for domain(s) $domainList includes overly broad SenderIpRanges entries: $($broadEntries -join ', '). Microsoft's own guidance warns that overly broad sending infrastructure here effectively bypasses spam filtering for any internet sender who impersonates the domain specified.$enforcementClause" `
             -Recommendation "Narrow SenderIpRanges on the override for $domainList to the specific IP addresses or CIDR ranges published by the simulation vendor - avoid CIDR blocks wider than /16 and explicit ranges spanning more than 65,536 addresses. Run Get-ExoPhishSimOverrideRule | Set-ExoPhishSimOverrideRule -RemoveSenderIpRanges <range> to remove an overly broad entry." `
             -ReferenceUrl 'https://learn.microsoft.com/en-us/defender-office-365/advanced-delivery-policy-configure'
     }

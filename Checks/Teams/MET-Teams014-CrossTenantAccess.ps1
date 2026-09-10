@@ -1,5 +1,3 @@
-$graphAvailable = $true
-$graphErrorDetail = $null
 $defaultPolicy = $null
 $authPolicy = $null
 
@@ -9,32 +7,57 @@ $authPolicy = $null
 # default policy, so per CLAUDE.md's bar for a direct Graph dependency this is justified -
 # but it must still degrade non-fatally to NotApplicable rather than aborting the run,
 # mirroring Expand-METGroupMembership's try/catch pattern.
-try {
-    if (-not (Get-Command -Name Get-MgPolicyCrossTenantAccessPolicyDefault -ErrorAction SilentlyContinue)) {
-        throw 'Get-MgPolicyCrossTenantAccessPolicyDefault cmdlet not found - the Microsoft.Graph.Identity.SignIns module is not installed/imported or Microsoft Graph is not connected'
-    }
-    $defaultPolicy = Get-MgPolicyCrossTenantAccessPolicyDefault -ErrorAction Stop
+#
+# Two distinct "could not run" cases, deliberately reported differently:
+#   1. Graph was never connected (-SkipGraph, the Microsoft.Graph.Identity.SignIns module
+#      absent, or the known EXO/Graph MSAL conflict at Connect-METSession). This is an
+#      expected, documented degradation - the reason goes in Finding, NOT the Error field,
+#      so a routine -SkipGraph run does not park this check in the report's Error bucket.
+#   2. Graph is connected but a policy call failed (most often a missing Policy.Read.All
+#      scope). That is an unexpected failure worth surfacing, so the Error field is set.
+$graphCmdletsAvailable =
+    [bool](Get-Command -Name Get-MgPolicyCrossTenantAccessPolicyDefault -ErrorAction SilentlyContinue) -and
+    [bool](Get-Command -Name Get-MgPolicyAuthorizationPolicy -ErrorAction SilentlyContinue)
 
-    if (-not (Get-Command -Name Get-MgPolicyAuthorizationPolicy -ErrorAction SilentlyContinue)) {
-        throw 'Get-MgPolicyAuthorizationPolicy cmdlet not found - the Microsoft.Graph.Identity.SignIns module is not installed/imported or Microsoft Graph is not connected'
-    }
-    $authPolicy = Get-MgPolicyAuthorizationPolicy -ErrorAction Stop
-}
-catch {
-    $graphAvailable = $false
-    $graphErrorDetail = $_.ToString()
-    Write-Verbose "Cross-tenant access policy retrieval via Microsoft Graph failed: $_"
-}
-
-if (-not $graphAvailable) {
+if (-not $graphCmdletsAvailable) {
     New-METCheckResult -CheckId 'MET-Teams014' -Category Teams `
         -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
         -Result NotApplicable -Severity Medium `
         -AffectedObject 'Cross-Tenant Access Policy' `
-        -Finding 'Microsoft Graph is unavailable, so the Entra ID cross-tenant access default policy and authorization policy could not be retrieved and this check could not run. This check requires Connect-METSession to have connected Microsoft Graph (i.e. run without -SkipGraph) and the Microsoft.Graph.Identity.SignIns module installed.' `
-        -Recommendation 'Run Connect-METSession without -SkipGraph, ensure the Microsoft.Graph.Identity.SignIns module (2.x) is installed, and re-run this check.' `
+        -Finding 'Microsoft Graph was not connected for this run, so the Entra ID cross-tenant access default policy and authorization policy could not be retrieved and this check could not run. This is not a failure - it is skipped whenever Connect-METSession runs with -SkipGraph, without the Microsoft.Graph.Identity.SignIns module installed, or when the Graph connection could not be established.' `
+        -Recommendation 'To include this check, run Connect-METSession without -SkipGraph, with the Microsoft.Graph.Identity.SignIns module (2.x) installed and the Policy.Read.All scope consented, then re-run.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/graph/api/crosstenantaccesspolicy-get'
+    return
+}
+
+try {
+    $defaultPolicy = Get-MgPolicyCrossTenantAccessPolicyDefault -ErrorAction Stop
+    $authPolicy = Get-MgPolicyAuthorizationPolicy -ErrorAction Stop
+}
+catch {
+    Write-Verbose "Cross-tenant access policy retrieval via Microsoft Graph failed: $_"
+
+    if ($_.Exception -is [System.Management.Automation.CommandNotFoundException]) {
+        # The cmdlet resolved a moment ago but the call reports it as unknown - treat this
+        # as Graph-not-connected (case 1), not a check error.
+        New-METCheckResult -CheckId 'MET-Teams014' -Category Teams `
+            -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
+            -Result NotApplicable -Severity Medium `
+            -AffectedObject 'Cross-Tenant Access Policy' `
+            -Finding 'Microsoft Graph was not connected for this run, so the Entra ID cross-tenant access default policy and authorization policy could not be retrieved and this check could not run. This is not a failure - it is skipped whenever Connect-METSession runs with -SkipGraph, without the Microsoft.Graph.Identity.SignIns module installed, or when the Graph connection could not be established.' `
+            -Recommendation 'To include this check, run Connect-METSession without -SkipGraph, with the Microsoft.Graph.Identity.SignIns module (2.x) installed and the Policy.Read.All scope consented, then re-run.' `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/graph/api/crosstenantaccesspolicy-get'
+        return
+    }
+
+    New-METCheckResult -CheckId 'MET-Teams014' -Category Teams `
+        -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
+        -Result NotApplicable -Severity Medium `
+        -AffectedObject 'Cross-Tenant Access Policy' `
+        -Finding 'Microsoft Graph is connected, but retrieving the Entra ID cross-tenant access default policy or authorization policy failed, so this check could not run. The signed-in identity most likely lacks the Policy.Read.All scope.' `
+        -Recommendation 'Grant the Policy.Read.All scope to the identity MET connects with, then re-run. In the Entra admin center the same settings are under External Identities > Cross-tenant access settings.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/graph/api/crosstenantaccesspolicy-get' `
-        -ErrorMessage $graphErrorDetail
+        -ErrorMessage $_.ToString()
     return
 }
 

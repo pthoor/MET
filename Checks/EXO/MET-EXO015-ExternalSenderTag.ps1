@@ -19,7 +19,23 @@ finally {
     $ErrorActionPreference = $previousErrorActionPreference
 }
 
-if ($config.Enabled -eq $true) {
+if (-not $config) {
+    $enabledUnknown = $true
+}
+else {
+    $enabledProperty = $config.PSObject.Properties['Enabled']
+    $enabledUnknown = -not $enabledProperty -or $null -eq $enabledProperty.Value
+}
+
+if ($enabledUnknown) {
+    New-METCheckResult -CheckId 'MET-EXO015' -Category EXO -Name 'External Sender Warning Tag' `
+        -Result Warning -Severity Medium -AffectedObject 'External Sender Tag Configuration' `
+        -Finding 'The Enabled property was not returned by Get-ExternalInOutlook, so whether external sender tagging is on was not established. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the tag on from one with it switched off.' `
+        -Recommendation 'Confirm the setting directly with: Get-ExternalInOutlook | Format-List Enabled. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-externalinoutlook' `
+        -ErrorMessage 'Get-ExternalInOutlook did not return an Enabled value.'
+}
+elseif ($config.Enabled -eq $true) {
     if ($config.AllowList -and $config.AllowList.Count -gt 0) {
         $finding = "External sender tagging is enabled. $($config.AllowList.Count) sender(s)/domain(s) are exempted from the tag via the allow list."
     }

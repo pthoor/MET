@@ -80,7 +80,13 @@ Describe 'MET-Teams008 App Permission Policy' {
         It 'Returns Warning instead of an unhandled error' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'Could not retrieve'
+        }
+
+        It 'Records the retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Error   | Should -Match 'Could not retrieve Teams app permission policies'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
+            $results[0].Result  | Should -Not -Be 'Pass'
         }
     }
 }

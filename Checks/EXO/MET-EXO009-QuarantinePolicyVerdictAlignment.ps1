@@ -102,6 +102,7 @@ try {
 }
 catch {
     Write-Verbose "MET-EXO009: Get-SafeAttachmentPolicy unavailable - may not be MDO licensed"
+    $null = $retrievalErrors.Add("Unable to retrieve Safe Attachments policies. $($_.ToString())")
 }
 
 if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {
@@ -114,6 +115,7 @@ if ($retrievalErrors.Count -gt 0 -and $assignments.Count -eq 0) {
 }
 
 $fails = [System.Collections.Generic.List[string]]::new()
+$permissionWarnings = [System.Collections.Generic.List[string]]::new()
 
 foreach ($a in $assignments) {
     if ($a.Verdict -notin $restrictedVerdicts) { continue }
@@ -124,17 +126,70 @@ foreach ($a in $assignments) {
         continue
     }
 
-    if ($qp.EndUserQuarantinePermissions.PermissionToRelease) {
+    # Get-QuarantinePolicy returns EndUserQuarantinePermissions as a formatted string, so
+    # $qp.EndUserQuarantinePermissions.PermissionToRelease is always $null regardless of
+    # the real value. Get-METEndUserQuarantinePermission parses the string; it returns
+    # $null (and .PermissionToRelease returns $null) when nothing could be read. Distinguish
+    # "not returned" from "returned and false" before branching, so an unobserved permission
+    # cannot be reported as a prevented one.
+    $permissions = Get-METEndUserQuarantinePermission -QuarantinePolicy $qp
+
+    if ($null -eq $permissions -or $null -eq $permissions.PermissionToRelease) {
+        $null = $permissionWarnings.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses quarantine tag '$($a.Tag)' whose EndUserQuarantinePermissions.PermissionToRelease was not returned by Get-QuarantinePolicy, so whether users can self-release quarantined messages via this tag was not established")
+        continue
+    }
+
+    if ($permissions.PermissionToRelease) {
         $null = $fails.Add("Policy '$($a.Source)': $($a.Verdict) verdict uses '$($a.Tag)' which allows users to self-release quarantined messages")
     }
 }
 
 if ($fails.Count -gt 0) {
+    # A confirmed failure on one assignment must not swallow an unconfirmed
+    # permission on a different one, or a retrieval failure on a different policy
+    # family - the reader still needs to know that second signal was never
+    # established, distinct from the confirmed failure so it is not mistaken for one.
+    $finding = $fails -join '; '
+    $failErrorParts = [System.Collections.Generic.List[string]]::new()
+    if ($permissionWarnings.Count -gt 0) {
+        $finding += ' Additionally, the following have an unconfirmed release permission rather than a confirmed failure: ' + ($permissionWarnings -join '; ') + '.'
+        $failErrorParts.Add("Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ').")
+    }
+    if ($retrievalErrors.Count -gt 0) {
+        $finding += ' Additionally, one or more filter policy types could not be retrieved, so any verdicts they carry are unverified rather than a confirmed failure: ' + ($retrievalErrors -join '; ') + '.'
+        $failErrorParts.Add($retrievalErrors -join '; ')
+    }
+    $failErrorMessage = if ($failErrorParts.Count -gt 0) { $failErrorParts -join "`n" } else { $null }
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
         -Result Fail -Severity High -AffectedObject 'Quarantine Tag Assignments' `
-        -Finding ($fails -join '; ') `
+        -Finding $finding `
         -Recommendation 'For Malware and High-Confidence Phish verdicts, assign a quarantine policy with PermissionToRelease disabled. Use AdminOnlyAccessPolicy or a custom policy with equivalent restrictions.' `
-        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies'
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage $failErrorMessage
+}
+elseif ($permissionWarnings.Count -gt 0) {
+    $finding = ($permissionWarnings -join '; ') +
+        '. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a quarantine policy that prevents self-release from one that allows it.'
+    if ($retrievalErrors.Count -gt 0) {
+        $finding += " Additionally, one or more filter policy types could not be retrieved: $($retrievalErrors -join '; ')."
+    }
+    New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
+        -Result Warning -Severity High -AffectedObject 'Quarantine Tag Assignments' `
+        -Finding $finding `
+        -Recommendation 'Confirm the setting directly with: Get-QuarantinePolicy -Identity <tag name> | Select-Object -ExpandProperty EndUserQuarantinePermissions. An absent property usually means an ExchangeOnlineManagement version that does not expose it - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage "Get-QuarantinePolicy did not return EndUserQuarantinePermissions.PermissionToRelease for: $($permissionWarnings -join '; ')."
+}
+elseif ($retrievalErrors.Count -gt 0) {
+    # A partial retrieval failure must not score as a clean Pass. Some policy families
+    # were enumerated and some were not, so the verdicts carried by the missing ones
+    # went unassessed - the exact exposure this check exists to find.
+    New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `
+        -Result Warning -Severity High -AffectedObject 'Quarantine Tag Assignments' `
+        -Finding "No self-release exposure was found in the filter policies that could be read, but one or more policy types could not be retrieved, so verdict alignment is only partially verified: $($retrievalErrors -join '; ')" `
+        -Recommendation 'Ensure the account has Security Reader or higher permissions across all filter policy types, then rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/mdo-quarantinepolicies' `
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-EXO009' -Category EXO -Name 'Quarantine Policy Verdict Alignment' `

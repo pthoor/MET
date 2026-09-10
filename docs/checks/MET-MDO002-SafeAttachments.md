@@ -4,10 +4,13 @@
 
 ## What it checks
 
-Verifies that Safe Attachments policies are enabled and that the action is not `Allow`:
+Verifies that Safe Attachments policies are enabled and that the action is not `Allow`, and separately reports the tenant-wide toggle that extends Safe Attachments beyond email:
 
 - `Enable` - policy is active
 - `Action` - must be `Block` or `DynamicDelivery` (not `Allow`)
+- `EnableATPForSPOTeamsODB` (`Get-AtpPolicyForO365`) - Safe Attachments protection for SharePoint, OneDrive and Microsoft Teams file sharing
+
+The global toggle is always reported, including when it is correctly enabled. It is a separate control plane from the per-policy email settings, so a failure to read it is surfaced as its own result rather than leaving the report looking like a complete Safe Attachments assessment.
 
 ## Why it matters
 
@@ -15,10 +18,22 @@ Safe Attachments detonates email attachments in a sandbox before they reach the 
 
 ## Pass / Fail / Warning
 
+Per Safe Attachments policy:
+
 | Result | Condition |
 |---|---|
 | Pass | Policy enabled with `Block` or `DynamicDelivery` |
 | Fail | Policy disabled, action is `Allow`, or no policies exist |
+| Warning | `Enable` was not returned for this policy, so whether Safe Attachments is enabled was not established; or `Enable` is confirmed `$true` but `Action` was not returned, so whether attachments are blocked, dynamically delivered, or allowed through was not established |
+
+For the global SharePoint / OneDrive / Teams setting:
+
+| Result | Condition |
+|---|---|
+| Pass | `EnableATPForSPOTeamsODB` is `$true` |
+| Fail | `EnableATPForSPOTeamsODB` is `$false` |
+| Warning | `Get-AtpPolicyForO365` could not be read - the setting was not established; the failure is carried in `Error` |
+| NotApplicable | The policy returned no `EnableATPForSPOTeamsODB` property, or returned it present but `$null` - the setting was not established; recorded in `Error` |
 
 ## Recommendation
 

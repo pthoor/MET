@@ -8,16 +8,19 @@ BeforeAll {
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-MalwareFilterRule { [CmdletBinding()] param() }
     function Get-MalwareFilterPolicy { [CmdletBinding()] param() }
     function Get-HostedContentFilterRule { [CmdletBinding()] param() }
     function Get-HostedContentFilterPolicy { [CmdletBinding()] param() }
     function Get-HostedOutboundSpamFilterRule { [CmdletBinding()] param() }
     function Get-HostedOutboundSpamFilterPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
-    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-EOPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-MgGroup { [CmdletBinding()] param([string]$Filter,[int]$Top) }
+    function Get-MgGroupTransitiveMember { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
+    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
+    function Get-UnifiedGroupLinks { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
 
     function New-Rule {
         param([string]$Name,[string]$Link,[int]$Priority=0,[string[]]$Domains,[switch]$Outbound)
@@ -39,6 +42,7 @@ Describe 'MET-MDO005 anti-malware effective coverage' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'}; [PSCustomObject]@{PrimarySmtpAddress='b@other.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
     It 'does not require legacy admin notifications and ignores a shadowed weak policy' {
         $strong=New-Rule strong strong 0
@@ -70,6 +74,7 @@ Describe 'MET-MDO006 inbound anti-spam effective coverage' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@sub.contoso.com';RecipientTypeDetails='UserMailbox'}; [PSCustomObject]@{PrimarySmtpAddress='b@other.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
     }
     It 'applies domain and catch-all policies by priority and reports only affected recipients' {
         $domain=New-Rule domain domain 0 @('contoso.com'); $domain | Add-Member HostedContentFilterPolicy domain
@@ -100,6 +105,7 @@ Describe 'MET-MDO007 outbound anti-spam effective coverage' {
         }
         $result=& "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
         $result.Result | Should -Be Fail
+        $result.Severity | Should -Be 'High'
         $result.Metadata.AffectedRecipients | Should -Be @('b@other.com')
     }
     It 'reports Automatic as Warning and does not require legacy notification recipients' {
@@ -118,6 +124,7 @@ Describe 'MET-MDO005 common attachment filter file types' {
         $script:METContext=$null
         Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
         Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
         Mock Get-MalwareFilterRule { @() }
     }
 
@@ -179,6 +186,158 @@ Describe 'MET-MDO005 common attachment filter file types' {
             $result.Result | Should -Be 'Pass'
             $result.Finding | Should -Not -Match 'file type list is empty'
             $result.Finding | Should -Not -Match 'does not block high-risk file types'
+        }
+    }
+}
+
+Describe 'MET-MDO005/006/007 absent-property handling' {
+    BeforeEach {
+        $script:METContext = $null
+        Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
+    }
+
+    # ZapEnabled and EnableFileFilter are read with -not, which collapses an absent
+    # property into $false.
+    Context 'MET-MDO005: the effective anti-malware policy omits ZapEnabled and EnableFileFilter' {
+        BeforeEach {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+        }
+
+        It 'Does not return Pass on settings it never observed' {
+            $result = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Not -Be 'Pass'
+        }
+
+        # The check now branches on absence before the falsy test, so it states that
+        # ZapEnabled and EnableFileFilter were not returned rather than asserting they
+        # are disabled. See Tests/Unit/Checks.MDO005.Tests.ps1 for the mutation-verified
+        # coverage of this fix; this test keeps the verdict assertion this file already
+        # carried for the two properties.
+        It 'States both settings were not returned rather than asserting they are disabled' {
+            $result = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $result.Result | Should -Be 'Fail'
+            $result.Finding | Should -Match 'ZapEnabled was not returned'
+            $result.Finding | Should -Match 'EnableFileFilter was not returned'
+            $result.Finding | Should -Not -Match 'ZAP for malware is disabled'
+            $result.Finding | Should -Not -Match 'Common attachment filter is disabled'
+        }
+    }
+
+    # BulkThreshold is the one inbound anti-spam setting tested with a numeric comparison
+    # rather than an equality check. $null -gt 6 is $false, so an absent threshold raises
+    # no issue at all and the policy is graded compliant on a value never read.
+    Context 'MET-MDO006: an otherwise compliant anti-spam policy omits BulkThreshold' {
+        BeforeEach {
+            Mock Get-HostedContentFilterRule { @() }
+            Mock Get-HostedContentFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; SpamAction='MoveToJmf'; HighConfidenceSpamAction='Quarantine'
+                    PhishSpamAction='Quarantine'; HighConfidencePhishAction='Quarantine'
+                    HighConfidencePhishQuarantineTag='AdminOnlyAccessPolicy'; AllowedSenders=@(); AllowedSenderDomains=@() }
+            }
+        }
+
+        It 'Does not report the recipient as fully protected on a threshold that was never observed' {
+            $result = & "$root/Checks/MDO/MET-MDO006-AntiSpamInbound.ps1"
+            $result.Result | Should -Not -Be 'Pass'
+            $result.Finding | Should -Not -Match 'Bulk complaint level threshold'
+            $result.Finding | Should -Match 'BulkThreshold was not returned'
+        }
+    }
+
+    # The outbound check is the one that gets this right: AutoForwardingMode is compared
+    # against the documented value set rather than tested for truth, so an absent value
+    # falls outside it and is surfaced instead of being read as Off.
+    Context 'MET-MDO007: the effective outbound policy omits AutoForwardingMode' {
+        BeforeEach {
+            Mock Get-HostedOutboundSpamFilterRule { @() }
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ActionWhenThresholdReached='BlockUser' }
+            }
+        }
+
+        It 'Returns Warning rather than reading the absent value as disabled forwarding' {
+            $result = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $result.Result | Should -Be 'Warning'
+            $result.Severity | Should -Be 'High'
+            $result.Finding | Should -Match 'system-controlled rather than explicitly disabled'
+            $result.Finding | Should -Not -Match 'Automatic external forwarding is enabled'
+        }
+    }
+}
+
+
+Describe 'MET-MDO005/007 inverted-sense regression guards' {
+    BeforeEach {
+        $script:METContext = $null
+        Mock Get-EXOMailbox { [PSCustomObject]@{PrimarySmtpAddress='a@contoso.com';RecipientTypeDetails='UserMailbox'} }
+        Mock Get-ATPProtectionPolicyRule { @() }
+        Mock Get-EOPProtectionPolicyRule { @() }
+    }
+
+    # ZapEnabled and EnableFileFilter are both read with -not, so the secure value is
+    # $true and the issue text is the negative. Reading either as "the feature is off"
+    # inverts the verdict, so both senses are pinned for both properties.
+    Context 'MET-MDO005 ZapEnabled and EnableFileFilter' {
+        It 'Raises each issue only when its property is false' {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$true; EnableFileFilter=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $secure = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'ZAP for malware is disabled'
+            $secure.Finding | Should -Not -Match 'Common attachment filter is disabled'
+
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$false; EnableFileFilter=$false; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $insecure = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'ZAP for malware is disabled'
+            $insecure.Finding | Should -Match 'Common attachment filter is disabled'
+        }
+
+        It 'Keeps the two properties independent so one cannot stand in for the other' {
+            Mock Get-MalwareFilterRule { @() }
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$false; EnableFileFilter=$true; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $zapOnly = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $zapOnly.Finding | Should -Match 'ZAP for malware is disabled'
+            $zapOnly.Finding | Should -Not -Match 'Common attachment filter is disabled'
+
+            Mock Get-MalwareFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; ZapEnabled=$true; EnableFileFilter=$false; FileTypeAction='Reject'; QuarantineTag='AdminOnlyAccessPolicy' }
+            }
+            $filterOnly = & "$root/Checks/MDO/MET-MDO005-AntiMalware.ps1"
+            $filterOnly.Finding | Should -Match 'Common attachment filter is disabled'
+            $filterOnly.Finding | Should -Not -Match 'ZAP for malware is disabled'
+        }
+    }
+
+    # AutoForwardingMode is the inverted one in the outbound check: 'On' is the insecure
+    # value while every other setting it grades is secure when switched on.
+    Context 'MET-MDO007 AutoForwardingMode' {
+        It 'Flags automatic forwarding only when AutoForwardingMode is On' {
+            Mock Get-HostedOutboundSpamFilterRule { @() }
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; AutoForwardingMode='Off'; ActionWhenThresholdReached='BlockUser' }
+            }
+            $secure = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $secure.Result | Should -Be 'Pass'
+            $secure.Finding | Should -Not -Match 'Automatic external forwarding is enabled'
+
+            Mock Get-HostedOutboundSpamFilterPolicy {
+                [PSCustomObject]@{ Name='Default'; IsDefault=$true; AutoForwardingMode='On'; ActionWhenThresholdReached='BlockUser' }
+            }
+            $insecure = & "$root/Checks/MDO/MET-MDO007-AntiSpamOutbound.ps1"
+            $insecure.Result | Should -Be 'Fail'
+            $insecure.Finding | Should -Match 'Automatic external forwarding is enabled'
         }
     }
 }

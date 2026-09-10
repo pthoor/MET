@@ -14,7 +14,7 @@ if ($allMailboxes.Count -eq 0) {
 $errors = [System.Collections.Generic.List[string]]::new()
 try { $rules = @(Get-HostedContentFilterRule -ErrorAction Stop) } catch { $rules=@(); $errors.Add("Unable to retrieve inbound anti-spam rules. $($_.ToString())") }
 try { $policies = @(Get-HostedContentFilterPolicy -ErrorAction Stop) } catch { $policies=@(); $errors.Add("Unable to retrieve inbound anti-spam policies. $($_.ToString())") }
-try { $presets = @(Get-ATPProtectionPolicyRule -ErrorAction Stop) } catch { $presets=@(); $errors.Add("Unable to retrieve preset policy rules. $($_.ToString())") }
+try { $presets = @(Get-EOPProtectionPolicyRule -ErrorAction Stop) } catch { $presets=@(); $errors.Add("Unable to retrieve preset policy rules. $($_.ToString())") }
 $groupCache = if ($METContext -and $METContext.GroupMembers) { $METContext.GroupMembers } else { @{} }
 $resolution = Resolve-METEffectivePolicy -Subjects $allMailboxes -GroupCache $groupCache -Rules $rules -Policies $policies -PresetRules $presets -IncludePresets -PolicyLinkProperty HostedContentFilterPolicy -ProtectionType 'inbound anti-spam' -RetrievalErrors $errors
 $evaluate = {
@@ -31,4 +31,14 @@ $evaluate = {
     if (@($policy.AllowedSenderDomains).Count) { $issues.Add("Allowed sender domains contains $(@($policy.AllowedSenderDomains).Count) entry or entries") }
     $issues.ToArray()
 }
-New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO006' -Name 'Anti-Spam Inbound Effective Coverage' -ProtectionType 'Inbound Anti-Spam' -Severity Medium -Subjects $allMailboxes -Resolution $resolution -GetPolicyIssues $evaluate -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-antispam' -Recommendation 'Apply a Standard/Strict preset or compliant custom inbound anti-spam policy to every affected recipient. Quarantine high-confidence spam and phishing, use BCL 6 or lower, and remove unsafe sender or domain allow entries.'
+$warnings = {
+    param($policy, $policyType)
+    if (-not $policy) { return }
+    # $null -gt 6 is $false, so an absent or present-but-null BulkThreshold raises no
+    # issue in $evaluate above and would otherwise pass unassessed.
+    $bulkThresholdProperty = $policy.PSObject.Properties['BulkThreshold']
+    if (-not $bulkThresholdProperty -or $null -eq $bulkThresholdProperty.Value) {
+        'BulkThreshold was not returned by Get-HostedContentFilterPolicy, so the bulk complaint level could not be compared against the recommended maximum of 6'
+    }
+}
+New-METEffectivePolicyCoverageResult -CheckId 'MET-MDO006' -Name 'Anti-Spam Inbound Effective Coverage' -ProtectionType 'Inbound Anti-Spam' -Severity Medium -Subjects $allMailboxes -Resolution $resolution -GetPolicyIssues $evaluate -GetPolicyWarnings $warnings -RetrievalErrors $errors -ReferenceUrl 'https://aka.ms/mdo-antispam' -Recommendation 'Apply a Standard/Strict preset or compliant custom inbound anti-spam policy to every affected recipient. Quarantine high-confidence spam and phishing, use BCL 6 or lower, and remove unsafe sender or domain allow entries.'

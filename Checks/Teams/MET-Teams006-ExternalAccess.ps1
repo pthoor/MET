@@ -1,4 +1,5 @@
 $issues = [System.Collections.Generic.List[string]]::new()
+$retrievalErrors = [System.Collections.Generic.List[string]]::new()
 
 # Check Teams federation (external access) allow-list scope
 try {
@@ -37,7 +38,7 @@ try {
     }
 }
 catch {
-    $issues.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve tenant federation configuration: $_"
 }
 
@@ -47,7 +48,16 @@ if ($issues.Count -gt 0) {
         -Result $result -Severity High -AffectedObject 'Teams External Access Configuration' `
         -Finding ($issues -join '; ') `
         -Recommendation 'Restrict AllowedDomains to a specific, reviewed allow-list of trusted partner domains instead of AllowAllKnownDomains, and configure a BlockedDomains deny-list as a defense-in-depth backstop. Disable AllowTeamsConsumer unless there is a specific business need for staff to chat with personal Teams/Skype accounts; if it must stay enabled, run Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false so personal/consumer accounts cannot discover or initiate contact with your organization, and consider -RestrictTeamsConsumerToExternalUserProfiles $true to further narrow exposure. Run: Set-CsTenantFederationConfiguration -AllowedDomains <AllowedDomainsObject> to scope federation, or -AllowFederatedUsers $false to disable entirely.' `
-        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration'
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration' `
+        -ErrorMessage ($retrievalErrors -join "`n")
+}
+elseif ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams006' -Category Teams -Name 'External Access / Federation Allow-List' `
+        -Result Warning -Severity High -AffectedObject 'Teams External Access Configuration' `
+        -Finding 'The Teams tenant federation configuration could not be read, so the federation allow-list scope, consumer-account federation and the blocked-domain deny-list were not assessed.' `
+        -Recommendation 'Ensure the MicrosoftTeams module is installed and the session has permission to read the tenant federation configuration, then rerun the assessment.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration' `
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams006' -Category Teams -Name 'External Access / Federation Allow-List' `

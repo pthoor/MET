@@ -210,8 +210,14 @@ test.describe('card expansion', () => {
     // point it must not silently lose its ERROR badge and go back to looking like a resolved risk.
     // Simulated here via localStorage (the mechanism Accept Risk itself writes to) since the
     // fixture's only Error case, MET-Teams014, is NotApplicable and has no Accept Risk button.
+    // Keyed on resultKey (checkId + '|' + name + '|' + affectedObject), not on the
+    // bare CheckId - name was folded in because checkId + affectedObject alone still collides
+    // for checks like MET-EXO006 whose sections share one AffectedObject.
     await page.evaluate(() => {
-      localStorage.setItem('MET_accepted_contoso.onmicrosoft.com_MET-Teams014', 'Pre-existing acceptance');
+      localStorage.setItem(
+        'MET_accepted_contoso.onmicrosoft.com_MET-Teams014|Cross-Tenant Access|Cross-tenant access policy',
+        'Pre-existing acceptance'
+      );
     });
     await page.reload();
     await page.locator('.tab[data-tab="Accepted"]').click();
@@ -312,5 +318,94 @@ test.describe('offline self-containment', () => {
 
     const external = requests.filter((url) => !url.endsWith('/report.html'));
     expect(external, `unexpected sub-resource requests: ${external.join(', ')}`).toEqual([]);
+  });
+});
+
+// Injection safety at the DOM level. A string-level assertion cannot prove this: the
+// payload legitimately appears inside the embedded CHECKS JSON, and the question is
+// only ever whether the renderer turns it into markup. Scheme validation on a
+// reference URL is not enough on its own - new URL() accepts quotes and angle
+// brackets in a path, so an https: URL can still close an href attribute.
+test.describe('injection safety', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/report-hostile.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+  });
+
+  test('no payload from any check field becomes a live element', async ({ page }) => {
+    await page.locator('#btn-collapse-all').click();
+    await expect(page.locator('img')).toHaveCount(0);
+    await expect(page.locator('[onerror]')).toHaveCount(0);
+  });
+
+  test('no injected handler executes, on any tab', async ({ page }) => {
+    for (const tab of ['all', 'mdo', 'exo', 'teams', 'controls']) {
+      const locator = page.locator(`.tab[data-tab="${tab}"]`);
+      if (await locator.count()) await locator.click();
+    }
+    const flags = await page.evaluate(() =>
+      Object.keys(window).filter((key) => key.startsWith('__xss'))
+    );
+    expect(flags).toEqual([]);
+  });
+
+  test('a hostile reference URL is escaped rather than emitted raw', async ({ page }) => {
+    const hrefs = await page
+      .locator('a.btn-docs')
+      .evaluateAll((anchors) => anchors.map((a) => a.getAttribute('href')));
+    for (const href of hrefs) {
+      expect(href).not.toContain('<img');
+      expect(href).not.toContain('"');
+    }
+  });
+
+  test('a javascript: or data: reference URL never reaches a live href', async ({ page }) => {
+    // Both tabs that render a reference link: the card's Microsoft Docs button and the
+    // All Controls table's link column. Each neutralised URL becomes '#'.
+    await page.locator('#btn-collapse-all').click();
+    await page.locator('.tab[data-tab="Controls"]').click();
+    await expect(page.locator('#ctrl-ref')).toHaveClass(/visible/);
+
+    const hrefs = await page
+      .locator('a[href]')
+      .evaluateAll((anchors) => anchors.map((a) => a.getAttribute('href')));
+
+    expect(hrefs.length).toBeGreaterThan(0);
+    for (const href of hrefs) {
+      expect(href).not.toMatch(/^\s*javascript:/i);
+      expect(href).not.toMatch(/^\s*data:/i);
+    }
+    expect(hrefs).toContain('#');
+
+    // Nothing the anchors carry has run, either.
+    const flags = await page.evaluate(() =>
+      Object.keys(window).filter((key) => key.startsWith('__xss'))
+    );
+    expect(flags).toEqual([]);
+  });
+
+  test('a hostile field is rendered as visible text, not dropped and not parsed', async ({ page }) => {
+    // Escaping that silently drops the payload would pass every "no live element" assertion
+    // above while hiding the very value an operator opened the report to read.
+    const card = page.locator('.card[data-check-id="MET-MDO001"]');
+    await card.locator('.card-header').click();
+
+    await expect(card.locator('.field-value').first()).toHaveText(
+      'Policy "><img src=n2 onerror="window.__xssAffected=1">'
+    );
+    await expect(card.locator('.card-name')).toHaveText(
+      'Href breakout <img src=n1 onerror="window.__xssName=1">'
+    );
+  });
+
+  test('an unrecognised Result or Severity still renders a visible badge', async ({ page }) => {
+    // Breakout payloads reduce to the 'unknown' class; without a base background the
+    // badge would render white-on-white and the finding would be invisible.
+    const badges = page.locator('#cards-container .sev-pill');
+    await expect(badges.first()).toBeVisible();
+    const background = await badges
+      .first()
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(background).not.toBe('rgba(0, 0, 0, 0)');
   });
 });

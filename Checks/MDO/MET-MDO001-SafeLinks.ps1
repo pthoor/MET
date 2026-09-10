@@ -25,6 +25,29 @@ if ($allMailboxes.Count -eq 0) {
     return
 }
 
+function Add-METSafeLinksPropertyIssue {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [System.Collections.Generic.List[string]] $Issues,
+        [Parameter(Mandatory)] [object] $Policy,
+        [Parameter(Mandatory)] [string] $PropertyName,
+        [Parameter(Mandatory)] [string] $NotEstablishedText,
+        [Parameter(Mandatory)] [string] $FalseText,
+        [switch] $InsecureWhenTrue
+    )
+
+    # A property that is absent, or present but $null, was never observed. Reading
+    # it as $false (or, for the insecure-when-true properties, as $true) would
+    # fabricate a verdict this check did not establish.
+    $property = $Policy.PSObject.Properties[$PropertyName]
+    if (-not $property -or $null -eq $property.Value) {
+        $Issues.Add($NotEstablishedText)
+        return
+    }
+
+    $isIssue = if ($InsecureWhenTrue) { [bool]$property.Value } else { -not $property.Value }
+    if ($isIssue) { $Issues.Add($FalseText) }
+}
+
 $evaluate = {
     param($Policy, $PolicyType)
     $issues = [System.Collections.Generic.List[string]]::new()
@@ -33,16 +56,34 @@ $evaluate = {
         return $issues.ToArray()
     }
 
-    if (-not $Policy.EnableSafeLinksForEmail)  { $issues.Add('Safe Links for email is disabled') }
-    if (-not $Policy.EnableSafeLinksForOffice) { $issues.Add('Safe Links for Office apps is disabled') }
-    if (-not $Policy.TrackClicks)              { $issues.Add('Click tracking is disabled') }
-    if (-not $Policy.EnableForInternalSenders) { $issues.Add('Not applied to internal senders') }
-    if (-not $Policy.ScanUrls)                 { $issues.Add('Real-time URL scanning is disabled') }
-    if (-not $Policy.DeliverMessageAfterScan)  { $issues.Add('Messages delivered before URL scan completes') }
-    if ($Policy.AllowClickThrough)             { $issues.Add('Users can click through to blocked URLs') }
-    if ($PolicyType -ne 'BuiltIn' -and $Policy.DisableURLRewrite) {
-        $issues.Add('URL rewriting is disabled')
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'EnableSafeLinksForEmail' `
+        -NotEstablishedText 'EnableSafeLinksForEmail was not returned for this policy, so whether Safe Links is enabled for email was not established' `
+        -FalseText 'Safe Links for email is disabled'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'EnableSafeLinksForOffice' `
+        -NotEstablishedText 'EnableSafeLinksForOffice was not returned for this policy, so whether Safe Links is enabled for Office apps was not established' `
+        -FalseText 'Safe Links for Office apps is disabled'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'TrackClicks' `
+        -NotEstablishedText 'TrackClicks was not returned for this policy, so whether click tracking is enabled was not established' `
+        -FalseText 'Click tracking is disabled'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'EnableForInternalSenders' `
+        -NotEstablishedText 'EnableForInternalSenders was not returned for this policy, so whether the policy applies to internal senders was not established' `
+        -FalseText 'Not applied to internal senders'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'ScanUrls' `
+        -NotEstablishedText 'ScanUrls was not returned for this policy, so whether real-time URL scanning is enabled was not established' `
+        -FalseText 'Real-time URL scanning is disabled'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'DeliverMessageAfterScan' `
+        -NotEstablishedText 'DeliverMessageAfterScan was not returned for this policy, so whether messages are held until the URL scan completes was not established' `
+        -FalseText 'Messages delivered before URL scan completes'
+    Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'AllowClickThrough' `
+        -NotEstablishedText 'AllowClickThrough was not returned for this policy, so whether users can click through to blocked URLs was not established' `
+        -FalseText 'Users can click through to blocked URLs' -InsecureWhenTrue
+
+    if ($PolicyType -ne 'BuiltIn') {
+        Add-METSafeLinksPropertyIssue -Issues $issues -Policy $Policy -PropertyName 'DisableURLRewrite' `
+            -NotEstablishedText 'DisableURLRewrite was not returned for this policy, so whether URL rewriting is disabled was not established' `
+            -FalseText 'URL rewriting is disabled' -InsecureWhenTrue
     }
+
     $issues.ToArray()
 }
 

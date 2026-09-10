@@ -25,14 +25,17 @@ If a custom (admin-created) quarantine policy is mistakenly assigned to the Malw
 
 Earlier versions of this check also treated impersonation (`Impersonated User`/`Impersonated Domain`) as high-risk (Fail) and Phish/Mailbox Intelligence Phish/Spoof as medium-risk (Warning) if self-release was allowed. That contradicted Microsoft's own Strict preset, which uses full-access quarantine policies for all five of those verdicts - so the older logic flagged Microsoft's own recommended configuration as a misconfiguration on any tenant with Standard or Strict assigned to anyone. This was corrected in the 2026-08 quarantine-policy accuracy pass.
 
+`Get-QuarantinePolicy` returns `EndUserQuarantinePermissions` as a formatted string, not a typed object, so `$policy.EndUserQuarantinePermissions.PermissionToRelease` is always `$null` regardless of the real setting. A revision that read it that way reported every restricted-verdict tag - built-ins included - as an unconfirmed permission on every tenant. The check now resolves `PermissionToRelease` through `Get-METEndUserQuarantinePermission`, which parses that string.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |
 |---|---|
 | Pass | Every non-preset policy's Malware and High-Confidence Phish verdict tags resolve to a quarantine policy with `PermissionToRelease = $false` (or no such assignment exists) |
-| Fail | A non-preset policy assigns Malware or High-Confidence Phish to a quarantine tag with `PermissionToRelease = $true`, or to a tag that does not exist; or filter policies could not be retrieved at all |
+| Fail | A non-preset policy assigns Malware or High-Confidence Phish to a quarantine tag with `PermissionToRelease = $true`, or to a tag that does not exist; or filter policies could not be retrieved at all. A confirmed failure on one assignment is reported alongside, and does not suppress, an unconfirmed permission on a different assignment or a retrieval failure on a different filter policy family - both are named in the Finding, clearly marked as unconfirmed/not-yet-retrieved rather than a second confirmed failure |
+| Warning | No confirmed self-release exposure was found, but `EndUserQuarantinePermissions.PermissionToRelease` was not returned by `Get-QuarantinePolicy` for one or more restricted-verdict tag assignments, so whether users can self-release via that tag was not established; or one or more filter policy types could not be retrieved at all, so verdict alignment is only partially verified |
 
-There is no Warning tier - the removed Medium-risk tier (Phish/Mailbox Intelligence Phish/Spoof) had no basis in Microsoft's own preset design and was dropped along with the incorrect High-risk classification of impersonation.
+The removed Medium-risk tier (Phish/Mailbox Intelligence Phish/Spoof) had no basis in Microsoft's own preset design and was dropped along with the incorrect High-risk classification of impersonation; the Warning tier above is unrelated to that removal - it exists solely for an unconfirmed `PermissionToRelease` or a partial retrieval failure, never for a verdict outside the restricted set.
 
 ## Recommendation
 

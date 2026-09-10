@@ -1,182 +1,40 @@
 ﻿BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
     . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
 
-    # Stub EXO/DNS cmdlets
-    function Get-AcceptedDomain              { [CmdletBinding()] param() }
-    function Resolve-DnsName                 { [CmdletBinding()] param([string]$Name,[string]$Type,[switch]$DnsOnly,[switch]$ErrorAction) }
-    function Resolve-METDnsName             { [CmdletBinding()] param([string]$Name,[string]$Type) }
+    # Stub EXO cmdlets
     function Get-DkimSigningConfig           { [CmdletBinding()] param() }
-    function Get-QuarantinePolicy            { [CmdletBinding()] param() }
+    function Get-QuarantinePolicy            { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
     function Get-TenantAllowBlockListItems   { [CmdletBinding()] param([string]$ListType,[string]$ListSubType) }
     function Get-ReportSubmissionPolicy      { [CmdletBinding()] param() }
     function Get-ReportSubmissionRule        { [CmdletBinding()] param() }
-    function Get-TransportRule               { [CmdletBinding()] param([string]$ResultSize) }
-}
 
-Describe 'MET-EXO001 DMARC' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO001-DMARC.ps1'
-    }
-
-    Context 'mail.onmicrosoft.com accepted domain' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.mail.onmicrosoft.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-        }
-
-        It 'Returns NotApplicable' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'NotApplicable'
-            $results[0].Severity | Should -Be 'Informational'
-        }
-    }
-
-    Context 'onmicrosoft domain without DMARC record' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.onmicrosoft.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-            Mock Resolve-METDnsName { throw 'DNS name not found' }
-        }
-
-        It 'Returns Warning with the lookup error instead of a false Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'DNS lookup failed'
-            $results[0].Error | Should -Match 'DNS name not found'
-        }
-    }
-}
-
-Describe 'MET-EXO002 DKIM' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO002-DKIM.ps1'
-    }
-
-    Context 'DKIM enabled with 2048-bit key and Valid status' {
-        BeforeAll {
-            Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 2048; Status = 'Valid' }
-            }
-        }
-        It 'Returns Pass' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
-        }
-    }
-
-    Context 'DKIM is disabled' {
-        BeforeAll {
-            Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $false; KeySize = 2048; Status = 'Valid' }
-            }
-        }
-        It 'Returns Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-        }
-    }
-
-    Context 'DKIM key is 1024-bit' {
-        BeforeAll {
-            Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 1024; Status = 'Valid' }
-            }
-        }
-        It 'Returns Fail and mentions key size' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-            $results[0].Finding | Should -Match '1024'
-        }
-    }
-
-    Context 'DKIM status is not Valid' {
-        BeforeAll {
-            Mock Get-DkimSigningConfig {
-                [PSCustomObject]@{ Domain = 'contoso.com'; Enabled = $true; KeySize = 2048; Status = 'CnameMissing' }
-            }
-        }
-        It 'Returns Fail and mentions status' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-            $results[0].Finding | Should -Match 'CnameMissing'
-        }
-    }
-
-    Context 'No DKIM configs found' {
-        BeforeAll { Mock Get-DkimSigningConfig { @() } }
-        It 'Returns Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-        }
-    }
-
-    Context 'Get-DkimSigningConfig throws' {
-        BeforeAll { Mock Get-DkimSigningConfig { throw 'Unauthorized' } }
-        It 'Returns Fail with Error populated' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-            $results[0].Error | Should -Not -BeNullOrEmpty
-        }
-    }
-}
-
-Describe 'MET-EXO003 SPF' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO003-SPF.ps1'
-    }
-
-    Context 'SPF lookup counting includes bare mechanisms and redirect' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-
-            Mock Resolve-METDnsName {
-                param([string]$Name, [string]$Type)
-
-                switch ($Name) {
-                    'contoso.com' {
-                        return [PSCustomObject]@{
-                            Strings = @('v=spf1 a mx include:_spf1.contoso.com include:_spf2.contoso.com include:_spf3.contoso.com include:_spf4.contoso.com include:_spf5.contoso.com redirect=_spf6.contoso.com -all')
-                        }
-                    }
-                    { $_ -match '^_spf[1-6]\.contoso\.com$' } {
-                        return [PSCustomObject]@{ Strings = @('v=spf1 a mx -all') }
-                    }
-                    default {
-                        return @()
-                    }
-                }
-            }
-        }
-
-        It 'Returns Warning for more than 10 lookups' {
-            $results = & $checkFile
-            $result = $results | Select-Object -First 1
-            $result.Result | Should -Be 'Warning'
-            $result.Finding | Should -Match 'exceeds 10 DNS lookups'
-        }
-    }
-
-    Context 'DNS lookup fails' {
-        BeforeAll {
-            Mock Get-AcceptedDomain {
-                [PSCustomObject]@{ DomainName = 'contoso.com'; Default = $true; DomainType = 'Authoritative' }
-            }
-            Mock Resolve-METDnsName { throw 'resolver unavailable' }
-        }
-
-        It 'Returns Warning with the lookup error instead of a false Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'DNS lookup failed'
-            $results[0].Error | Should -Match 'resolver unavailable'
-        }
+    # Get-QuarantinePolicy returns EndUserQuarantinePermissions as a formatted string,
+    # never a typed object and never an EndUserQuarantinePermissionsValue integer.
+    function New-METPermString {
+        param(
+            [bool] $PermissionToRelease        = $false,
+            [bool] $PermissionToRequestRelease = $false,
+            [bool] $PermissionToDelete         = $false,
+            [bool] $PermissionToPreview        = $false,
+            [bool] $PermissionToAllowSender    = $false,
+            [bool] $PermissionToBlockSender    = $false,
+            [bool] $PermissionToDownload       = $false,
+            [bool] $PermissionToViewHeader     = $false
+        )
+        @"
+[PermissionToViewHeader: $PermissionToViewHeader
+PermissionToDownload: $PermissionToDownload
+PermissionToAllowSender: $PermissionToAllowSender
+PermissionToBlockSender: $PermissionToBlockSender
+PermissionToRequestRelease: $PermissionToRequestRelease
+PermissionToRelease: $PermissionToRelease
+PermissionToPreview: $PermissionToPreview
+PermissionToDelete: $PermissionToDelete]
+"@
     }
 }
 
@@ -190,14 +48,14 @@ Describe 'MET-EXO004 Quarantine Policies' {
             Mock Get-QuarantinePolicy {
                 @(
                     [PSCustomObject]@{
-                        Name                              = 'AdminOnlyAccessPolicy'
-                        EndUserQuarantinePermissionsValue = 0
-                        ESNEnabled                         = $false
+                        Name                         = 'AdminOnlyAccessPolicy'
+                        EndUserQuarantinePermissions = (New-METPermString)
+                        ESNEnabled                   = $false
                     }
                     [PSCustomObject]@{
-                        Name                              = 'DefaultFullAccessPolicy'
-                        EndUserQuarantinePermissionsValue = 39
-                        ESNEnabled                         = $false
+                        Name                         = 'DefaultFullAccessPolicy'
+                        EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true -PermissionToAllowSender $true)
+                        ESNEnabled                   = $false
                     }
                 )
             }
@@ -218,9 +76,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoCustomPolicy'
-                    EndUserQuarantinePermissionsValue = 23
-                    ESNEnabled                         = $false
+                    Name                         = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString -PermissionToBlockSender $true -PermissionToPreview $true -PermissionToDelete $true)
+                    ESNEnabled                   = $false
                 }
             }
         }
@@ -235,9 +93,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoCustomPolicy'
-                    EndUserQuarantinePermissionsValue = 23
-                    ESNEnabled                         = $true
+                    Name                         = 'ContosoCustomPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString -PermissionToBlockSender $true -PermissionToPreview $true -PermissionToDelete $true)
+                    ESNEnabled                   = $true
                 }
             }
         }
@@ -251,9 +109,9 @@ Describe 'MET-EXO004 Quarantine Policies' {
         BeforeAll {
             Mock Get-QuarantinePolicy {
                 [PSCustomObject]@{
-                    Name                              = 'ContosoNoAccessPolicy'
-                    EndUserQuarantinePermissionsValue = 0
-                    ESNEnabled                         = $false
+                    Name                         = 'ContosoNoAccessPolicy'
+                    EndUserQuarantinePermissions = (New-METPermString)
+                    ESNEnabled                   = $false
                 }
             }
         }
@@ -273,11 +131,98 @@ Describe 'MET-EXO004 Quarantine Policies' {
             $results[0].Error | Should -Not -BeNullOrEmpty
         }
     }
+
+    # A reduced Get-QuarantinePolicy object omits both properties this check reads.
+    # -not $null is $true, so the policy used to fall through to the else branch and be
+    # graded on values that were never read. Fixed: absence on either side is now checked
+    # structurally before the "permission granted" test runs.
+    Context 'A custom quarantine policy omits ESNEnabled and EndUserQuarantinePermissions' {
+        BeforeAll {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy' }
+            }
+        }
+
+        It 'Returns Warning naming the properties that were never observed' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].AffectedObject | Should -Be 'ContosoCustomPolicy'
+            $results[0].Finding | Should -Match 'not returned'
+            $results[0].Finding | Should -Not -Match 'Notification settings are consistent'
+        }
+    }
+
+    # The Warning fires on a conjunction of a negative and a positive: notifications off
+    # AND end-user permissions granted. Dropping or flipping either half turns the check
+    # into one that flags every policy or no policy, so all three combinations that
+    # decide the verdict are pinned.
+    Context 'Inverted-sense regression guard' {
+        It 'Warns only when ESNEnabled is false while end-user permissions are granted' {
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true); ESNEnabled = $false }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Warning'
+
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString -PermissionToRelease $true); ESNEnabled = $true }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+
+            Mock Get-QuarantinePolicy {
+                [PSCustomObject]@{ Name = 'ContosoCustomPolicy'; EndUserQuarantinePermissions = (New-METPermString); ESNEnabled = $false }
+            }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
+        }
+    }
 }
 
 Describe 'MET-EXO005 Tenant Allow/Block List' {
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO005-TenantAllowBlockList.ps1'
+    }
+
+    # These dates are fixed rather than relative to Get-Date: entries built from the
+    # current clock are never older than the check's 90-day cutoff, so the stale-allow
+    # branch would never run.
+    Context 'Allow entries are past their expiration date or untouched for over 90 days' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'legacy@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = ([datetime]::new(2020, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)) }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'bad@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    'Url' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'https://expired.vendor.com'; ExpirationDate = ([datetime]::new(2021, 6, 1, 0, 0, 0, [System.DateTimeKind]::Utc)); LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'https://bad.vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Returns Warning counting both stale allow entries' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Warning'
+            $mainResult.Severity | Should -Be 'Low'
+            $mainResult.AffectedObject | Should -Be 'TABL (2 allows, 2 blocks)'
+            $mainResult.Finding | Should -Match '2 allow entry\(ies\) are stale'
+        }
+
+        It 'Does not attribute the Warning to wildcards or to the allow/block ratio' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult.Finding | Should -Not -Match 'wildcard'
+            $mainResult.Finding | Should -Not -Match 'significantly outnumber'
+            $mainResult.Finding | Should -Not -Match 'no corresponding block entries'
+        }
     }
 
     Context 'Advanced Delivery URL allow entries present alongside a well-maintained TABL' {
@@ -342,100 +287,117 @@ Describe 'MET-EXO005 Tenant Allow/Block List' {
             $mainResult.Finding | Should -Match 'wildcard'
         }
 
-        It 'Does not emit an Advanced Delivery result' {
+        It 'Still emits an Advanced Delivery result carrying the retrieval error' {
             $results = & $checkFile
             $advResult = $results | Where-Object { $_.AffectedObject -match 'Advanced Delivery' }
-            $advResult | Should -BeNullOrEmpty
+            $advResult | Should -Not -BeNullOrEmpty
+            $advResult.Result | Should -Not -Be 'Pass'
+            $advResult.Error | Should -Match 'Access denied'
+            $advResult.Finding | Should -Not -Match 'No Advanced Delivery URL allow entries are configured'
         }
     }
-}
 
-Describe 'MET-EXO006 Submission Policy' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'EXO' 'MET-EXO006-SubmissionPolicy.ps1'
-    }
-
-    Context 'Reporting to Microsoft enabled with submission mailbox' {
+    Context 'Every Tenant Allow/Block List type fails to read' {
         BeforeAll {
-            Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{ EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true }
-            }
-            Mock Get-ReportSubmissionRule {
-                [PSCustomObject]@{ SentTo = 'secops@contoso.com' }
-            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } { throw 'Access denied' }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
         }
-        It 'Returns Pass' {
+
+        It 'Returns Warning with the retrieval error rather than an empty-list Info result' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $mainResult = $results | Where-Object { $_.AffectedObject -match 'Tenant Allow/Block List' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Be 'Warning'
+            $mainResult.Error | Should -Match 'Access denied'
+            $mainResult.Finding | Should -Not -Match 'No entries found'
         }
     }
 
-    Context 'Reporting to Microsoft disabled' {
+    Context 'Sender list type fails while the other list types succeed' {
         BeforeAll {
-            Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{ EnableReportToMicrosoft = $false; EnableUserEmailNotification = $true }
-            }
-            Mock Get-ReportSubmissionRule { $null }
-        }
-        It 'Returns Fail' {
-            $results = & $checkFile
-            $results[0].Result | Should -Be 'Fail'
-        }
-    }
-
-    Context 'No submission mailbox configured' {
-        BeforeAll {
-            Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{ EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true }
-            }
-            Mock Get-ReportSubmissionRule { $null }
-        }
-        It 'Returns Warning and mentions mailbox' {
-            $results = & $checkFile
-            $mailboxResult = $results | Where-Object { $_.Name -match 'SecOps Mailbox' }
-            $mailboxResult | Should -Not -BeNullOrEmpty
-            $mailboxResult.Result | Should -Be 'Warning'
-            $mailboxResult.Finding | Should -Match 'mailbox'
-        }
-    }
-
-    Context 'Rule and policy addresses agree' {
-        BeforeAll {
-            Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{
-                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
-                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
-                    ReportJunkAddresses = 'secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' { throw 'Access denied' }
+                    default {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'https://good.example.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                            [PSCustomObject]@{ Action = 'Block'; Value = 'https://bad.example.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
                 }
             }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = 'secops@contoso.com' } }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
         }
-        It 'Returns Pass for address consistency' {
+
+        It 'Names the unreadable list type and does not return Pass' {
             $results = & $checkFile
-            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
-            $consistencyResult | Should -Not -BeNullOrEmpty
-            $consistencyResult.Result | Should -Be 'Pass'
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Error | Should -Match 'Sender'
+            $mainResult.Finding | Should -Match 'Sender'
         }
     }
 
-    Context 'Rule and policy addresses drift' {
+    Context 'The unreadable list type is the one holding the block entries' {
         BeforeAll {
-            Mock Get-ReportSubmissionPolicy {
-                [PSCustomObject]@{
-                    EnableReportToMicrosoft = $true; EnableUserEmailNotification = $true
-                    ReportJunkToCustomizedAddress = $true; ReportNotJunkToCustomizedAddress = $true; ReportPhishToCustomizedAddress = $true
-                    ReportJunkAddresses = 'old-secops@contoso.com'; ReportNotJunkAddresses = 'secops@contoso.com'; ReportPhishAddresses = 'secops@contoso.com'
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Url' { throw 'Access denied' }
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Action = 'Allow'; Value = 'partner@fabrikam.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
                 }
             }
-            Mock Get-ReportSubmissionRule { [PSCustomObject]@{ SentTo = 'secops@contoso.com' } }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
         }
-        It 'Returns Warning identifying the mismatched report type and stale address' {
+
+        It 'Does not claim the tenant has allow entries with no corresponding blocks' {
             $results = & $checkFile
-            $consistencyResult = $results | Where-Object { $_.Name -match 'Mailbox Address Consistency' }
-            $consistencyResult | Should -Not -BeNullOrEmpty
-            $consistencyResult.Result | Should -Be 'Warning'
-            $consistencyResult.Finding | Should -Match 'Junk reports go to'
-            $consistencyResult.Finding | Should -Match 'old-secops@contoso.com'
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Finding | Should -Not -Match 'no corresponding block entries'
+            $mainResult.Finding | Should -Not -Match 'significantly outnumber'
+        }
+
+        It 'Reports the partial coverage and does not return Pass' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Error | Should -Match 'Url'
+            $mainResult.Finding | Should -Match 'Url'
+        }
+    }
+
+    # An entry whose Action property is absent matches neither the Allow filter nor the
+    # Block filter, so an entry the check did read was counted as neither. Fixed: an
+    # unclassifiable entry is now tallied separately and stops the clean/well-maintained
+    # verdict from being reached.
+    Context 'Tenant Allow/Block List entries omit the Action property' {
+        BeforeAll {
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { -not $ListSubType } {
+                switch ($ListType) {
+                    'Sender' {
+                        @(
+                            [PSCustomObject]@{ Value = 'legacy@vendor.com'; ExpirationDate = $null; LastModifiedDateTime = (Get-Date).ToUniversalTime() }
+                        )
+                    }
+                    default { @() }
+                }
+            }
+            Mock Get-TenantAllowBlockListItems -ParameterFilter { $ListSubType -eq 'AdvancedDelivery' } { @() }
+        }
+
+        It 'Does not return Pass and names the entry it could not classify' {
+            $results = & $checkFile
+            $mainResult = $results | Where-Object { $_.AffectedObject -match '^TABL' }
+            $mainResult | Should -Not -BeNullOrEmpty
+            $mainResult.Result | Should -Not -Be 'Pass'
+            $mainResult.Finding | Should -Not -Match 'appear well-maintained'
+            $mainResult.Finding | Should -Match '1 entry'
         }
     }
 }

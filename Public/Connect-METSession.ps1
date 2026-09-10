@@ -80,6 +80,10 @@ function Connect-METSession {
         Write-Warning 'Device code authentication requested (-UseDeviceAuthentication). This flow is a documented phishing vector (Microsoft: "block wherever possible, allow only where necessary") - use it only when no browser is reachable at all (a true headless host). Prefer -DisableWAM on an interactive host, or -CertificatePath for unattended/CI use.'
     }
 
+    # Loaded at most once per call and shared by the Graph and Teams legs. Loading the
+    # PFX separately per leg doubled the key-material handling for no benefit.
+    $sharedCertificate = $null
+
     $requestedMode = $PSCmdlet.ParameterSetName
     $requestedOrg = switch ($requestedMode) {
         'ServicePrincipal' { $TenantId }
@@ -92,10 +96,20 @@ function Connect-METSession {
     # (this is the only reliable check available for Graph/Teams in Interactive+DelegatedOrganization
     # mode, since neither SDK's returned context exposes the domain name originally requested - only
     # a resolved tenant GUID). EXO gets a second, fully independent check below regardless.
-    if ($script:METConnection -and ($requestedMode -ne $script:METConnection.Mode -or
-            ($requestedOrg -and $script:METConnection.Org -and $requestedOrg -ne $script:METConnection.Org))) {
+    # An unspecified org must not be treated as "no conflict". Interactive without
+    # -DelegatedOrganization leaves $requestedOrg null, and conditioning the comparison on
+    # it being truthy meant a delegated connect followed by a bare Connect-METSession
+    # reused all three of the previous customer's live sessions unverified - the same
+    # cross-customer reuse this guard exists to prevent. An unspecified org against a
+    # tracked org is a mismatch, not a match.
+    $orgMismatch = if ($script:METConnection) {
+        if ($requestedOrg -and $script:METConnection.Org) { $requestedOrg -ne $script:METConnection.Org }
+        else { [bool]$requestedOrg -ne [bool]$script:METConnection.Org }
+    } else { $false }
+
+    if ($script:METConnection -and ($requestedMode -ne $script:METConnection.Mode -or $orgMismatch)) {
         $previousIdentity = if ($script:METConnection.Org) { $script:METConnection.Org } else { $script:METConnection.Mode }
-        $newIdentity = if ($requestedOrg) { $requestedOrg } else { $requestedMode }
+        $newIdentity = if ($requestedOrg) { $requestedOrg } else { "$requestedMode (no organization specified)" }
         throw "Connect-METSession already established a session in this PowerShell process for '$previousIdentity'. Requesting '$newIdentity' now would reuse that connection's Exchange Online/Graph/Teams sessions without actually switching tenant or auth mode. Run Disconnect-METSession first, then reconnect to the new organization."
     }
 
@@ -169,9 +183,29 @@ function Connect-METSession {
             }
         }
 
-        $existing = Get-ConnectionInformation -ErrorAction SilentlyContinue |
-            Where-Object { $_.State -eq 'Connected' } |
-            Select-Object -First 1
+        # Exchange Online supports concurrent sessions in one process. Checking only the
+        # first connected session (the prior Select-Object -First 1) meant a process holding
+        # two live connections for different customers passed this guard whenever the first
+        # one happened to match the requested org, leaving the other customer's session live
+        # and cmdlet routing between them ambiguous - the same class of cross-customer leak
+        # the mismatch/app-only checks below exist to close, just missed for the concurrent
+        # case. Refusal here is unconditional on more than one distinct org being connected,
+        # regardless of whether either matches $requestedOrg: two customers' sessions live in
+        # one process is itself the unsafe state. Sessions with no resolvable org (both
+        # Organization and DelegatedOrganization empty) are excluded from the distinct-org set
+        # rather than counted as a distinct value, so they can't spuriously trip this guard.
+        $connectedSessions = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+            Where-Object { $_.State -eq 'Connected' })
+
+        $distinctOrgs = @($connectedSessions | ForEach-Object {
+            if ($_.DelegatedOrganization) { $_.DelegatedOrganization } else { $_.Organization }
+        } | Where-Object { $_ } | Sort-Object -Unique)
+
+        if ($distinctOrgs.Count -gt 1) {
+            throw "Exchange Online has $($connectedSessions.Count) live connections belonging to more than one organization ($($distinctOrgs -join ', ')). Cmdlet routing between them is ambiguous. Run Disconnect-METSession first, then reconnect to the correct organization."
+        }
+
+        $existing = $connectedSessions | Select-Object -First 1
 
         if ($existing) {
             # Reusing a live connection without checking whose tenant it belongs to is a
@@ -219,8 +253,15 @@ function Connect-METSession {
                 $servicesConnected.Add('ExchangeOnline')
             }
             catch {
-                $onWindowsRetry = if ($IsWindows) { "On Windows try: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose" }
-                                   else { "On a headless host with no reachable browser try: Connect-METSession -UseDeviceAuthentication -Verbose`nOtherwise try: Connect-METSession -DisableWAM -Verbose" }
+                $onWindowsRetry = if ($IsWindows) {
+                    if ("$_" -match '0x80070520|logon session does not exist|\bWAM\b|broker') {
+                        "This is a WAM broker error (0x80070520 'A specified logon session does not exist'), which usually means the session is not an interactive desktop one - most often an elevated 'Run as administrator' prompt, or a remote/service/scheduled-task session. Retry from a normal non-elevated PowerShell window, or bypass WAM: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose"
+                    }
+                    else {
+                        "Re-run with -Verbose for detail. If the error mentions a WAM broker or 0x80070520 ('A specified logon session does not exist'), run from a normal non-elevated PowerShell window or bypass WAM: Connect-METSession -DisableWAM -UserPrincipalName <upn> -Verbose"
+                    }
+                }
+                else { "On a headless host with no reachable browser try: Connect-METSession -UseDeviceAuthentication -Verbose`nOtherwise try: Connect-METSession -DisableWAM -Verbose" }
                 throw "Failed to connect to Exchange Online: $_`n$onWindowsRetry"
             }
         }
@@ -269,7 +310,10 @@ function Connect-METSession {
                     }
                     if ($CertificatePath) {
                         try {
-                            $graphParams['Certificate'] = Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
+                            if (-not $sharedCertificate) {
+                                $sharedCertificate = Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
+                            }
+                            $graphParams['Certificate'] = $sharedCertificate
                         }
                         catch {
                             $graphCertLoadError = $_.Exception.Message
@@ -425,7 +469,10 @@ function Connect-METSession {
                             $teamsParams['ApplicationId'] = $AppId
                             $teamsParams['TenantId']      = $TenantId
                             $teamsParams['Certificate']   = if ($CertificatePath) {
-                                Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
+                                if (-not $sharedCertificate) {
+                                    $sharedCertificate = Get-METCertificateFromFile -Path $CertificatePath -Password $CertificatePassword
+                                }
+                                $sharedCertificate
                             } else {
                                 Get-METCertificateByThumbprint -Thumbprint $CertificateThumbprint
                             }
@@ -458,7 +505,11 @@ function Connect-METSession {
         }
     }
 
-    $script:METConnection = @{ Mode = $requestedMode; Org = $requestedOrg }
+    # Never downgrade a tracked organization to $null. Overwriting it would destroy the
+    # cross-call guard for the remainder of the process, so a later reconnect could reuse
+    # this customer's sessions with nothing left to compare against.
+    $retainedOrg = if ($requestedOrg) { $requestedOrg } elseif ($script:METConnection) { $script:METConnection.Org } else { $null }
+    $script:METConnection = @{ Mode = $requestedMode; Org = $retainedOrg }
     $script:METSessionInfo = [PSCustomObject]@{
         AuthMode          = $requestedMode
         DeviceCodeUsed    = [bool]$UseDeviceAuthentication

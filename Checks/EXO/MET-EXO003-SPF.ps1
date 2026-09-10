@@ -21,17 +21,21 @@ if (-not $domains) {
 function Measure-SpfLookups {
     param([string] $DomainName, [int] $Depth = 0, [System.Collections.Generic.HashSet[string]] $Visited = $null)
 
-    if ($Depth -gt 5) { return 0 }
+    # RFC 7208 4.6.4 caps a valid record at 10 DNS-querying mechanisms, so a chain
+    # deeper than that is already over the limit. Complete=$false here (rather than
+    # just stopping) is what stops a truncated walk from being reported as a fact.
+    if ($Depth -gt 10) { return [PSCustomObject]@{ Count = 0; Complete = $false } }
     if (-not $Visited) { $Visited = [System.Collections.Generic.HashSet[string]]::new() }
-    if (-not $Visited.Add($DomainName)) { return 0 }
+    if (-not $Visited.Add($DomainName)) { return [PSCustomObject]@{ Count = 0; Complete = $true } }
 
     $count = 0
+    $complete = $true
     try {
         $txt = Resolve-METDnsName -Name $DomainName -Type TXT |
             Where-Object { $_.Strings -match '^v=spf1' } |
             Select-Object -First 1
 
-        if (-not $txt) { return 0 }
+        if (-not $txt) { return [PSCustomObject]@{ Count = 0; Complete = $true } }
 
         $record = $txt.Strings -join ''
         $terms = $record -split '\s+' | Where-Object { $_ }
@@ -45,13 +49,17 @@ function Measure-SpfLookups {
 
             if ($normalized -match '^include:([^\s]+)$') {
                 $count += 1
-                $count += Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                $nested = Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                $count += $nested.Count
+                $complete = $complete -and $nested.Complete
                 continue
             }
 
             if ($normalized -match '^redirect=([^\s]+)$') {
                 $count += 1
-                $count += Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                $nested = Measure-SpfLookups -DomainName $Matches[1] -Depth ($Depth + 1) -Visited $Visited
+                $count += $nested.Count
+                $complete = $complete -and $nested.Complete
                 continue
             }
 
@@ -60,9 +68,12 @@ function Measure-SpfLookups {
             }
         }
     }
-    catch { Write-Verbose "DNS lookup failed for '$DomainName' during SPF lookup count: $_" }
+    catch {
+        Write-Verbose "DNS lookup failed for '$DomainName' during SPF lookup count: $_"
+        $complete = $false
+    }
 
-    return $count
+    return [PSCustomObject]@{ Count = $count; Complete = $complete }
 }
 
 foreach ($domain in $domains) {
@@ -98,24 +109,53 @@ foreach ($domain in $domains) {
 
     $record = $spfRecord.Strings -join ''
     $issues = [System.Collections.Generic.List[string]]::new()
+    $terms = @($record -split '\s+' | Where-Object { $_ })
 
-    if ($record -match '\+all') {
+    # RFC 7208 5.1: 'all' is a mechanism term, so it is only an enforcement qualifier
+    # when it stands as its own term. Matching the substring '-all' against the whole
+    # record reads an include or hostname such as 'a:mail-all.contoso.com' as enforcement.
+    $allTerm = $terms | Where-Object { $_ -match '^[+\-~?]?all$' } | Select-Object -First 1
+    $allQualifier = $null
+    if ($allTerm) {
+        $allQualifier = if ($allTerm -match '^([+\-~?])') { $Matches[1] } else { '+' }
+    }
+    $redirectTerm = $terms | Where-Object { $_ -match '^redirect=(.+)$' } | Select-Object -First 1
+
+    # RFC 7208 2.6.2: a neutral result and an absent 'all' term both fall back to
+    # the same default the receiver applies when no SPF record exists at all - the
+    # spec requires treating Neutral "exactly like the None result". Those two and
+    # '+all' (explicit allow-all) are therefore the same amount of protection: none.
+    $allForcesFail = $false
+    if ($allQualifier -eq '+') {
         $issues.Add("SPF record uses '+all' (allow all) - any server can send as this domain")
+        $allForcesFail = $true
     }
-    elseif ($record -notmatch '-all' -and $record -notmatch '~all') {
-        $issues.Add("SPF record does not end with '-all' or '~all' - enforcement is missing")
+    elseif ($allQualifier -eq '?') {
+        $issues.Add("SPF record uses '?all' (neutral) - RFC 7208 requires receivers to treat a neutral result exactly as if no SPF record were published")
+        $allForcesFail = $true
     }
-    elseif ($record -match '~all') {
+    elseif ($allQualifier -eq '~') {
         $issues.Add("SPF record uses '~all' (soft fail) - consider '-all' for strict enforcement")
     }
+    elseif (-not $allQualifier -and $redirectTerm) {
+        $issues.Add("SPF record has no 'all' mechanism and defers to $redirectTerm - enforcement is whatever that record declares and was not evaluated here")
+    }
+    elseif (-not $allQualifier) {
+        $issues.Add("SPF record has no 'all' mechanism - unmatched senders get the default 'neutral' result, which receivers must treat as if no SPF record were published")
+        $allForcesFail = $true
+    }
 
-    $lookupCount = Measure-SpfLookups -DomainName $domain.DomainName
+    $lookupResult = Measure-SpfLookups -DomainName $domain.DomainName
+    $lookupCount = $lookupResult.Count
     if ($lookupCount -gt 10) {
         $issues.Add("SPF record exceeds 10 DNS lookups ($lookupCount) - may cause SPF permerror")
     }
+    elseif (-not $lookupResult.Complete) {
+        $issues.Add("SPF lookup count could not be completed - at least $lookupCount DNS-querying mechanisms were counted before a nested lookup failed or the include chain was truncated, so the 10-lookup limit was not verified")
+    }
 
     if ($issues.Count -gt 0) {
-        $result = if ($record -match '\+all') { 'Fail' } else { 'Warning' }
+        $result = if ($allForcesFail) { 'Fail' } else { 'Warning' }
         New-METCheckResult -CheckId 'MET-EXO003' -Category EXO -Name 'SPF' `
             -Result $result -Severity High -AffectedObject $domain.DomainName `
             -Finding "$($issues -join '; ') | Record: $record" `

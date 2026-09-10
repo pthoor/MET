@@ -142,6 +142,66 @@ Describe 'MET-EXO008 Quarantine Retention' {
         }
     }
 
+    Context 'Custom policy with QuarantineRetentionPeriod absent' {
+        BeforeAll {
+            Mock Get-HostedContentFilterRule {
+                @([PSCustomObject]@{
+                    Name                     = 'Contoso Custom Policy'
+                    HostedContentFilterPolicy = 'Contoso Custom Policy'
+                    Priority                 = 1
+                    State                    = 'Enabled'
+                    SentTo                   = @('user@contoso.com')
+                })
+            }
+            Mock Get-HostedContentFilterPolicy {
+                @([PSCustomObject]@{
+                    Name      = 'Contoso Custom Policy'
+                    IsDefault = $false
+                })
+            }
+        }
+        It 'Returns Warning naming the property rather than passing on an unconfirmed value' {
+            $results = & $checkFile
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'QuarantineRetentionPeriod'
+        }
+        It 'Never renders an empty retention value into the Finding' {
+            $results = & $checkFile
+            $results[0].Finding | Should -Not -Match 'is\s+days'
+        }
+        It 'Keeps the anti-phish inheritance note' {
+            $results = & $checkFile
+            $results[0].Finding | Should -Match 'anti-phishing quarantine'
+        }
+    }
+
+    Context 'Preset policy with QuarantineRetentionPeriod absent' {
+        BeforeAll {
+            Mock Get-HostedContentFilterRule {
+                @([PSCustomObject]@{
+                    Name                     = 'Strict Preset Security Policy1707729536596'
+                    HostedContentFilterPolicy = 'Strict Preset Security Policy1707729536596'
+                    Priority                 = 0
+                    State                    = 'Enabled'
+                })
+            }
+            Mock Get-HostedContentFilterPolicy {
+                @([PSCustomObject]@{
+                    Name      = 'Strict Preset Security Policy1707729536596'
+                    IsDefault = $false
+                })
+            }
+        }
+        It 'Returns Warning rather than claiming a fixed preset value' {
+            $results = & $checkFile
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'QuarantineRetentionPeriod'
+            $results[0].Finding | Should -Not -Match 'is\s+days'
+        }
+    }
+
     Context 'Retrieval throws' {
         BeforeAll {
             Mock Get-HostedContentFilterRule { throw 'Access denied' }

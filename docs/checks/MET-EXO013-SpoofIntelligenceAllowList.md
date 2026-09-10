@@ -9,8 +9,8 @@ Spoof intelligence (part of anti-spoofing protection in Microsoft Defender for O
 This check calls `Get-TenantAllowBlockListSpoofItems -Action Allow` and reviews every such approved spoof pair:
 
 - Total count of allow entries
-- How many are `SpoofType = External` - an outside domain or IP approved to send mail that appears to come from an internal or trusted sender address, as opposed to `Internal` (spoofing within your own accepted domains)
-- Lists up to 10 sample entries showing the spoofed sender, the true sending infrastructure, and the spoof type
+- How many are `SpoofType = External` - an outside domain or IP approved to send mail that appears to come from an internal or trusted sender address, as opposed to `Internal` (spoofing within your own accepted domains). An entry whose `SpoofType` was not returned by `Get-TenantAllowBlockListSpoofItems` is counted as neither, and the Finding says so - the External count is then a lower bound, not a confirmed total
+- Lists up to 10 sample entries showing the spoofed sender, the true sending infrastructure, and the spoof type (or `spoof type not returned` when the property is absent)
 
 ## Why it matters
 

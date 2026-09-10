@@ -41,6 +41,7 @@ The per-mailbox enumeration degrades non-fatally, but not silently. If `Get-EXOC
 | Pass | `SmtpClientAuthenticationDisabled` is `$true` tenant-wide and no mailbox explicitly re-enables it |
 | Warning (with Error) | Tenant-wide setting is `$true` but per-mailbox overrides could not be enumerated - the override exposure is unverified, stated in the finding |
 | Warning | Tenant-wide setting is `$true` but one or more mailboxes set `SmtpClientAuthenticationDisabled = $false` (up to 10 addresses listed, plus the total count) |
+| Warning | Tenant-wide setting is `$true`, no mailbox confirms an override, but one or more mailboxes returned by `Get-EXOCasMailbox` omitted the `SmtpClientAuthenticationDisabled` property entirely, so whether those mailboxes also override the baseline is unverified (a mailbox where the property is present and `$null` is not affected - that is a confirmed inherit, not an unverified state) |
 | Fail | `SmtpClientAuthenticationDisabled` is `$false` or not configured - SMTP AUTH is enabled for every mailbox tenant-wide |
 | Fail (Error) | Unable to retrieve transport configuration (permissions issue) |
 

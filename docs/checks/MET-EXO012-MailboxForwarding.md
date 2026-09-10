@@ -1,6 +1,6 @@
 # MET-EXO012 - Mailbox Forwarding Exfiltration Risk
 
-**Category:** EXO | **Severity:** Critical
+**Category:** EXO | **Severity:** High
 
 ## What it checks
 
@@ -18,9 +18,14 @@ The risk is highest when `DeliverToMailboxAndForward` is `$false`: the mailbox o
 
 | Result | Condition |
 |---|---|
-| Info | No mailboxes found with forwarding configured |
-| Warning | One or more mailboxes have `ForwardingSmtpAddress` or `ForwardingAddress` set - always flagged for review, with silent (no local copy) forwarding called out specifically |
+| Pass | No mailbox has `ForwardingSmtpAddress` or `ForwardingAddress` set |
+| Info | One or more mailboxes forward, and every one of them has `DeliverToMailboxAndForward = $true` - a local copy is retained in every case, so none forwards silently. The mailboxes are listed for review rather than reported as a gap |
+| Warning | At least one mailbox forwards silently (`DeliverToMailboxAndForward = $false`), **or** `DeliverToMailboxAndForward` was not returned for at least one forwarding mailbox |
 | Fail | The check itself could not run (e.g. insufficient permissions) |
+
+A tenant with forwarding configured can therefore reach a clean-enough verdict without removing legitimate forwards: a shared mailbox that routes mail onward while keeping a local copy produces `Info`, not a standing `Warning`. Only silent forwarding - or an unconfirmed local-copy state - reaches `Warning`.
+
+**An unreturned property is never treated as "not silent."** If `DeliverToMailboxAndForward` is absent or null on a returned mailbox, the check reports `Warning` and names that mailbox, rather than assuming a local copy is retained. Nothing in an absent property distinguishes a mailbox that keeps a local copy from one forwarding silently, and defaulting to the safe-looking interpretation would turn a blind spot into a clean result. The sample lines mark such a mailbox `[DeliverToMailboxAndForward not returned - local copy retention unconfirmed]`, distinct from the `[silent - no local copy retained]` marker used for a confirmed `$false`.
 
 ## Recommendation
 
@@ -31,6 +36,10 @@ Set-Mailbox -Identity <mailbox> -ForwardingSmtpAddress $null
 ```
 
 Pay particular attention to entries where `DeliverToMailboxAndForward` is `$false`, since these leave no trace in the owner's own mailbox.
+
+## Related checks
+
+Automatic mail forwarding is governed by three independent control planes, all of which must be closed: the remote domain `AutoForwardEnabled` setting (MET-EXO018), the outbound spam filter policy's `AutoForwardingMode` (MET-MDO007), and per-mailbox forwarding addresses (MET-EXO012). All three checks carry the same **High** severity - they assess one control at three layers, so a gap in any one of them leaves the same exfiltration path open.
 
 ## Reference
 

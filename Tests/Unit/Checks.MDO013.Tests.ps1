@@ -9,7 +9,7 @@ BeforeAll {
     . "$root/Private/Get-METRuleScope.ps1"
     . "$root/Private/Get-METAssessableMailboxes.ps1"
 
-    function Get-EXOMailbox              { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox              { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-EOPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
     function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
     function Get-HostedContentFilterRule { [CmdletBinding()] param() }

@@ -1,17 +1,25 @@
 ﻿$issues = [System.Collections.Generic.List[string]]::new()
+$retrievalErrors = [System.Collections.Generic.List[string]]::new()
+$unobservedSettingClauses = [System.Collections.Generic.List[string]]::new()
+$unobservedSettingNames = [System.Collections.Generic.List[string]]::new()
 
 # Check Teams external access settings via EXO/Graph
 try {
     $tenantConfig = Get-CsTenantFederationConfiguration -ErrorAction Stop
+    # Federation being disabled is the hardened end state - MET-Teams006 recommends
+    # Set-CsTenantFederationConfiguration -AllowFederatedUsers $false as its remediation.
+    # Adding it to $issues made the two checks penalise each other's recommended
+    # configuration, and turned the most locked-down tenant into a Warning. Usability
+    # commentary does not belong in the issue list of a posture check.
     if ($tenantConfig.AllowFederatedUsers -eq $false) {
-        $issues.Add('External access (federation) is fully disabled - may impact legitimate collaboration')
+        Write-Verbose 'MET-Teams003: Teams federation is fully disabled (hardened; see MET-Teams006).'
     }
     if ($tenantConfig.AllowPublicUsers -eq $true) {
         $issues.Add('Access from Skype consumer users is allowed - consider disabling if not needed')
     }
 }
 catch {
-    $issues.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve tenant federation configuration: $_"
 }
 
@@ -56,9 +64,36 @@ try {
         $names = ($anonymousStartPolicies | Select-Object -ExpandProperty Identity) -join ', '
         $issues.Add("Anonymous (unauthenticated) participants can start a meeting with no organiser present in the following meeting policy/policies: $names - this defeats lobby controls that assume an organiser is there to admit attendees")
     }
+
+    # A property present but $null is treated the same as absent: neither observation
+    # confirms whether the setting is actually secure, and the six -eq $true filters
+    # above only ever catch an explicit insecure value, never silence on this collection.
+    $meetingSettingNames = @(
+        'AllowAnonymousUsersToJoinMeeting',
+        'AutoAdmittedUsers',
+        'AllowExternalNonTrustedMeetingChat',
+        'AllowPSTNUsersToBypassLobby',
+        'AllowExternalParticipantGiveRequestControl',
+        'AllowAnonymousUsersToStartMeeting'
+    )
+
+    foreach ($settingName in $meetingSettingNames) {
+        $unobservedPolicies = @(
+            $meetingPolicies | Where-Object {
+                -not $_.PSObject.Properties[$settingName] -or $null -eq $_.$settingName
+            }
+        )
+        if ($unobservedPolicies.Count -gt 0) {
+            $unobservedSettingNames.Add($settingName)
+            $shownNames = @($unobservedPolicies | Select-Object -First 5 -ExpandProperty Identity)
+            $shownNamesText = $shownNames -join ', '
+            $truncationSuffix = if ($unobservedPolicies.Count -gt $shownNames.Count) { " (showing first $($shownNames.Count) of $($unobservedPolicies.Count))" } else { '' }
+            $unobservedSettingClauses.Add("$settingName was not returned for the following meeting policy/policies: $shownNamesText$truncationSuffix")
+        }
+    }
 }
 catch {
-    $issues.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve Teams meeting policies: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve Teams meeting policies: $_"
 }
 
@@ -71,17 +106,39 @@ try {
     }
 }
 catch {
-    $issues.Add("Could not retrieve Teams channel policy: $($_.Exception.Message)")
+    $retrievalErrors.Add("Could not retrieve Teams channel policy: $($_.Exception.Message)")
     Write-Verbose "Could not retrieve Teams channel policy: $_"
 }
 
 if ($issues.Count -gt 0) {
     $result = if ($issues | Where-Object { $_ -match 'Anonymous' -or $_ -match 'Everyone' -or $_ -match 'PSTN callers bypass the lobby' }) { 'Fail' } else { 'Warning' }
+    $findingParts = [System.Collections.Generic.List[string]]::new($issues)
+    if ($unobservedSettingClauses.Count -gt 0) {
+        $findingParts.AddRange($unobservedSettingClauses)
+        $findingParts.Add('An unconfirmed state is reported alongside the confirmed issues above rather than folded into a pass, because nothing here distinguishes a tenant with an unreturned setting switched on from one with it switched off.')
+    }
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
         -Result $result -Severity Medium -AffectedObject 'Teams Meeting Policies' `
-        -Finding ($issues -join '; ') `
+        -Finding ($findingParts -join '; ') `
         -Recommendation "Disable anonymous meeting join, set AutoAdmittedUsers to 'EveryoneInSameAndFederatedCompany' or 'OrganizerOnly', and review external chat permissions. Use the lobby as a security control." `
-        -ReferenceUrl 'https://aka.ms/teams-meeting-security'
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage ($retrievalErrors -join "`n")
+}
+elseif ($unobservedSettingClauses.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
+        -Result Warning -Severity Medium -AffectedObject 'Teams Meeting Policies' `
+        -Finding (($unobservedSettingClauses -join '; ') + '. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a tenant with the setting on from one with it switched off.') `
+        -Recommendation 'Confirm these settings directly with: Get-CsTeamsMeetingPolicy | Format-List <PropertyName>. An absent or null property usually means a MicrosoftTeams module version that does not expose it, or a value never explicitly set on that policy - update the module and rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage "The following properties were not returned by Get-CsTeamsMeetingPolicy for one or more meeting policies: $($unobservedSettingNames -join ', ')"
+}
+elseif ($retrievalErrors.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `
+        -Result Warning -Severity Medium -AffectedObject 'Teams Meeting Policies' `
+        -Finding 'Teams meeting protection state could not be read in full, so anonymous join, lobby admission and external meeting chat exposure were not assessed.' `
+        -Recommendation 'Ensure the MicrosoftTeams module is installed and the session has permission to read Teams meeting, federation and channel policies, then rerun the assessment.' `
+        -ReferenceUrl 'https://aka.ms/teams-meeting-security' `
+        -ErrorMessage ($retrievalErrors -join "`n")
 }
 else {
     New-METCheckResult -CheckId 'MET-Teams003' -Category Teams -Name 'Meeting Protection' `

@@ -233,6 +233,47 @@ Seven new checks and three enhancements to existing checks, closing gaps in cont
 
 ---
 
+## v0.11.1 - Security and scoring correctness ✅
+
+Findings from a full pre-1.0 audit across check logic, the module core, the HTML report, the cmdlet surface, documentation, CI/release and the test suite. This release lands the security and correctness tier; the remainder is tracked as GitHub issues.
+
+### Security
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Stored XSS via `ReferenceUrl` in the HTML report | ✅ | Critical | `safeHref` parsed the URL to validate its scheme, then returned **the original raw string** into `href="..."`. `new URL()` accepts quotes and angle brackets in a path, so `https://x/"><img src=q onerror=...>` closed the attribute and executed on open. `javascript:` and `data:` were correctly rejected, which is exactly why this survived - the tests only covered those two. Now returns `esc(u.href)`. Reproduced in Chromium before and after; the new DOM-level tests were confirmed to fail against the vulnerable code |
+| Stored XSS via `Result`/`Severity`/`Category` in class attributes | ✅ | High | Built by concatenation with no escaping while the adjacent text content was escaped. `.toLowerCase()` is not a defence - every character needed to break out of an attribute survives it. All fragments now go through a `slug()` allow-list (`[^a-z0-9-]` stripped), which also gives unknown enum values a visible fallback instead of rendering white-on-white |
+| `Connect-METSession` reuse guard skipped when no organization was requested | ✅ | High | Every tenant-identity gate was conditioned on `$requestedOrg` being truthy, and it is `$null` for interactive without `-DelegatedOrganization`. A delegated connect followed by a bare `Connect-METSession` therefore reused all three of the previous customer's live sessions unverified, then overwrote the tracked org with `$null`, destroying the guard for the rest of the process. An unspecified org is now treated as a mismatch, and a tracked org is never downgraded to null |
+| Service-principal certificate written to the on-disk key container | ✅ | Medium | The PFX was loaded with default key-storage flags, which persists the private key in the user's key container until the object is disposed - and nothing disposed it. Now loaded with `EphemeralKeySet` (except macOS, which does not support it) and loaded once per call rather than once per connection leg |
+
+### Scoring correctness
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Crashed checks excluded from the posture score | ✅ | Critical | The synthetic result `Invoke-METTriage` builds when a check throws carried `Score = $null`, and `Get-METReport` only scores results with a non-null score. Reproduced: three passing checks plus two that threw reported **`Posture Score: 100 / 100 [Excellent]`** directly above a table listing both failures. Now `Score = 0`, matching `New-METCheckResult`'s Fail |
+| Aggregation inherited the first item's severity | ✅ | Critical | Multi-result checks were stamped with `$items[0].Severity`. `MET-EXO001` emits Informational for the tenant's `.mail.onmicrosoft.com` routing domain, which every tenant has - so whenever it sorted first, a real DMARC Fail aggregated to Informational, weight 0, which removes the item from **both** the numerator and the denominator of the weighted average. The same tenant scored 100 or 50 depending on whether `-Detailed` was passed. Now resolved via `Get-METWorstSeverity` across the noteworthy items |
+| A malformed result destroyed the entire report | ✅ | High | `Get-METCheckWeight` has a `ValidateSet`, so one result with a null or unrecognised `Severity` threw inside the scoring loop and **no report file was written at all** - including for the checks that ran correctly. A null `Timestamp` did the same. Both now degrade instead of aborting |
+
+### Check accuracy
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| MDO005/MDO006/MDO009 resolved presets through the wrong rule set | ✅ | Critical | All three assess EOP-family policies (`MalwareFilterPolicy`, `HostedContentFilterPolicy`) but fetched preset membership with `Get-ATPProtectionPolicyRule`. The repo documents the correct split in `Resolve-METCoverageMatrix.ps1:10-12`, and MDO008/MDO014 query both correctly - these three drifted. Produced false Fails on tenants with the Standard preset enabled for EOP only (the default malware policy ships `EnableFileFilter = $false`), and false Passes wherever the ATP rule covered recipients the EOP rule did not |
+| EXO002's key-length assertion was dead code | ✅ | High | Read `$config.KeySize`, which `Get-DkimSigningConfig` does not return - Microsoft's own read-back command uses the per-selector `Selector1KeySize`/`Selector2KeySize`, and `KeySize` exists only as an input parameter on `New-`/`Rotate-`. Every tenant on 1024-bit keys passed. The unit test mocked the invented property, so it went green against a branch that could not fire. Now evaluates the active signing selector (resolved via `SelectorBeforeRotateOnDate`/`RotateOnDate`) so a domain correctly mid-rotation with one 1024-bit and one 2048-bit selector is not failed, reports the pending selector separately, and returns Warning rather than Pass when no size is reported at all. `Status` handling now distinguishes `NoDKIMKeys` from `CnameMissing` |
+| Three checks reported Pass while asserting unverified conditions | ✅ | High | `MET-EXO009`'s retrieval-error guard required *zero* successful assignments, so a partial failure was discarded and the check passed; `MET-Teams005`'s Pass text claimed "all Teams messaging policies allow users to report security concerns" even when the Teams leg was unavailable, which is a supported configuration; `MET-Teams004` swallowed a rule-retrieval failure and passed without the exception data that determines effective ZAP coverage. All three now degrade to Warning with the error surfaced. `MET-Teams005` also now treats a null submission policy as a Fail, matching `MET-EXO006`'s handling of the same cmdlet |
+| Teams003 penalised Teams006's recommended configuration | ✅ | Medium | Teams003 added "External access (federation) is fully disabled" to its issue list, flipping the verdict to Warning, while Teams006 recommends `Set-CsTenantFederationConfiguration -AllowFederatedUsers $false` as its remediation. The most hardened tenant was scored down for it |
+
+### HTML report error visibility
+
+| Item | Status | Severity | Notes |
+|---|---|---|---|
+| Errored checks rendered no error indication | ✅ | High | A check carrying both a `Result` (e.g. `NotApplicable`) and a populated `Error` field - MET-Teams014 when Graph is unreachable, or any check `Invoke-METTriage` synthesized a `Fail` for after it threw - rendered a plain result badge and blended in with every other card. The summary banner's `Error` count was the only surface, pointing at a card with no way to find it. `createCard()` and the Controls Reference table now test `error` first: the badge reads ERROR and the left border is forced to the critical-severity colour via a new `data-error` attribute, regardless of the check's own severity. `card.dataset.result` is deliberately left untouched so the existing tab and result-filter logic keeps working |
+| No way to filter to errored checks | ✅ | Medium | The Result dropdown offered only the five `Result` enum values, and an errored check still carries whatever `Result` it returned - never literally `Error`. Added an Error option treated as a bucket mutually exclusive from the Result-based options, mirroring the summary and donut counts which already exclude errored checks from their Result bucket: selecting Error shows only checks with a populated `Error`, and selecting a real Result now excludes errored checks, matching what the badge on the card displays |
+| ERROR badge lost to the Accepted badge | ✅ | Medium | Found in review of #23. Both badge computations tested `accepted` before `hasError`, so a check risk-accepted while still carrying an error showed ACCEPTED rather than ERROR - reintroducing the same "error with no findable card" problem, scoped to accepted checks, and reachable in practice since synthesized error results are `Fail` and get an Accept Risk button like any other finding. `hasError` now takes precedence in both. The Accepted-tab mechanics are untouched: the card still lives in the Accepted tab and can be un-accepted, it just no longer reports itself as a resolved finding |
+| Errored cards did not auto-open "How to fix" | ✅ | Low | The `showFix` variable was computed and never read, and the Expand All handler had the same `isFailWarn`-only blind spot as the single-card handler. Both now auto-open the fix panel for errored cards, matching Fail/Warning |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |

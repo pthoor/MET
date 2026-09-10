@@ -13,7 +13,7 @@ Assesses Teams meeting and federation security settings:
 - `AllowExternalParticipantGiveRequestControl` (meeting policy) - external participants should not be able to request and be granted control of a shared screen
 - `AllowAnonymousUsersToStartMeeting` (meeting policy) - unauthenticated participants should not be able to start a meeting with no organiser present
 
-Every meeting policy instance is evaluated, not only `Global`. A property that the policy object does not expose is treated as not enabled.
+Every meeting policy instance is evaluated, not only `Global`. A property that the policy object does not expose (or returns as `$null`) is never read as a confirmed value in either direction - it cannot trigger one of the `-eq $true` Fail/Warning conditions above, and it is separately reported as an unconfirmed setting so it is not folded into a pass.
 
 ## Why it matters
 
@@ -25,9 +25,9 @@ Screen-control handoff extends that from persuasion to hands-on access: an exter
 
 | Result | Condition |
 |---|---|
-| Pass | All settings at recommended values |
-| Fail | Anonymous join allowed, anonymous users can start meetings, `AutoAdmittedUsers = Everyone`, or PSTN callers bypass the lobby |
-| Warning | Skype consumer access, external chat, or external screen-control requests enabled |
+| Pass | All settings at recommended values, and every relevant property was returned |
+| Fail | Anonymous join allowed, anonymous users can start meetings, `AutoAdmittedUsers = Everyone`, or PSTN callers bypass the lobby (any unconfirmed settings are listed alongside these confirmed issues, not folded into the verdict) |
+| Warning | Skype consumer access, external chat, or external screen-control requests enabled; one or more of the six per-policy meeting settings above was not returned (absent or `$null`) for one or more meeting policies, so whether that setting is secure was not established; or Teams meeting/federation/channel policy state could not be retrieved at all |
 
 ## Recommendation
 

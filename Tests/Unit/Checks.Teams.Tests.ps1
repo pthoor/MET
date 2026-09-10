@@ -1,10 +1,8 @@
 ﻿BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     . "$root/Private/New-METCheckResult.ps1"
+    . "$root/Private/Get-METEndUserQuarantinePermission.ps1"
     . "$root/Private/Get-METCheckWeight.ps1"
-
-    # Stub EXO cmdlets needed by Teams002
-    function Get-AtpPolicyForO365        { [CmdletBinding()] param() }
 
     # Stub Teams cmdlets needed by Teams003
     function Get-CsTenantFederationConfiguration { [CmdletBinding()] param() }
@@ -14,53 +12,7 @@
     # Stub cmdlets needed by Teams004
     function Get-TeamsProtectionPolicy     { [CmdletBinding()] param() }
     function Get-TeamsProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity) }
-}
-
-Describe 'MET-Teams002 Safe Attachments for Teams' {
-    BeforeEach {
-        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'Teams' 'MET-Teams002-SafeAttachments.ps1'
-    }
-
-    Context 'EnableATPForSPOTeamsODB is true' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 {
-                [PSCustomObject]@{ EnableATPForSPOTeamsODB = $true }
-            }
-        }
-        It 'Returns Pass' {
-            $results = & $checkFile
-            $results | Where-Object CheckId -eq 'MET-Teams002' |
-                Select-Object -First 1 |
-                ForEach-Object { $_.Result | Should -Be 'Pass' }
-        }
-    }
-
-    Context 'EnableATPForSPOTeamsODB is false' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 {
-                [PSCustomObject]@{ EnableATPForSPOTeamsODB = $false }
-            }
-        }
-        It 'Returns Fail' {
-            $results = & $checkFile
-            $results | Where-Object CheckId -eq 'MET-Teams002' |
-                Select-Object -First 1 |
-                ForEach-Object { $_.Result | Should -Be 'Fail' }
-        }
-    }
-
-    Context 'Get-AtpPolicyForO365 throws' {
-        BeforeAll {
-            Mock Get-AtpPolicyForO365 { throw 'Access denied' }
-        }
-        It 'Returns Fail with Error populated' {
-            $results = & $checkFile
-            $result = $results | Where-Object CheckId -eq 'MET-Teams002' | Select-Object -First 1
-            $result.Result | Should -Be 'Fail'
-            $result.Error | Should -Match 'Access denied'
-        }
-    }
+    function Get-QuarantinePolicy          { [CmdletBinding()] param([string]$Identity,[string]$QuarantinePolicyType) }
 }
 
 Describe 'MET-Teams003 Meeting Protection' {
@@ -75,10 +27,13 @@ Describe 'MET-Teams003 Meeting Protection' {
             }
             Mock Get-CsTeamsMeetingPolicy {
                 [PSCustomObject]@{
-                    Identity                              = 'Global'
-                    AllowAnonymousUsersToJoinMeeting      = $false
-                    AutoAdmittedUsers                     = 'EveryoneInSameAndFederatedCompany'
-                    AllowExternalNonTrustedMeetingChat    = $false
+                    Identity                                    = 'Global'
+                    AllowAnonymousUsersToJoinMeeting            = $false
+                    AutoAdmittedUsers                           = 'EveryoneInSameAndFederatedCompany'
+                    AllowExternalNonTrustedMeetingChat          = $false
+                    AllowPSTNUsersToBypassLobby                 = $false
+                    AllowExternalParticipantGiveRequestControl  = $false
+                    AllowAnonymousUsersToStartMeeting           = $false
                 }
             }
             Mock Get-CsTeamsChannelsPolicy {
@@ -208,10 +163,33 @@ Describe 'MET-Teams003 Meeting Protection' {
             }
         }
 
-        It 'Returns Warning instead of false Pass' {
+        It 'Returns Warning instead of false Pass even though the other cmdlets returned clean data' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Warning'
-            $results[0].Finding | Should -Match 'Could not retrieve Teams meeting policies'
+        }
+
+        It 'Records the retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Error   | Should -Match 'Could not retrieve Teams meeting policies'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
+            $results[0].Result  | Should -Not -Be 'Pass'
+        }
+    }
+
+    Context 'Every meeting protection cmdlet fails' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration { throw 'Tenant federation configuration unavailable' }
+            Mock Get-CsTeamsMeetingPolicy { throw 'Teams meeting policy unavailable' }
+            Mock Get-CsTeamsChannelsPolicy { throw 'Teams channels policy unavailable' }
+        }
+
+        It 'Records every retrieval failure in the Error field, not the Finding' {
+            $results = & $checkFile
+            $results[0].Result  | Should -Be 'Warning'
+            $results[0].Error   | Should -Match 'Could not retrieve tenant federation configuration'
+            $results[0].Error   | Should -Match 'Could not retrieve Teams meeting policies'
+            $results[0].Error   | Should -Match 'Could not retrieve Teams channel policy'
+            $results[0].Finding | Should -Not -Match 'Could not retrieve'
         }
     }
 
@@ -327,11 +305,36 @@ Describe 'MET-Teams003 Meeting Protection' {
                 [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
             }
         }
-        It 'Treats the absent properties as not enabled' {
+        It 'Warns that the absent properties were not confirmed rather than treating them as not enabled' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
             $results[0].Finding | Should -Not -Match 'control of a shared screen'
             $results[0].Finding | Should -Not -Match 'start a meeting with no organiser present'
+        }
+    }
+
+    # Every meeting-policy assertion in this check is an -eq $true comparison, so a
+    # policy object that returns none of the properties produces no insecure-value
+    # match on its own; the absence tracking added alongside those six filters is what
+    # keeps this from reading as a clean tenant.
+    Context 'The meeting policy object omits every property the check reads' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{ AllowFederatedUsers = $true; AllowPublicUsers = $false }
+            }
+            Mock Get-CsTeamsMeetingPolicy {
+                [PSCustomObject]@{ Identity = 'Global' }
+            }
+            Mock Get-CsTeamsChannelsPolicy {
+                [PSCustomObject]@{ Identity = 'Global'; AllowSharedChannelCreation = $false }
+            }
+        }
+
+        It 'Returns Warning and reports the settings as unobserved rather than correctly configured' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'correctly configured'
+            $results[0].Finding | Should -Match 'not returned'
         }
     }
 }
@@ -464,9 +467,11 @@ Describe 'MET-Teams004 ZAP for Teams' {
             }
             Mock Get-TeamsProtectionPolicyRule { throw 'Teams protection policy rule retrieval unavailable' }
         }
-        It 'Does not fail purely because rules could not be retrieved' {
+        It 'Returns Warning, not Pass, because rule exceptions narrowing ZAP coverage went unverified' {
             $results = & $checkFile
-            $results[0].Result | Should -Be 'Pass'
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'unverified'
+            $results[0].Error   | Should -Not -BeNullOrEmpty
         }
     }
 
@@ -478,6 +483,31 @@ Describe 'MET-Teams004 ZAP for Teams' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Fail'
             $results[0].Error | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    # The quarantine tag is resolved to a policy object and read as
+    # $policy.EndUserQuarantinePermissions.PermissionToRelease. A policy object that
+    # omits EndUserQuarantinePermissions makes the whole expression $null, so the
+    # self-release test must not silently treat that as "prevented".
+    Context 'The assigned quarantine policy omits EndUserQuarantinePermissions' {
+        BeforeAll {
+            Mock Get-TeamsProtectionPolicy {
+                [PSCustomObject]@{
+                    ZapEnabled                       = $true
+                    MalwareQuarantineTag             = 'ContosoCustomTag'
+                    HighConfidencePhishQuarantineTag = 'ContosoCustomTag'
+                }
+            }
+            Mock Get-TeamsProtectionPolicyRule { @() }
+            Mock Get-QuarantinePolicy { [PSCustomObject]@{ Name = 'ContosoCustomTag' } }
+        }
+
+        It 'Reports the release permission as unconfirmed instead of claiming users cannot self-release' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Not -Match 'quarantine policies do not allow user self-release'
+            $results[0].Finding | Should -Match 'not returned'
         }
     }
 }

@@ -18,6 +18,8 @@ Microsoft 365 Priority Accounts receive enhanced threat protection and different
 | Pass | Tags applied and a matching anti-phishing policy covers the tagged users |
 | Warning | Tags not applied |
 | Warning | Tags applied but no differentiated protection policy found |
+| NotApplicable | `Get-EmailTenantSettings` returned no object, so whether the tenant-wide priority account protection toggle is enabled was not established (a tenant without MDO Plan 2 licensing may legitimately return nothing here) |
+| NotApplicable | `EnablePriorityAccountProtection` was not returned, or was returned as `$null`, so the toggle state was not established |
 
 ## Recommendation
 

@@ -47,11 +47,23 @@
         # Minimal Linux containers (including GitHub Codespaces) often omit both
         # bind-utils and dnsutils. Use DNS-over-HTTPS rather than treating that
         # missing local tooling as proof that a DNS record does not exist.
+        $resolver = $env:MET_DOH_RESOLVER
+        if ($resolver) { $resolver = $resolver.Trim() }
+        if ($resolver -and $resolver -eq 'none') {
+            throw "DNS lookup for '$Name' requires the DNS-over-HTTPS fallback because neither Resolve-DnsName, dig nor nslookup is available on this host, but MET_DOH_RESOLVER is set to 'none'. Install dnsutils/bind-utils, or unset MET_DOH_RESOLVER to allow the fallback."
+        }
+        if (-not $resolver) { $resolver = 'https://dns.google/resolve' }
+
+        if (-not $script:METDohWarned) {
+            Write-Warning "No local DNS resolver is available, so MET is resolving '$Name' over DNS-over-HTTPS via $resolver. The domain names of the tenant being assessed leave this host and are sent to that third-party resolver. Set MET_DOH_RESOLVER to another endpoint, or to 'none' to disable this fallback."
+            $script:METDohWarned = $true
+        }
+
         $escapedName = [uri]::EscapeDataString($Name)
-        $uri = "https://dns.google/resolve?name=$escapedName&type=$Type"
+        $uri = "${resolver}?name=$escapedName&type=$Type"
 
         try {
-            $response = Invoke-RestMethod -Uri $uri -Method Get -Headers @{ Accept = 'application/dns-json' } -ErrorAction Stop
+            $response = Invoke-RestMethod -Uri $uri -Method Get -Headers @{ Accept = 'application/dns-json' } -TimeoutSec 15 -ErrorAction Stop
         }
         catch {
             throw "DNS lookup for '$Name' failed using the DNS-over-HTTPS fallback: $($_.Exception.Message)"

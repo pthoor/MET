@@ -14,13 +14,15 @@ Reviews the tenant's Teams protection policy via `Get-TeamsProtectionPolicy` and
 
 ZAP retroactively removes messages already delivered once Defender for Office 365's cloud detection catches up - useful because detection engines improve continuously and a message judged clean at delivery time can be reclassified minutes or hours later. Without ZAP for Teams, a malicious link or file shared in a Teams chat stays visible and clickable indefinitely after the fact, even though the equivalent email would have been purged. The quarantine-tag checks close a related but separate gap: ZAP moving a message to quarantine is meaningless as a control if the assigned quarantine policy then lets the recipient release it themselves, undoing the ZAP action. Rule exceptions matter because a tenant-wide `ZapEnabled = $true` can still leave specific recipients, groups, or domains silently uncovered if a policy rule excepts them - the aggregate flag alone does not guarantee blanket coverage.
 
+`Get-QuarantinePolicy` returns `EndUserQuarantinePermissions` as a formatted string, not a typed object, so `$policy.EndUserQuarantinePermissions.PermissionToRelease` is always `$null`. The check resolves `PermissionToRelease` through `Get-METEndUserQuarantinePermission`, which parses that string; a revision that read the property directly reported the release permission as unconfirmed for every non-`AdminOnlyAccessPolicy` tag on every tenant.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |
 |---|---|
 | Pass | `ZapEnabled` is `$true`, both quarantine tags are `AdminOnlyAccessPolicy` (or resolve to a policy with `PermissionToRelease = $false`), and no enabled rule has exceptions |
-| Fail | `ZapEnabled` is `$false`, either quarantine tag is unset or allows self-release, or the Teams protection policy could not be retrieved / does not exist |
-| Warning | ZAP and quarantine permissions are otherwise compliant, but one or more enabled `TeamsProtectionPolicyRule` entries except specific recipients/groups/domains from coverage |
+| Fail | `ZapEnabled` is `$false`, either quarantine tag is unset or allows self-release, or the Teams protection policy could not be retrieved / does not exist. A confirmed failure on one quarantine tag is reported alongside, and does not suppress, an unconfirmed release permission on the other tag or a `Get-TeamsProtectionPolicyRule` retrieval failure - both are named in the Finding, clearly marked as unconfirmed/not-yet-retrieved rather than a second confirmed failure |
+| Warning | ZAP and quarantine permissions are otherwise compliant, but one or more enabled `TeamsProtectionPolicyRule` entries except specific recipients/groups/domains from coverage; `Get-TeamsProtectionPolicyRule` could not be read, so rule exceptions are unverified; or `EndUserQuarantinePermissions.PermissionToRelease` was not returned by `Get-QuarantinePolicy` for a non-`AdminOnlyAccessPolicy` tag, so whether users can self-release via that tag was not established |
 
 ## Recommendation
 

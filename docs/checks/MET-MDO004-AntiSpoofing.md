@@ -20,8 +20,8 @@ Spoofing is the simplest phishing technique and is still prevalent. Spoof intell
 | Result | Condition |
 |---|---|
 | Pass | All four settings correct |
-| Fail | Spoof intelligence disabled |
-| Warning | Spoof intelligence on but sub-optimal action or DMARC not honored |
+| Fail | Spoof intelligence disabled, or `EnableSpoofIntelligence` not returned by the service - an absent setting is not evidence the control is on |
+| Warning | Spoof intelligence confirmed on, but sub-optimal action or DMARC not honored |
 
 ## Recommendation
 

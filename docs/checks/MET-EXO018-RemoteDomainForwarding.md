@@ -28,12 +28,14 @@ This check covers only one of **three independent control planes** for automatic
 
 Closing one while leaving the others open still permits mail to leave the tenant automatically.
 
+All three checks in this family carry the same **High** severity. They assess one control at three layers, so a gap in any one of them leaves the same exfiltration path open, and scoring them differently would have implied a difference in exposure that does not exist.
+
 ## Pass / Fail / Warning
 
 | Result | Condition |
 |---|---|
 | Pass | `AutoForwardEnabled` is disabled for the remote domain |
-| Pass | `AutoForwardEnabled` is absent or null on the object - forwarding is not asserted as enabled, and the finding states that the property was not present |
+| Warning | `AutoForwardEnabled` was not returned for the remote domain - the forwarding state was not established, so it is reported as a gap rather than a pass, with a recommendation to confirm directly with `Get-RemoteDomain` |
 | Warning | `AutoForwardEnabled` is enabled for a specific (non-`*`) remote domain - a scoped exception that needs periodic review |
 | Fail | `AutoForwardEnabled` is enabled on the tenant-wide default remote domain (`DomainName = '*'`) |
 | Info | No remote domains are configured in the tenant |

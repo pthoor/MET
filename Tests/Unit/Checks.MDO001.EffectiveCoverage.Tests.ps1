@@ -8,12 +8,14 @@ BeforeAll {
     . "$root/Private/Get-METPolicyOrderingObservations.ps1"
     . "$root/Private/New-METEffectivePolicyCoverageResult.ps1"
 
-    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets) }
+    function Get-EXOMailbox { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-SafeLinksRule { [CmdletBinding()] param() }
     function Get-SafeLinksPolicy { [CmdletBinding()] param() }
-    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param() }
-    function Get-MgGroup { [CmdletBinding()] param([string]$Filter) }
-    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity) }
+    function Get-ATPProtectionPolicyRule { [CmdletBinding()] param([string]$Identity) }
+    function Get-MgGroup { [CmdletBinding()] param([string]$Filter,[int]$Top) }
+    function Get-MgGroupTransitiveMember { [CmdletBinding()] param([string]$GroupId,[switch]$All) }
+    function Get-DistributionGroupMember { [CmdletBinding()] param([string]$Identity,[string]$ResultSize) }
+    function Get-UnifiedGroupLinks { [CmdletBinding()] param([string]$Identity,[string]$LinkType,[string]$ResultSize) }
 
     function New-TestSafeLinksPolicy {
         param([string] $Name, [bool] $Compliant)
@@ -45,8 +47,8 @@ Describe 'MET-MDO001 effective recipient coverage' {
         $script:METContext = $null
         $script:checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO001-SafeLinks.ps1'
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@thoorsec.onmicrosoft.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@contoso.onmicrosoft.com' }
         }
         Mock Get-ATPProtectionPolicyRule { @() }
     }
@@ -83,7 +85,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
     It 'fails only the recipient outside a compliant domain-scoped policy' {
         Mock Get-SafeLinksRule {
             @(
-                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('thoor.tech')
+                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('contoso.com')
                 New-TestSafeLinksRule -Name 'Weak fallback' -Policy 'Weak fallback' -Priority 1
             )
         }
@@ -98,15 +100,15 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
         $result.Result | Should -Be 'Fail'
         $result.Metadata.CompliantRecipients | Should -Be 1
-        $result.Metadata.AffectedRecipients | Should -Be @('bob@thoorsec.onmicrosoft.com')
-        $result.Finding | Should -Match 'bob@thoorsec.onmicrosoft.com'
+        $result.Metadata.AffectedRecipients | Should -Be @('bob@contoso.onmicrosoft.com')
+        $result.Finding | Should -Match 'bob@contoso.onmicrosoft.com'
         $result.Finding | Should -Match 'Safe Links for email is disabled'
     }
 
     It 'excludes discovery mailboxes from the assessment population' {
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'DiscoverySearchMailbox@thoorsec.onmicrosoft.com'; RecipientTypeDetails = 'DiscoveryMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'DiscoverySearchMailbox@contoso.onmicrosoft.com'; RecipientTypeDetails = 'DiscoveryMailbox' }
         }
         Mock Get-SafeLinksRule { @(New-TestSafeLinksRule -Name 'Strict custom' -Policy 'Strict custom' -Priority 0) }
         Mock Get-SafeLinksPolicy { @(New-TestSafeLinksPolicy -Name 'Strict custom' -Compliant $true) }
@@ -115,7 +117,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
         $result.Result | Should -Be 'Pass'
         $result.Metadata.TotalRecipients | Should -Be 1
-        $result.Metadata.AffectedRecipients | Should -Not -Contain 'DiscoverySearchMailbox@thoorsec.onmicrosoft.com'
+        $result.Metadata.AffectedRecipients | Should -Not -Contain 'DiscoverySearchMailbox@contoso.onmicrosoft.com'
     }
 
     It 'returns NotApplicable when no assessable mailboxes remain' {
@@ -139,7 +141,7 @@ Describe 'MET-MDO001 effective recipient coverage' {
 
     It 'returns Warning when a scoped group cannot be expanded' {
         $groupRule = New-TestSafeLinksRule -Name 'Group policy' -Policy 'Group policy' -Priority 0
-        $groupRule.SentToMemberOf = @('security@thoor.tech')
+        $groupRule.SentToMemberOf = @('security@contoso.com')
         Mock Get-SafeLinksRule { @($groupRule) }
         Mock Get-SafeLinksPolicy {
             @(
@@ -147,23 +149,36 @@ Describe 'MET-MDO001 effective recipient coverage' {
                 New-TestSafeLinksPolicy -Name 'Built-In Protection Policy' -Compliant $true
             )
         }
+        # Expand-METGroupMembership tries three tiers - Graph, Exchange DL, then
+        # Microsoft 365 Group links - and only records a retrieval error when all
+        # three fail, so all three have to be denied for "cannot be expanded" to
+        # be what this exercises.
         Mock Get-MgGroup { throw 'group lookup denied' }
         Mock Get-DistributionGroupMember { throw 'group lookup denied' }
+        Mock Get-UnifiedGroupLinks { throw 'group lookup denied' }
 
         $result = & $script:checkFile
 
         $result.Result | Should -Be 'Warning'
-        $result.Error | Should -Match 'security@thoor.tech'
+        $result.Error | Should -Match 'security@contoso.com'
+        # Asserted on the denial text, not just the group name: the group name
+        # also appears in the wrapper sentence, so matching it alone passed even
+        # when the tier mocks never ran and the recorded cause was a fixture
+        # parameter-binding error rather than the denial under test.
+        $result.Error | Should -Match 'group lookup denied'
+        Should -Invoke Get-MgGroup -Times 1
+        Should -Invoke Get-DistributionGroupMember -Times 1
+        Should -Invoke Get-UnifiedGroupLinks -Times 1
     }
 
     It 'applies a parent-domain policy to subdomain recipients through the full check' {
         Mock Get-EXOMailbox {
-            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
-            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@lab.thoor.tech'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' }
+            [PSCustomObject]@{ PrimarySmtpAddress = 'bob@lab.contoso.com'; RecipientTypeDetails = 'UserMailbox' }
         }
         Mock Get-SafeLinksRule {
             @(
-                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('thoor.tech')
+                New-TestSafeLinksRule -Name 'Strict domain' -Policy 'Strict domain' -Priority 0 -Domains @('contoso.com')
                 New-TestSafeLinksRule -Name 'Weak fallback' -Policy 'Weak fallback' -Priority 1
             )
         }

@@ -37,8 +37,16 @@ catch {
 
 $overrides = @(
     $casMailboxes | Where-Object {
-        $null -ne $_.SmtpClientAuthenticationDisabled -and $_.SmtpClientAuthenticationDisabled -eq $false
+        $_.PSObject.Properties['SmtpClientAuthenticationDisabled'] -and $null -ne $_.SmtpClientAuthenticationDisabled -and $_.SmtpClientAuthenticationDisabled -eq $false
     }
+)
+
+# A mailbox with SmtpClientAuthenticationDisabled present and $null inherits the tenant
+# setting - a documented, meaningful value, not an override. A mailbox whose object omits
+# the property entirely is a different fact: whether it overrides was never returned at
+# all, so it cannot be folded into either "inherits" or "overrides".
+$unverified = @(
+    $casMailboxes | Where-Object { -not $_.PSObject.Properties['SmtpClientAuthenticationDisabled'] }
 )
 
 if ($overrides.Count -gt 0) {
@@ -46,11 +54,26 @@ if ($overrides.Count -gt 0) {
     $sampleText = $sample -join ', '
     $suffix = if ($overrides.Count -gt $sample.Count) { " (showing first $($sample.Count) of $($overrides.Count))" } else { '' }
 
+    $finding = "SMTP AUTH client submission is disabled tenant-wide, but $($overrides.Count) mailbox(es) explicitly re-enable it and are therefore exempt from that baseline: $sampleText$suffix. Unless an authentication policy separately blocks Basic authentication for SMTP, each of these is a live password-only endpoint that bypasses most Conditional Access and can be password-sprayed."
+    $overrideErrorMessage = $null
+
+    if ($unverified.Count -gt 0) {
+        $finding += " In addition, $($unverified.Count) mailbox(es) did not return the SmtpClientAuthenticationDisabled property, so whether they also override the baseline is unverified."
+        $overrideErrorMessage = "$($unverified.Count) of $($casMailboxes.Count) mailbox(es) returned by Get-EXOCasMailbox did not include a SmtpClientAuthenticationDisabled value."
+    }
+
     New-METCheckResult -CheckId 'MET-EXO019' -Category EXO -Name 'SMTP Client Authentication' `
         -Result Warning -Severity High -AffectedObject "Mailbox SMTP AUTH Overrides ($($overrides.Count) mailboxes)" `
-        -Finding "SMTP AUTH client submission is disabled tenant-wide, but $($overrides.Count) mailbox(es) explicitly re-enable it and are therefore exempt from that baseline: $sampleText$suffix. Unless an authentication policy separately blocks Basic authentication for SMTP, each of these is a live password-only endpoint that bypasses most Conditional Access and can be password-sprayed." `
+        -Finding $finding `
         -Recommendation $recommendation `
-        -ReferenceUrl $referenceUrl
+        -ReferenceUrl $referenceUrl -ErrorMessage $overrideErrorMessage
+}
+elseif ($unverified.Count -gt 0) {
+    New-METCheckResult -CheckId 'MET-EXO019' -Category EXO -Name 'SMTP Client Authentication' `
+        -Result Warning -Severity High -AffectedObject 'Transport Configuration' `
+        -Finding "SMTP AUTH client submission is disabled tenant-wide, but $($unverified.Count) mailbox(es) did not return the SmtpClientAuthenticationDisabled property, so whether they override that baseline is unverified. An unconfirmed state is reported as unassessed rather than a pass, because nothing here distinguishes a mailbox that inherits the tenant-wide disablement from one that silently overrides it." `
+        -Recommendation $recommendation `
+        -ReferenceUrl $referenceUrl -ErrorMessage "$($unverified.Count) of $($casMailboxes.Count) mailbox(es) returned by Get-EXOCasMailbox did not include a SmtpClientAuthenticationDisabled value."
 }
 else {
     New-METCheckResult -CheckId 'MET-EXO019' -Category EXO -Name 'SMTP Client Authentication' `
