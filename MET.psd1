@@ -18,13 +18,13 @@
     FunctionsToExport    = @(
         'Connect-METSession'
         'Disconnect-METSession'
-        'Invoke-METTriage'
+        'Invoke-METAssessment'
         'Get-METReport'
         'Test-METPrerequisites'
     )
     CmdletsToExport      = @()
     VariablesToExport    = @()
-    AliasesToExport      = @()
+    AliasesToExport      = @('Invoke-METTriage')
     PrivateData          = @{
         PSData = @{
             Tags         = @('MDO', 'Microsoft365', 'Defender', 'ExchangeOnline', 'Teams', 'Security', 'Posture', 'Assessment')

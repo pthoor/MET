@@ -20,7 +20,7 @@ Look at the existing check inventory in `README.md` and pick the next available 
 
 Create `Checks/<Category>/MET-<ID>-<ShortName>.ps1`.
 
-Each check script is a standalone `.ps1` file (not a function). It is dot-sourced and executed by `Invoke-METTriage`. The script:
+Each check script is a standalone `.ps1` file (not a function). It is dot-sourced and executed by `Invoke-METAssessment`. The script:
 
 - Has access to all `Private/` helpers (`New-METCheckResult`, `Get-METCheckWeight`)
 - Must **not** throw - wrap all EXO/Graph/Teams calls in `try/catch`

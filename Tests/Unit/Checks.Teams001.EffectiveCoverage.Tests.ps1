@@ -152,7 +152,7 @@ Describe 'MET-Teams001 effective recipient coverage' {
     }
 
     It 'reuses a Safe Links resolution cached in $METContext by MET-MDO001 without throwing on AddRange' {
-        # Regression: Invoke-METTriage runs MET-MDO001 before MET-Teams001 in the same $METContext.
+        # Regression: Invoke-METAssessment runs MET-MDO001 before MET-Teams001 in the same $METContext.
         # MET-MDO001 caches its RetrievalErrors list back into $METContext as a plain `@()` array,
         # which PowerShell types as System.Object[] even though every element is a string. Passing
         # that straight to List[string].AddRange() throws, because Object[] does not satisfy

@@ -1,4 +1,4 @@
-﻿function Invoke-METTriage {
+﻿function Invoke-METAssessment {
     [CmdletBinding()]
     param(
         [Parameter()]
@@ -69,7 +69,7 @@
         TenantName      = ''
     }
 
-    Write-Progress -Activity 'MET Triage' -Status 'Initializing - fetching accepted domains...' `
+    Write-Progress -Activity 'MET Assessment' -Status 'Initializing - fetching accepted domains...' `
         -PercentComplete 0 -Id 1
 
     try {
@@ -105,7 +105,7 @@
     foreach ($file in $checkFiles) {
         $currentIndex++
         $checkIdDisplay = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
-        Write-Progress -Activity 'MET Triage' -Status "$checkIdDisplay - $($file.BaseName)" `
+        Write-Progress -Activity 'MET Assessment' -Status "$checkIdDisplay - $($file.BaseName)" `
             -PercentComplete ([int]($currentIndex / $totalChecks * 100)) `
             -CurrentOperation "Check $currentIndex of $totalChecks" -Id 1
         Write-Verbose "Running check: $($file.BaseName)"
@@ -113,7 +113,7 @@
         # Run the check script inside a scriptblock so that:
         #   1. $METContext is injected as a local variable the script can read.
         #   2. `return` inside the check script exits only this scriptblock,
-        #      not Invoke-METTriage, avoiding the dot-source return-scope trap.
+        #      not Invoke-METAssessment, avoiding the dot-source return-scope trap.
         #   3. Hashtable fields (e.g. GroupMembers) mutated by the check script
         #      persist across checks because hashtables are reference types.
         $checkPath = $file.FullName
@@ -166,7 +166,7 @@
         }
     }
 
-    Write-Progress -Activity 'MET Triage' -Completed -Id 1
+    Write-Progress -Activity 'MET Assessment' -Completed -Id 1
 
     if ($PassThru) { return }
 

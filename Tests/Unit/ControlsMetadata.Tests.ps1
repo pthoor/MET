@@ -18,7 +18,7 @@ BeforeAll {
         }
     }
 
-    # Discovered exactly the way Invoke-METTriage discovers them, so a file this test cannot see
+    # Discovered exactly the way Invoke-METAssessment discovers them, so a file this test cannot see
     # is a file the triage run cannot see either.
     $script:CheckFiles = [ordered]@{}
     Get-ChildItem -Path (Join-Path $root 'Checks') -Recurse -Filter 'MET-*.ps1' |

@@ -6,7 +6,7 @@ BeforeAll {
     . "$root/Private/Test-METIsBuiltInQuarantinePolicyName.ps1"
     . "$root/Private/Expand-METGroupMembership.ps1"
     . "$root/Private/Get-METAssessableMailboxes.ps1"
-    . "$root/Public/Invoke-METTriage.ps1"
+    . "$root/Public/Invoke-METAssessment.ps1"
 
     function Get-AcceptedDomain           { [CmdletBinding()] param() }
     function Get-EXOMailbox               { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
@@ -28,7 +28,7 @@ BeforeAll {
     function Get-User                     { [CmdletBinding()] param([switch]$IsVIP,[string]$ResultSize) }
 }
 
-Describe 'Invoke-METTriage default aggregation' {
+Describe 'Invoke-METAssessment default aggregation' {
     BeforeEach {
         Mock Get-AcceptedDomain           { @() }
         Mock Get-MgGroup                  { throw 'Graph not available' }
@@ -56,7 +56,7 @@ Describe 'Invoke-METTriage default aggregation' {
 
     Context 'A check emits multiple Info results and no Fail/Warning' {
         It 'Collapses them into one summary instead of dropping all but the first' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'Info'
@@ -66,7 +66,7 @@ Describe 'Invoke-METTriage default aggregation' {
         }
 
         It 'Still returns every individual result with -Detailed' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -Detailed -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO014' -Detailed -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 2
             @($results | ForEach-Object AffectedObject) | Should -Contain 'Sales DL'
@@ -82,7 +82,7 @@ Describe 'Invoke-METTriage default aggregation' {
         }
 
         It 'Stamps METRunTenant on the all-info summary aggregate (both groups healthy)' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'Info'
@@ -97,7 +97,7 @@ Describe 'Invoke-METTriage default aggregation' {
                 @([PSCustomObject]@{ RecipientType = 'MailUser'; PrimarySmtpAddress = 'alice@contoso.com' })
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO014' -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 1
             $results[0].Result | Should -Be 'Fail'
@@ -107,7 +107,7 @@ Describe 'Invoke-METTriage default aggregation' {
     }
 }
 
-Describe 'Invoke-METTriage mixed-result aggregation' {
+Describe 'Invoke-METAssessment mixed-result aggregation' {
     BeforeEach {
         Mock Get-AcceptedDomain { @() }
     }
@@ -134,7 +134,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Reports the aggregate as a Fail counting only the failing domain' {
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
 
             $results.Count           | Should -Be 1
             $results[0].Result       | Should -Be 'Fail'
@@ -144,7 +144,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Keeps only the failing domain in the aggregated Finding' {
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO002' -WarningAction SilentlyContinue)
 
             $results[0].Finding | Should -Match 'broken\.contoso\.com'
             $results[0].Finding | Should -Not -Match 'ok1\.contoso\.com'
@@ -152,7 +152,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Still returns all ten per-domain results with -Detailed' {
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO002' -Detailed -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO002' -Detailed -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 10
             @($results | Where-Object Result -eq 'Fail').Count | Should -Be 1
@@ -174,7 +174,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Reports the aggregate as a Warning, not a Fail' {
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
 
             $results.Count             | Should -Be 1
             $results[0].Result         | Should -Be 'Warning'
@@ -184,7 +184,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Names the warned policies and leaves the healthy one out of the Finding' {
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO004' -WarningAction SilentlyContinue)
 
             $results[0].Finding | Should -Match 'CustomNoNotify1'
             $results[0].Finding | Should -Match 'CustomNoNotify2'
@@ -205,7 +205,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Produces exactly the underlying mix the branch is meant to handle' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO002' -Detailed -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO002' -Detailed -WarningAction SilentlyContinue)
 
             $results.Count | Should -Be 2
             @($results.Result | Sort-Object) | Should -Be @('NotApplicable', 'Pass')
@@ -213,7 +213,7 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Escalates the aggregate to Fail and carries the error text forward' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO002' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO002' -WarningAction SilentlyContinue)
 
             $results.Count             | Should -Be 1
             $results[0].Result         | Should -Be 'Fail'
@@ -236,14 +236,14 @@ Describe 'Invoke-METTriage mixed-result aggregation' {
         }
 
         It 'Emits the two underlying results with the expected severities' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO010' -Detailed -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO010' -Detailed -WarningAction SilentlyContinue)
             $results.Count | Should -Be 2
             ($results | Where-Object { $_.Result -eq 'NotApplicable' }).Severity | Should -Be 'High'
             ($results | Where-Object { $_.Result -eq 'Warning' }).Severity | Should -Be 'Medium'
         }
 
         It 'Scores the aggregate at the errored item severity (High), not the warning (Medium)' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO010' -WarningAction SilentlyContinue)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO010' -WarningAction SilentlyContinue)
 
             $results.Count       | Should -Be 1
             $results[0].Result   | Should -Be 'Warning'

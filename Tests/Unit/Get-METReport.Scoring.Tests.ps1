@@ -92,7 +92,7 @@ Describe 'Posture score arithmetic' {
 }
 
 Describe 'Checks that failed to run' {
-    # Invoke-METTriage synthesises a Fail/High result with Score = 0 for any check that
+    # Invoke-METAssessment synthesises a Fail/High result with Score = 0 for any check that
     # throws. If that score were null, Get-METReport would drop the check from the
     # weighted average and report a clean posture over a table of its own failures.
     It 'Counts a crashed check against the score instead of silently excluding it' {

@@ -844,7 +844,7 @@ const CONTROLS_CATEGORIES = [
 ];
 
 // ── Result identity ──────────────────────────────────────────────
-// Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one per
+// Invoke-METAssessment -Detailed routinely emits several results sharing one CheckId (one per
 // domain/policy/mailbox). CheckId alone is not a unique identity for a result, so every
 // acceptance helper, cardMap, and click target below is keyed on resultKey(check) instead.
 // checkId + affectedObject alone is not enough either: MET-EXO006 emits ten independent
@@ -1146,7 +1146,7 @@ function createCard(check) {
   // A check can carry both a Result (e.g. NotApplicable) and a populated Error field when it
   // couldn't run - the badge must say ERROR so the card is findable, even though card.dataset.result
   // (used by the result-filter dropdown and tab scoping below) stays the real Result value. hasError
-  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METTriage's per-check catch)
+  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METAssessment's per-check catch)
   // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
   // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
   const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);

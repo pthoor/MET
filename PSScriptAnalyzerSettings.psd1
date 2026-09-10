@@ -10,7 +10,7 @@
         'PSAvoidUsingWriteHost'
 
         # False positives: parameters used inside switch($PSCmdlet.ParameterSetName) blocks
-        # and parameters intentionally declared for future use (DelegatedOrganization in Invoke-METTriage)
+        # and parameters intentionally declared for future use (DelegatedOrganization in Invoke-METAssessment)
         'PSReviewUnusedParameter'
 
         # Our noun plurals are intentional and follow Microsoft's own naming patterns
