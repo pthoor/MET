@@ -20,6 +20,7 @@ BeforeAll {
         'Get-ArcConfig'
         'Get-AtpPolicyForO365'
         'Get-ATPProtectionPolicyRule'
+        'Get-ConnectionInformation'
         'Get-CsExternalAccessPolicy'
         'Get-CsOnlineUser'
         'Get-CsTeamsAppPermissionPolicy'
@@ -78,6 +79,12 @@ BeforeAll {
         param([string[]] $Names)
         foreach ($name in $Names) {
             Set-Item -Path "function:script:$name" -Value { }
+        }
+
+        # The generic stub above returns nothing, which the Invoke-METAssessment
+        # preflight reads as "not connected". This one has to return an object.
+        Set-Item -Path 'function:script:Get-ConnectionInformation' -Value {
+            [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com' }
         }
     } $script:TenantCmdlets
 

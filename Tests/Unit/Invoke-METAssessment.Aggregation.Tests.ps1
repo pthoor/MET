@@ -9,6 +9,7 @@ BeforeAll {
     . "$root/Public/Invoke-METAssessment.ps1"
 
     function Get-AcceptedDomain           { [CmdletBinding()] param() }
+    function Get-ConnectionInformation    { [CmdletBinding()] param() }
     function Get-EXOMailbox               { [CmdletBinding()] param([string]$ResultSize,[string]$PropertySets,[string[]]$Properties,[string]$Filter) }
     function Get-EOPProtectionPolicyRule  { [CmdletBinding()] param([string]$Identity) }
     function Get-ATPProtectionPolicyRule  { [CmdletBinding()] param([string]$Identity) }
@@ -30,6 +31,7 @@ BeforeAll {
 
 Describe 'Invoke-METAssessment default aggregation' {
     BeforeEach {
+        Mock Get-ConnectionInformation     { [PSCustomObject]@{ State = 'Connected' } }
         Mock Get-AcceptedDomain           { @() }
         Mock Get-MgGroup                  { throw 'Graph not available' }
         Mock Get-MgGroupTransitiveMember  { throw 'Graph not available' }
@@ -109,6 +111,7 @@ Describe 'Invoke-METAssessment default aggregation' {
 
 Describe 'Invoke-METAssessment mixed-result aggregation' {
     BeforeEach {
+        Mock Get-ConnectionInformation { [PSCustomObject]@{ State = 'Connected' } }
         Mock Get-AcceptedDomain { @() }
     }
 
