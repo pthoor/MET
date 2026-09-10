@@ -137,10 +137,13 @@ function Connect-METSession {
     # Connect-METSession (e.g. a prior Import-Module MicrosoftTeams/Graph/Az),
     # the check below surfaces that instead of the raw MSAL load failure.
     if (-not $SkipExchangeOnline) {
+        # Floor derived in docs/superpowers/notes/2026-09-10-exo-version-floor.md, not
+        # guessed: the earliest version carrying every Connect-ExchangeOnline parameter
+        # MET passes and every EXO-hosted cmdlet the checks call.
         $exoModule = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
-            Where-Object { $_.Version -ge [version]'3.0.0' } | Select-Object -First 1
+            Where-Object { $_.Version -ge [version]'3.7.2' } | Select-Object -First 1
         if (-not $exoModule) {
-            throw "ExchangeOnlineManagement 3.x or later is not installed. Run: Install-Module ExchangeOnlineManagement -Scope CurrentUser"
+            throw "ExchangeOnlineManagement 3.7.2 or later is not installed. Run: Install-Module ExchangeOnlineManagement -Scope CurrentUser"
         }
 
         $exoParams = @{

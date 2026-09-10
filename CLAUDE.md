@@ -128,7 +128,7 @@ MET/
 | Requirement | Detail |
 |---|---|
 | PowerShell | 7.4+ (tested on 7.4, 7.6) |
-| ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) - required |
+| ExchangeOnlineManagement | 3.7.2+ (modern auth, REST-based) - required. Floor is `-DisableWAM`, the switch `Connect-METSession` passes off Windows; derived in `docs/superpowers/notes/2026-09-10-exo-version-floor.md`. Note EXO's own supported-OS table requires PowerShell 7.6.0+ starting at module 3.10.0 (3.5.0-3.9.2 need only 7.4.0+) - on MET's PS 7.4 floor, EXO 3.10.x cannot be installed at all |
 | Microsoft.Graph.Identity.SignIns / .Groups | 2.x - optional; a missing module or failed Graph connection is non-fatal, and group expansion degrades to Exchange Online cmdlets (see [Connection Requirements for New Checks](#connection-requirements-for-new-checks)) |
 | MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
