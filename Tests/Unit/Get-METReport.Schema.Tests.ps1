@@ -38,15 +38,9 @@ BeforeAll {
         ($Results | Get-METReport -Format JSON -TenantName 'contoso.onmicrosoft.com') -join "`n"
     }
 
-    # The two violations pinned below are removed before validating, so the schema still sees
-    # every other property of a real report. A new violation - a renamed field, a value outside
-    # an enum, a required field dropped - therefore fails, while the two known ones stay
-    # documented in their own assertions rather than masking everything behind them.
     function Remove-METPinnedSchemaViolation {
         param([string] $Json)
         $doc = $Json | ConvertFrom-Json -AsHashtable
-        $null = $doc.Remove('authentication')
-        foreach ($check in @($doc.checks)) { $null = $check.Remove('metadata') }
         $doc | ConvertTo-Json -Depth 10
     }
 
@@ -149,44 +143,39 @@ Describe 'Get-METReport JSON output against docs/schema/MET-report-schema.json' 
         }
     }
 
-    Context 'Properties the published schema does not permit' {
+    Context 'Properties the published schema now permits' {
 
-        # Pins current output, which is wrong on both counts: the root object has
-        # "additionalProperties": false and no "authentication" property, and checkResult has
-        # "additionalProperties": false and no "metadata" property, so every report MET
-        # produces fails the contract it publishes. Left pinned rather than corrected here so
-        # the violation is visible and cannot change unnoticed - whether the schema gains the
-        # two properties or the output drops them is its own change.
-        #
-        #   /authentication - emitted on every run (null when Get-METReport was not reached
-        #     through Connect-METSession, otherwise an object of authMode, deviceCodeUsed,
-        #     tenantIdentity, servicesConnected). Schema clause: root "additionalProperties":
-        #     false. Fix: add "authentication" to the root "properties".
-        #   /checks/<n>/metadata - emitted on every check, null unless the check attached
-        #     structured detail. Schema clause: definitions/checkResult
-        #     "additionalProperties": false. Fix: add "metadata" to checkResult "properties".
-        It 'Currently emits a root authentication property the schema forbids' {
+        # /authentication (root) and /checks/<n>/metadata (per check) are both really emitted
+        # on every run - authentication null when Get-METReport was not reached through
+        # Connect-METSession, otherwise an object of authMode, deviceCodeUsed, tenantIdentity,
+        # servicesConnected; metadata null unless the check attached structured detail. Both
+        # used to be rejected by "additionalProperties": false on the root object and on
+        # definitions/checkResult respectively, so every report MET produced failed the
+        # contract it publishes. The schema now declares both properties instead.
+        It 'Validates a full report against the published schema unmodified' {
             $json = Get-METJsonReport -Results $script:MixedResults
             $json | Should -Match '"authentication":'
-            { Test-METReportAgainstSchema -Json $json } |
-                Should -Throw -ExpectedMessage "*at '/authentication'*"
+            { Test-Json -Json $json -SchemaFile $script:SchemaFile -ErrorAction Stop } |
+                Should -Not -Throw
         }
 
-        It 'Currently emits a per-check metadata property the schema forbids' {
+        It 'Validates a report carrying per-check metadata unmodified' {
             $json = Get-METJsonReport -Results $script:MixedResults
-            $stripped = ($json | ConvertFrom-Json -AsHashtable)
-            $null = $stripped.Remove('authentication')
-            $json = $stripped | ConvertTo-Json -Depth 10
             $json | Should -Match '"metadata":'
-            { Test-METReportAgainstSchema -Json $json } |
-                Should -Throw -ExpectedMessage "*at '/checks/0/metadata'*"
+            { Test-Json -Json $json -SchemaFile $script:SchemaFile -ErrorAction Stop } |
+                Should -Not -Throw
         }
 
-        It 'Currently violates the schema on a zero-result run too' {
-            # The root violation does not need a single check result to occur, so even an empty
-            # run ships a document that fails its own contract.
+        It 'Emits a scoreBand alongside the numeric score' {
+            $doc = Get-METJsonReport -Results $script:MixedResults | ConvertFrom-Json
+            $doc.scoreBand | Should -BeIn @('Critical','Poor','Fair','Good','Excellent','None')
+        }
+
+        It 'Validates a zero-result run against the published schema unmodified' {
+            # The root authentication property does not need a single check result to occur, so
+            # even an empty run must ship a document that validates unmodified.
             { Test-METReportAgainstSchema -Json (Get-METJsonReport -Results @()) } |
-                Should -Throw -ExpectedMessage "*at '/authentication'*"
+                Should -Not -Throw
         }
     }
 }

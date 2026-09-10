@@ -371,6 +371,7 @@ function Get-METReport {
                     }
                 } else { $null }
                 postureScore   = $overallScore
+                scoreBand      = $band
                 categoryScores = $categoryScores
                 summary        = $summary
                 checks         = @($allResults | ForEach-Object {

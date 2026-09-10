@@ -53,6 +53,15 @@
       "type": "array",
       "description": "Individual check results",
       "items": { "$ref": "#/definitions/checkResult" }
+    },
+    "scoreBand": {
+      "type": "string",
+      "enum": ["Critical", "Poor", "Fair", "Good", "Excellent", "None"]
+    },
+    "authentication": {
+      "type": ["object", "null"],
+      "description": "Auth mode, tenant identity and services connected for this run, so a customer SOC can reconcile a sign-in in their own logs with a known MET run.",
+      "additionalProperties": true
     }
   },
   "additionalProperties": false,
@@ -116,6 +125,11 @@
         "error": {
           "type": ["string", "null"],
           "description": "Error message if the check script failed to execute"
+        },
+        "metadata": {
+          "type": ["object", "null"],
+          "description": "Structured per-check detail, e.g. effective policy coverage tables, plus the METRunTenant provenance stamp.",
+          "additionalProperties": true
         }
       },
       "additionalProperties": false
