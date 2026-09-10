@@ -167,3 +167,28 @@ Describe 'Get-METReport with no scorable results' {
         $output | Should -Match 'No scorable results'
     }
 }
+
+Describe 'Get-METReport issues table ordering' {
+    # Sort-Object Severity is alphabetical: Critical, High, Low, Medium.
+    It 'orders by severity weight, not alphabetically' {
+        $results = @(
+            New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
+                -Result Fail -Severity Low -AffectedObject 'Default' -Finding 'Low finding.'
+            New-METCheckResult -CheckId 'MET-EXO021' -Category EXO -Name 'Mailbox Audit Logging' `
+                -Result Fail -Severity Medium -AffectedObject 'Tenant' -Finding 'Medium finding.'
+            New-METCheckResult -CheckId 'MET-EXO010' -Category EXO -Name 'Direct Send Protection' `
+                -Result Fail -Severity Critical -AffectedObject 'Tenant' -Finding 'Critical finding.'
+            New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+                -Result Fail -Severity High -AffectedObject 'Default' -Finding 'High finding.'
+        )
+
+        $output = @($results | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $positions = @('Critical finding.','High finding.','Medium finding.','Low finding.') |
+            ForEach-Object { $output.IndexOf($_) }
+
+        $positions[0] | Should -BeLessThan $positions[1]
+        $positions[1] | Should -BeLessThan $positions[2]
+        $positions[2] | Should -BeLessThan $positions[3]
+    }
+}

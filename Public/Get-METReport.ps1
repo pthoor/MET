@@ -322,7 +322,12 @@ function Get-METReport {
             Write-Host "  Pass: $($summary.Pass)  Fail: $($summary.Fail)  Warning: $($summary.Warning)  N/A: $($summary.NotApplicable)  Info: $($summary.Info)  Error: $($summary.Error)"
             Write-Host ''
 
-            $actionable = $allResults | Where-Object { $_.Result -in 'Fail','Warning' } | Sort-Object Severity, CheckId
+            # Sort-Object Severity is a string sort, which ordered the table
+            # Critical, High, Low, Medium. Weight descending is the real order.
+            $actionable = $allResults |
+                Where-Object { $_.Result -in 'Fail','Warning' } |
+                Sort-Object -Property @{ Expression = { Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $_.Severity) }; Descending = $true },
+                                      @{ Expression = 'CheckId'; Descending = $false }
             if ($actionable) {
                 Write-Host '  Issues requiring attention:' -ForegroundColor Yellow
                 $actionable | Format-Table -AutoSize -Property @(
