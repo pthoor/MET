@@ -270,3 +270,23 @@ Describe 'Parameter binding conventions' {
         $attribute.ValueFromPipeline | Should -BeTrue
     }
 }
+
+Describe 'Loader failure handling' {
+    # A dot-source failure in Public/ only warned, yet Export-ModuleMember still
+    # published the failed file's BaseName - so Import-Module "succeeded" and the
+    # command was missing at call time, far from the cause.
+    It 'throws when a Public/ script fails to dot-source' {
+        $sandbox = Join-Path $TestDrive 'brokenmodule'
+        Copy-Item -LiteralPath $script:ModuleRoot -Destination $sandbox -Recurse -Force
+
+        $brokenPath = Join-Path $sandbox 'Public' 'Get-METBroken.ps1'
+        Set-Content -LiteralPath $brokenPath -Value 'throw "deliberate load failure"'
+
+        { Import-Module (Join-Path $sandbox 'MET.psd1') -Force -ErrorAction Stop } |
+            Should -Throw -ExpectedMessage '*Get-METBroken.ps1*'
+
+        Remove-Module 'MET' -Force -ErrorAction SilentlyContinue
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+        $script:Module = Get-Module -Name 'MET'
+    }
+}
