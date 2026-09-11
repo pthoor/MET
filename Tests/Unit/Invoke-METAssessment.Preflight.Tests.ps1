@@ -46,6 +46,22 @@ Describe 'Invoke-METAssessment connection preflight' {
         Should -Invoke -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -Times 0
     }
 
+    # -ErrorAction SilentlyContinue suppresses errors the command raises, not the failure
+    # to resolve the command at all, so with ExchangeOnlineManagement absent the guard
+    # itself threw a raw CommandNotFoundException.
+    It 'reports METNotConnected rather than CommandNotFoundException when EXO is absent' {
+        Mock -ModuleName 'MET' -CommandName 'Get-Command' `
+            -ParameterFilter { $Name -eq 'Get-ConnectionInformation' } -MockWith { }
+
+        $caught = $null
+        try { Invoke-METAssessment -CheckId 'MET-MDO001' } catch { $caught = $_ }
+
+        $caught | Should -Not -BeNullOrEmpty
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METNotConnected*'
+        $caught.Exception | Should -Not -BeOfType ([System.Management.Automation.CommandNotFoundException])
+        $caught.Exception.Message | Should -Match 'Test-METPrerequisites'
+    }
+
     It 'allows -ListChecks with no connection, as a documented dry run' {
         Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith { }
 
@@ -78,7 +94,9 @@ Describe 'Invoke-METAssessment check selection' {
         Invoke-METAssessment -CheckId 'MET-XXX999' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
 
         ($warnings -join ' ') | Should -Match 'MET-XXX999'
-        ($warnings -join ' ') | Should -Match 'Get-METCheck'
+        # Get-METCheck does not exist in this module - the dry-run is -ListChecks.
+        ($warnings -join ' ') | Should -Match '-ListChecks'
+        ($warnings -join ' ') | Should -Not -Match 'Get-METCheck'
     }
 
     It 'warns when a CheckId is missing the MET- prefix' {

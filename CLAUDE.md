@@ -146,8 +146,13 @@ No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-o
 Import-Module ./MET.psd1 -Force
 
 # Lint (matches CI's lint job exactly - must be zero errors)
+# -Path is [string], so passing the array as one argument throws
+# "Cannot convert 'System.Object[]'" and analyses nothing while reporting no findings.
+# Loop one path at a time, as pester.yml does.
 Install-Module PSScriptAnalyzer -MinimumVersion 1.21.0 -Scope CurrentUser
-Invoke-ScriptAnalyzer -Path Public,Private,Checks -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+@('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1') | ForEach-Object {
+    Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+}
 
 # Unit tests (no tenant connection required - all EXO/Graph/Teams cmdlets are mocked)
 $config = New-PesterConfiguration

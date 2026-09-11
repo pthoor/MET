@@ -29,11 +29,17 @@ function Disconnect-METSession {
     try {
         $teamsConnected = $false
 
-        # Connect-METSession records which legs it actually connected. If Teams was
-        # never one of them there is nothing to probe, and probing anyway was the whole
-        # source of the false disconnect failure below.
+        # Connect-METSession records which legs it actually connected, but ServicesConnected
+        # is rebuilt fresh per call: a second connect for the same tenant/org with -SkipTeams
+        # drops 'Teams' from the list while the Teams session from the first call is still
+        # live. Trusting that list alone then skipped the probe, recorded no failure, and
+        # cleared the tracking with Teams still authenticated to the previous customer. The
+        # module being loaded is the authority on whether a session can exist at all - if it
+        # is not loaded, Get-CsTenant could only be CommandNotFound anyway, which is the
+        # false disconnect failure this gate was added to avoid.
         $teamsWasConnected = -not $script:METSessionInfo -or
-                             ($script:METSessionInfo.ServicesConnected -contains 'Teams')
+                             ($script:METSessionInfo.ServicesConnected -contains 'Teams') -or
+                             [bool](Get-Module -Name MicrosoftTeams)
 
         if ($teamsWasConnected) {
             try {

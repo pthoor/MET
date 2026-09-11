@@ -198,6 +198,19 @@ Describe 'Get-METReport format and path combinations' {
         { $script:Sample | Get-METReport -Format JSON } | Should -Not -Throw
     }
 
+    # -Format All also requires -OutputPath, but $wantsHtml includes 'All' so the HTML
+    # guard fired first and told a user who asked for All that '-Format HTML requires
+    # -OutputPath' - naming a format they never requested.
+    It 'names the format actually requested when -Format All has no -OutputPath' {
+        { $script:Sample | Get-METReport -Format All } |
+            Should -Throw -ExpectedMessage '*-Format All*'
+    }
+
+    It 'still names HTML when -Format HTML has no -OutputPath' {
+        { $script:Sample | Get-METReport -Format HTML } |
+            Should -Throw -ExpectedMessage '*-Format HTML*'
+    }
+
     It 'warns that -OutputPath is ignored for -Format Console' {
         $warnings = @()
         $script:Sample | Get-METReport -Format Console -OutputPath (Join-Path $TestDrive 'ignored') `
@@ -233,4 +246,53 @@ Describe 'Get-METReport path and input handling' {
         Test-Path -LiteralPath (Join-Path $folder.FullName 'MET-report.json') | Should -BeTrue
     }
 
+    # Split-Path has no parameter set combining -LiteralPath with -Parent or -Leaf, so
+    # converting these two call sites to -LiteralPath made every -OutputPath that names a
+    # file throw 'Parameter set cannot be resolved' before writing anything - exactly the
+    # two invocations README/CLAUDE.md document. Every other test here passes a directory,
+    # which takes the other branch, so 1041 green tests never touched this.
+    It 'writes a JSON report when -OutputPath names a file' {
+        $target = Join-Path $TestDrive 'named-json' 'custom-name.json'
+
+        { $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-json') -Recurse -File -Filter 'custom-name.json')
+        $written.Count | Should -Be 1
+    }
+
+    It 'writes an HTML report when -OutputPath names a file' {
+        $target = Join-Path $TestDrive 'named-html' 'custom-name.html'
+
+        { $script:Sample | Get-METReport -Format HTML -OutputPath $target -NoLaunch | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-html') -Recurse -File -Filter 'custom-name.html')
+        $written.Count | Should -Be 1
+    }
+
+    # The named file still lands inside the per-run <timestamp>-<tenant> subfolder, which is
+    # the behavior that shipped before the -LiteralPath regression. Asserted so a future
+    # change to that layout is a deliberate one.
+    It 'keeps a named output file inside the per-run assessment folder' {
+        $target = Join-Path $TestDrive 'named-layout' 'custom-name.json'
+
+        $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null
+
+        $runFolder = Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-layout') -Directory | Select-Object -First 1
+        $runFolder | Should -Not -BeNullOrEmpty
+        Test-Path -LiteralPath (Join-Path $runFolder.FullName 'custom-name.json') | Should -BeTrue
+    }
+
+    # -OutputPath containing brackets must survive the file-naming branch too, which is
+    # why the fix uses [System.IO.Path] rather than reverting to Split-Path -Path.
+    It 'writes to a named output file under a bracketed folder' {
+        $target = Join-Path $TestDrive 'Contoso [2027]' 'custom-name.json'
+
+        { $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'Contoso [2027]') -Recurse -File -Filter 'custom-name.json')
+        $written.Count | Should -Be 1
+    }
 }

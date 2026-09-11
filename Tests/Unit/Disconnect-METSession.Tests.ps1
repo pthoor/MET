@@ -48,6 +48,30 @@ Describe 'Disconnect-METSession Teams classification' {
         }
     }
 
+    # ServicesConnected is rebuilt fresh on every Connect-METSession call, so a second
+    # connect for the same tenant/org with -SkipTeams (permitted - no guard fires) drops
+    # 'Teams' from the list while the Teams session from the first call is still live.
+    # Gating the probe on ServicesConnected alone then skipped it, recorded no failure and
+    # cleared the tracking with Teams still authenticated to customer A.
+    It 'still probes when ServicesConnected omits Teams but the module is loaded' {
+        InModuleScope 'MET' {
+            $script:METConnection = @{ Mode = 'Interactive'; Org = 'customera.onmicrosoft.com' }
+            $script:METSessionInfo = @{ ServicesConnected = @('ExchangeOnline') }
+
+            Mock -CommandName 'Get-Module' -ParameterFilter { $Name -eq 'MicrosoftTeams' } -MockWith {
+                [PSCustomObject]@{ Name = 'MicrosoftTeams'; Version = [version]'7.9.0' }
+            }
+            Mock -CommandName 'Get-CsTenant' -MockWith { [PSCustomObject]@{ TenantId = 'aaaa' } }
+            Mock -CommandName 'Disconnect-MicrosoftTeams' -MockWith { }
+
+            Disconnect-METSession -WarningAction SilentlyContinue
+
+            Should -Invoke -CommandName 'Get-CsTenant' -Times 1 -Exactly
+            Should -Invoke -CommandName 'Disconnect-MicrosoftTeams' -Times 1 -Exactly
+            $script:METConnection | Should -BeNullOrEmpty
+        }
+    }
+
     # The fail-closed intent is correct and must survive: an ambiguous failure while a
     # session may still be live must not clear the tracking the reuse guard depends on.
     It 'still fails closed on a genuinely ambiguous probe failure' {

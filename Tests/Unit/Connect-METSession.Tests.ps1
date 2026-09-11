@@ -424,14 +424,65 @@ Describe 'Connect-METSession tenant-scoped session reuse - EXO' {
 
     Context 'Existing connection is Managed Identity and Managed Identity was requested again' {
         It 'Reuses the connection without throwing (Managed Identity is app-only but never certificate-based)' {
+            # Connect-ExchangeOnline -ManagedIdentity requires -Organization (Task 18, C-7),
+            # so a live managed-identity session always reports that organization back. The
+            # mock reflects that rather than leaving Organization null, which no real
+            # managed-identity session does.
             Mock Get-ConnectionInformation {
-                [PSCustomObject]@{ State = 'Connected'; Organization = $null; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
             }
 
-            # -TenantId became mandatory in the ManagedIdentity set (Task 18, C-7); supplying
-            # it here does not change the reuse behavior this test asserts.
             { Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -ErrorAction Stop } | Should -Not -Throw
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    # -TenantId is mandatory in the ManagedIdentity set and is passed straight to
+    # Connect-ExchangeOnline -Organization, but $requestedOrg only covered the
+    # ServicePrincipal set and -DelegatedOrganization. ManagedIdentity fell through to
+    # $null, which left every tenant guard keyed on $requestedOrg inert: a managed-identity
+    # run for customer B silently reused customer A's live session and reported A's
+    # configuration under B's name.
+    Context 'Existing connection is for a different org and Managed Identity names another tenant' {
+        It 'Throws the organization mismatch instead of reusing customer A session' {
+            Mock Get-ConnectionInformation {
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'customera.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
+            }
+
+            $caught = $null
+            try {
+                Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity `
+                    -TenantId 'customerb.onmicrosoft.com' -ErrorAction Stop
+            }
+            catch { $caught = $_ }
+
+            $caught | Should -Not -BeNullOrEmpty
+            $caught.FullyQualifiedErrorId | Should -Match 'METOrganizationMismatch'
+            $caught.Exception.Message | Should -Match 'customera\.onmicrosoft\.com'
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    # Same gap seen from the cross-call guard. That guard still fired, because an absent
+    # $requestedOrg against a tracked one is itself treated as a mismatch - but it could
+    # only describe the requested identity as 'ManagedIdentity (no organization
+    # specified)', so the operator was never told which tenant the run had asked for.
+    Context 'A prior call in this process tracked a different org and Managed Identity names another' {
+        It 'Throws the cross-call identity mismatch naming both organizations' {
+            Mock Get-ConnectionInformation { $null }
+            $script:METConnection = @{ Mode = 'ManagedIdentity'; Org = 'customera.onmicrosoft.com' }
+
+            $caught = $null
+            try {
+                Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity `
+                    -TenantId 'customerb.onmicrosoft.com' -ErrorAction Stop
+            }
+            catch { $caught = $_ }
+
+            $caught | Should -Not -BeNullOrEmpty
+            $caught.FullyQualifiedErrorId | Should -Match 'METSessionIdentityMismatch'
+            $caught.Exception.Message | Should -Match 'customera\.onmicrosoft\.com'
+            $caught.Exception.Message | Should -Match 'customerb\.onmicrosoft\.com'
         }
     }
 }
@@ -619,6 +670,11 @@ Describe 'Connect-METSession cross-call identity guard' {
         Mock Get-Module {
             [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1'; ModuleBase = '/fake/ExchangeOnlineManagement/3.10.1' }
         } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+        # Disconnect-METSession asks whether MicrosoftTeams is loaded before probing for a
+        # live Teams session. Pester has no default mock to fall back to once Get-Module is
+        # mocked with a filter, so this models the real state of this test session (the
+        # module is not loaded) rather than letting the unmatched call throw.
+        Mock Get-Module { } -ParameterFilter { $Name -eq 'MicrosoftTeams' }
         Mock Get-METAssemblyFileVersion { [version]'4.83.1.0' }
         Mock Test-METAssemblyLoadConflict { $null }
         Mock Get-ConnectionInformation { $null }

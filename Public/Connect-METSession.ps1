@@ -115,8 +115,16 @@ function Connect-METSession {
     $sharedCertificate = $null
 
     $requestedMode = $PSCmdlet.ParameterSetName
+    # Every tenant guard below (the EXO organization mismatch, the Graph and Teams tenant
+    # checks, and the cross-call identity guard) is keyed on $requestedOrg. -TenantId is
+    # mandatory in the ManagedIdentity set and is passed to Connect-ExchangeOnline
+    # -Organization, so leaving ManagedIdentity to fall through to $null here left all four
+    # unable to tell one customer's tenant from another's on that path - and
+    # METSessionInfo.TenantIdentity null, so the report header could not name the tenant the
+    # run was aimed at either.
     $requestedOrg = switch ($requestedMode) {
         'ServicePrincipal' { $TenantId }
+        'ManagedIdentity'  { if ($DelegatedOrganization) { $DelegatedOrganization } else { $TenantId } }
         default            { if ($DelegatedOrganization) { $DelegatedOrganization } else { $null } }
     }
 

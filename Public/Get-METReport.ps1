@@ -184,11 +184,15 @@ function Get-METReport {
         $assessmentFolderAnnounced = $false
         $writtenFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
 
+        # $wantsHtml covers 'All' too, so this guard is the one that fires for both. The
+        # message names whichever format was actually requested - a user who asked for All
+        # was previously told '-Format HTML requires -OutputPath', naming a format they
+        # never passed, and the later 'All' guard was unreachable dead code.
         if ($wantsHtml -and -not $OutputPath) {
             $PSCmdlet.ThrowTerminatingError(
                 [System.Management.Automation.ErrorRecord]::new(
                     [System.ArgumentException]::new(
-                        '-Format HTML requires -OutputPath. The report is a single self-contained file over a thousand lines long; writing it to the console is never what was wanted. Pass -OutputPath <folder>.'),
+                        ('-Format {0} requires -OutputPath. The HTML report is a single self-contained file over a thousand lines long; writing it to the console is never what was wanted. Pass -OutputPath <folder>.' -f $Format)),
                     'METOutputPathRequired',
                     [System.Management.Automation.ErrorCategory]::InvalidArgument,
                     $Format))
@@ -210,7 +214,12 @@ function Get-METReport {
             $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
           }
           else {
-            $parentFolder = Split-Path -LiteralPath $OutputPath -Parent
+            # Split-Path has no parameter set pairing -LiteralPath with -Parent or -Leaf, so
+            # that combination throws 'Parameter set cannot be resolved' before anything is
+            # written. [System.IO.Path] is literal by nature, which keeps the -LiteralPath
+            # intent (a folder named 'Contoso [2026]' must not be glob-expanded) that
+            # reverting to Split-Path -Path would throw away.
+            $parentFolder = [System.IO.Path]::GetDirectoryName($OutputPath)
             if ([string]::IsNullOrWhiteSpace($parentFolder)) {
               $parentFolder = (Get-Location).Path
             }
@@ -224,7 +233,7 @@ function Get-METReport {
 
           if ($wantsJson) {
             $jsonLeaf = if ($Format -eq 'JSON' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -LiteralPath $OutputPath -Leaf
+              [System.IO.Path]::GetFileName($OutputPath)
             }
             else {
               'MET-report.json'
@@ -234,24 +243,13 @@ function Get-METReport {
 
           if ($wantsHtml) {
             $htmlLeaf = if ($Format -eq 'HTML' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -LiteralPath $OutputPath -Leaf
+              [System.IO.Path]::GetFileName($OutputPath)
             }
             else {
               'MET-report.html'
             }
             $resolvedHtmlPath = Join-Path $assessmentOutputFolder $htmlLeaf
           }
-        }
-
-        if ($Format -eq 'All' -and -not $OutputPath) {
-            $PSCmdlet.ThrowTerminatingError(
-                [System.Management.Automation.ErrorRecord]::new(
-                    [System.ArgumentException]::new("-OutputPath is required when -Format is 'All'. Provide a folder path to write both JSON and HTML reports."),
-                    'MissingOutputPath',
-                    [System.Management.Automation.ErrorCategory]::InvalidArgument,
-                    $Format
-                )
-            )
         }
 
         # Error is reported as its own bucket, mutually exclusive with the Result-based

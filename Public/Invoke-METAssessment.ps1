@@ -29,14 +29,28 @@
     # produce 51 results scoring 11/Critical, 45 of them errors - an artifact that
     # reads as a genuine assessment. Fail at the door instead. -ListChecks is
     # exempt: it is a documented dry-run that must work before connecting.
-    if (-not $ListChecks -and -not (Get-ConnectionInformation -ErrorAction SilentlyContinue)) {
-        $PSCmdlet.ThrowTerminatingError(
-            [System.Management.Automation.ErrorRecord]::new(
-                [System.InvalidOperationException]::new(
-                    'Not connected to Exchange Online. Run Connect-METSession first.'),
-                'METNotConnected',
-                [System.Management.Automation.ErrorCategory]::ConnectionError,
-                $null))
+    if (-not $ListChecks) {
+        # -ErrorAction SilentlyContinue does not suppress command *resolution* failure, so
+        # with ExchangeOnlineManagement not installed this leaked a raw
+        # CommandNotFoundException instead of the actionable guard below.
+        $exoCmdletAvailable = [bool](Get-Command -Name 'Get-ConnectionInformation' -ErrorAction SilentlyContinue)
+        $exoSession = if ($exoCmdletAvailable) { Get-ConnectionInformation -ErrorAction SilentlyContinue } else { $null }
+
+        if (-not $exoSession) {
+            $message = if ($exoCmdletAvailable) {
+                'Not connected to Exchange Online. Run Connect-METSession first.'
+            }
+            else {
+                'Not connected to Exchange Online: the ExchangeOnlineManagement module is not available in this session, so Get-ConnectionInformation could not be resolved. Run Test-METPrerequisites to check the required modules, then Connect-METSession.'
+            }
+
+            $PSCmdlet.ThrowTerminatingError(
+                [System.Management.Automation.ErrorRecord]::new(
+                    [System.InvalidOperationException]::new($message),
+                    'METNotConnected',
+                    [System.Management.Automation.ErrorCategory]::ConnectionError,
+                    $null))
+        }
     }
 
     $checksRoot = Join-Path $PSScriptRoot '..' 'Checks'
@@ -69,12 +83,12 @@
 
     foreach ($requested in @($CheckId) + @($ExcludeCheckId)) {
         if ($requested -and $knownCheckIds -notcontains $requested) {
-            Write-Warning "'$requested' matched no check. Run Get-METCheck to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
+            Write-Warning "'$requested' matched no check. Run Invoke-METAssessment -ListChecks to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
         }
     }
 
     if (@($checkFiles).Count -eq 0) {
-        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Get-METCheck to list the available checks.'
+        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Invoke-METAssessment -ListChecks to list the available checks.'
     }
 
     if ($ListChecks) {
