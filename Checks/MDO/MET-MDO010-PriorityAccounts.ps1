@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Priority Account Protection Toggle'
+    Severity       = 'High'
+    Description    = 'Checks whether the priority account protection toggle is enabled and whether priority account tags are applied to a differentiated protection policy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 # Check - tenant-wide priority account protection toggle (MDO Plan 2 only)
 try {
     $tenantSettings = Get-EmailTenantSettings -ErrorAction Stop

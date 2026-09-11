@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Policy Precedence Conflicts'
+    Severity       = 'High'
+    Description    = 'Finds custom anti-spam, anti-malware, Anti-Phish, Safe Links, and Safe Attachments rules whose targeted recipients are also covered by a Standard/Strict preset policy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 # ── Mailbox list (lazy-cached in context) ────────────────────────────────────
 $allMailboxes = $null
 if ($METContext -and $METContext.AllMailboxes) {

@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Anti-Spam Outbound Effective Coverage'
+    Severity       = 'High'
+    Description    = 'Resolves the effective outbound anti-spam policy per mailbox and checks auto-forward restrictions, sending limits, and external forwarding rules.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $allSenders = $null
 try {
     $allSenders = if ($METContext -and $METContext.AllMailboxes) { @($METContext.AllMailboxes) } else { @(Get-METAssessableMailboxes) }

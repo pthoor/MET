@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Anti-Phishing Effective Coverage'
+    Severity       = 'High'
+    Description    = 'Resolves the effective Anti-Phish policy per mailbox and checks impersonation protection, mailbox intelligence, first-contact safety tips, and the action taken on impersonation detection.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $allMailboxes = $null
 if ($METContext -and $METContext.AllMailboxes) {
     $allMailboxes = @($METContext.AllMailboxes)

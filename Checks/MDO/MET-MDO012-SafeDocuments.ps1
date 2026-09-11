@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Safe Documents'
+    Severity       = 'Medium'
+    Description    = 'Checks EnableSafeDocs and AllowSafeDocsOpen on Get-AtpPolicyForO365.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $atpGlobal = Get-AtpPolicyForO365 -ErrorAction Stop
 }
