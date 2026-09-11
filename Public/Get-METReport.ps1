@@ -119,6 +119,20 @@ function Get-METReport {
         }
       }
 
+      # Imported results (via Import-METReport) carry the authentication of the run that
+      # produced them, stamped on Metadata.METRunAuthentication. That record beats the
+      # current session's $script:METSessionInfo, which describes whoever this process
+      # happens to be connected to right now - a different run entirely. Precedence: imported
+      # provenance wins when present; the live session is used only as a fallback.
+      $importedAuth = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunAuthentication')) {
+            $_.Metadata['METRunAuthentication']
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -First 1)
+
         $scorable = $allResults | Where-Object { $_.Result -in 'Pass','Fail','Warning' -and $null -ne $_.Score }
 
         $overallScore = if ($scorable) {
@@ -275,16 +289,34 @@ function Get-METReport {
         # *now*, not who gathered these results, and a wrong auth description is
         # worse than none.
         $authInfoLine = $null
-        if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
-            $info = $script:METSessionInfo
-            $modeLabel = switch ($info.AuthMode) {
+        if (($importedAuth -or $script:METSessionInfo) -and -not $provenanceDisagreesWithLiveSession) {
+            # $importedAuth round-tripped through JSON (Import-METReport reads it straight off
+            # the saved file), so its property names are camelCase - authMode, deviceCodeUsed,
+            # tenantIdentity, servicesConnected. $script:METSessionInfo is a live module-scoped
+            # object with PascalCase properties. Reading either through the other's casing would
+            # silently no-op under PowerShell's case-insensitive property access - the exact
+            # accident C-20 exists to fix - so each source is read out explicitly rather than
+            # normalized into one shared $info variable.
+            if ($importedAuth) {
+                $authMode          = $importedAuth.authMode
+                $deviceCodeUsed    = $importedAuth.deviceCodeUsed
+                $tenantIdentity    = $importedAuth.tenantIdentity
+                $servicesConnected = $importedAuth.servicesConnected
+            }
+            else {
+                $authMode          = $script:METSessionInfo.AuthMode
+                $deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
+                $tenantIdentity    = $script:METSessionInfo.TenantIdentity
+                $servicesConnected = $script:METSessionInfo.ServicesConnected
+            }
+            $modeLabel = switch ($authMode) {
                 'ServicePrincipal' { 'Service Principal (certificate)' }
                 'ManagedIdentity'  { 'Managed Identity' }
-                default            { if ($info.DeviceCodeUsed) { 'Interactive (device code)' } else { 'Interactive' } }
+                default            { if ($deviceCodeUsed) { 'Interactive (device code)' } else { 'Interactive' } }
             }
             $authInfoLine = $modeLabel
-            if ($info.TenantIdentity) { $authInfoLine += " - $($info.TenantIdentity)" }
-            if ($info.ServicesConnected -and $info.ServicesConnected.Count) { $authInfoLine += " - $($info.ServicesConnected -join ', ')" }
+            if ($tenantIdentity) { $authInfoLine += " - $tenantIdentity" }
+            if ($servicesConnected -and @($servicesConnected).Count) { $authInfoLine += " - $(@($servicesConnected) -join ', ')" }
         }
 
         # ── Console ──────────────────────────────────────────────────────────
@@ -363,7 +395,17 @@ function Get-METReport {
                 tenant         = $effectiveTenantName
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
-                authentication = if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
+                # Imported provenance (camelCase, from a prior Import-METReport) wins over the
+                # live session (PascalCase) - see the console/HTML auth block above for why the
+                # two are read out by name instead of merged through case-insensitive access.
+                authentication = if ($importedAuth -and -not $provenanceDisagreesWithLiveSession) {
+                    [ordered]@{
+                        authMode          = $importedAuth.authMode
+                        deviceCodeUsed    = $importedAuth.deviceCodeUsed
+                        tenantIdentity    = $importedAuth.tenantIdentity
+                        servicesConnected = @($importedAuth.servicesConnected)
+                    }
+                } elseif ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
                     [ordered]@{
                         authMode          = $script:METSessionInfo.AuthMode
                         deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
