@@ -299,67 +299,67 @@ MET is assessment-only and never changes tenant configuration. The separate [Pro
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| [MET-MDO001](docs/checks/MET-MDO001-SafeLinks.md) | Safe Links Effective Coverage | High | Email + Office app URL scanning, click-through, internal senders |
-| [MET-MDO002](docs/checks/MET-MDO002-SafeAttachments.md) | Safe Attachments | High | Policy enabled, action is Block or DynamicDelivery |
-| [MET-MDO003](docs/checks/MET-MDO003-AntiPhish.md) | Anti-Phishing Effective Coverage | High | Mailbox intelligence, impersonation protection, safety tips |
-| [MET-MDO004](docs/checks/MET-MDO004-AntiSpoofing.md) | Anti-Spoofing | High | Spoof intelligence, DMARC honor, auth failure action |
-| [MET-MDO005](docs/checks/MET-MDO005-AntiMalware.md) | Anti-Malware Effective Coverage | High | ZAP, common attachment filter, admin notifications |
-| [MET-MDO006](docs/checks/MET-MDO006-AntiSpamInbound.md) | Anti-Spam Inbound Effective Coverage | Medium | Spam/phish actions, high-confidence thresholds, BCL |
-| [MET-MDO007](docs/checks/MET-MDO007-AntiSpamOutbound.md) | Anti-Spam Outbound Effective Coverage | High | Auto-forward disabled, send limit action, admin alerts |
-| [MET-MDO008](docs/checks/MET-MDO008-PresetPolicyCoverage.md) | Preset Policy Coverage | High | % of mailboxes covered by Standard or Strict preset |
-| [MET-MDO009](docs/checks/MET-MDO009-ZAP.md) | ZAP Effective Coverage | High | ZAP enabled for spam and phishing in all policies |
-| [MET-MDO010](docs/checks/MET-MDO010-PriorityAccounts.md) | Priority Account Protection Toggle | High | Priority Account tag usage + differentiated protection policy |
-| [MET-MDO011](docs/checks/MET-MDO011-UserTags.md) | User Tags | Low | Portal-review pointer for user tags and tag-aware alert policies; no programmatic assessment (always Info/Low). |
-| [MET-MDO012](docs/checks/MET-MDO012-SafeDocuments.md) | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
-| [MET-MDO013](docs/checks/MET-MDO013-PolicyPrecedenceConflicts.md) | Policy Precedence Conflicts | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
-| [MET-MDO014](docs/checks/MET-MDO014-GroupReferenceAudit.md) | Group Reference Audit | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
+| MET-MDO001 | [Safe Links Effective Coverage](docs/checks/MET-MDO001-SafeLinks.md) | High | Email + Office app URL scanning, click-through, internal senders |
+| MET-MDO002 | [Safe Attachments](docs/checks/MET-MDO002-SafeAttachments.md) | High | Policy enabled, action is Block or DynamicDelivery |
+| MET-MDO003 | [Anti-Phishing Effective Coverage](docs/checks/MET-MDO003-AntiPhish.md) | High | Mailbox intelligence, impersonation protection, safety tips |
+| MET-MDO004 | [Anti-Spoofing](docs/checks/MET-MDO004-AntiSpoofing.md) | High | Spoof intelligence, DMARC honor, auth failure action |
+| MET-MDO005 | [Anti-Malware Effective Coverage](docs/checks/MET-MDO005-AntiMalware.md) | High | ZAP, common attachment filter, admin notifications |
+| MET-MDO006 | [Anti-Spam Inbound Effective Coverage](docs/checks/MET-MDO006-AntiSpamInbound.md) | Medium | Spam/phish actions, high-confidence thresholds, BCL |
+| MET-MDO007 | [Anti-Spam Outbound Effective Coverage](docs/checks/MET-MDO007-AntiSpamOutbound.md) | High | Auto-forward disabled, send limit action, admin alerts |
+| MET-MDO008 | [Preset Policy Coverage](docs/checks/MET-MDO008-PresetPolicyCoverage.md) | High | % of mailboxes covered by Standard or Strict preset |
+| MET-MDO009 | [ZAP Effective Coverage](docs/checks/MET-MDO009-ZAP.md) | High | ZAP enabled for spam and phishing in all policies |
+| MET-MDO010 | [Priority Account Protection Toggle](docs/checks/MET-MDO010-PriorityAccounts.md) | High | Priority Account tag usage + differentiated protection policy |
+| MET-MDO011 | [User Tags](docs/checks/MET-MDO011-UserTags.md) | Low | Portal-review pointer for user tags and tag-aware alert policies; no programmatic assessment (always Info/Low). |
+| MET-MDO012 | [Safe Documents](docs/checks/MET-MDO012-SafeDocuments.md) | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
+| MET-MDO013 | [Policy Precedence Conflicts](docs/checks/MET-MDO013-PolicyPrecedenceConflicts.md) | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
+| MET-MDO014 | [Group Reference Audit](docs/checks/MET-MDO014-GroupReferenceAudit.md) | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
 
 ### EXO - Exchange Online / Email Authentication
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| [MET-EXO001](docs/checks/MET-EXO001-DMARC.md) | DMARC | High | Record present, policy quarantine/reject, rua reporting |
-| [MET-EXO002](docs/checks/MET-EXO002-DKIM.md) | DKIM | High | Signing enabled, key ≥ 2048 bit, CNAME status valid |
-| [MET-EXO003](docs/checks/MET-EXO003-SPF.md) | SPF | High | Record present, -all enforcement, ≤ 10 DNS lookups |
-| [MET-EXO004](docs/checks/MET-EXO004-QuarantinePolicy.md) | Quarantine Policies | Medium | Custom (non-built-in) quarantine policies with notifications off but end-user permissions granted |
-| [MET-EXO005](docs/checks/MET-EXO005-TenantAllowBlockList.md) | Tenant Allow/Block List | Low | Stale allows (>90 days), wildcard allows, allow/block ratio |
-| [MET-EXO006](docs/checks/MET-EXO006-SubmissionPolicy.md) | User Reported Message Settings | High | Report-to-Microsoft on, custom submission mailbox configured |
-| [MET-EXO007](docs/checks/MET-EXO007-TransportRuleAudit.md) | Transport Rule Audit | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
-| [MET-EXO008](docs/checks/MET-EXO008-QuarantineRetention.md) | Quarantine Retention | Low | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
-| [MET-EXO009](docs/checks/MET-EXO009-QuarantinePolicyVerdictAlignment.md) | Quarantine Policy Verdict Alignment | High | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
-| [MET-EXO010](docs/checks/MET-EXO010-DirectSend.md) | Direct Send Protection | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
-| [MET-EXO011](docs/checks/MET-EXO011-ConnectorHygiene.md) | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
-| [MET-EXO012](docs/checks/MET-EXO012-MailboxForwarding.md) | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
-| [MET-EXO013](docs/checks/MET-EXO013-SpoofIntelligenceAllowList.md) | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
-| [MET-EXO014](docs/checks/MET-EXO014-AdvancedDeliveryPolicy.md) | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
-| [MET-EXO015](docs/checks/MET-EXO015-ExternalSenderTag.md) | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
-| [MET-EXO016](docs/checks/MET-EXO016-ArcTrustedSealers.md) | ARC Trusted Sealers Review | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
-| [MET-EXO017](docs/checks/MET-EXO017-QuarantineNotificationCadence.md) | Quarantine Notification Cadence | Low | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
-| [MET-EXO018](docs/checks/MET-EXO018-RemoteDomainForwarding.md) | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
-| [MET-EXO019](docs/checks/MET-EXO019-SmtpAuthentication.md) | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
-| [MET-EXO020](docs/checks/MET-EXO020-ConnectionFilterPolicy.md) | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
-| [MET-EXO021](docs/checks/MET-EXO021-MailboxAuditing.md) | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
-| [MET-EXO022](docs/checks/MET-EXO022-SharingPolicy.md) | Calendar and Contact Sharing Policies | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
-| [MET-EXO023](docs/checks/MET-EXO023-UnifiedAuditLog.md) | Unified Audit Log Ingestion | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
+| MET-EXO001 | [DMARC](docs/checks/MET-EXO001-DMARC.md) | High | Record present, policy quarantine/reject, rua reporting |
+| MET-EXO002 | [DKIM](docs/checks/MET-EXO002-DKIM.md) | High | Signing enabled, key ≥ 2048 bit, CNAME status valid |
+| MET-EXO003 | [SPF](docs/checks/MET-EXO003-SPF.md) | High | Record present, -all enforcement, ≤ 10 DNS lookups |
+| MET-EXO004 | [Quarantine Policies](docs/checks/MET-EXO004-QuarantinePolicy.md) | Medium | Custom (non-built-in) quarantine policies with notifications off but end-user permissions granted |
+| MET-EXO005 | [Tenant Allow/Block List](docs/checks/MET-EXO005-TenantAllowBlockList.md) | Low | Stale allows (>90 days), wildcard allows, allow/block ratio |
+| MET-EXO006 | [User Reported Message Settings](docs/checks/MET-EXO006-SubmissionPolicy.md) | High | Report-to-Microsoft on, custom submission mailbox configured |
+| MET-EXO007 | [Transport Rule Audit](docs/checks/MET-EXO007-TransportRuleAudit.md) | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
+| MET-EXO008 | [Quarantine Retention](docs/checks/MET-EXO008-QuarantineRetention.md) | Low | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
+| MET-EXO009 | [Quarantine Policy Verdict Alignment](docs/checks/MET-EXO009-QuarantinePolicyVerdictAlignment.md) | High | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
+| MET-EXO010 | [Direct Send Protection](docs/checks/MET-EXO010-DirectSend.md) | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
+| MET-EXO011 | [Mail Flow Connector Hygiene](docs/checks/MET-EXO011-ConnectorHygiene.md) | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
+| MET-EXO012 | [Mailbox Forwarding](docs/checks/MET-EXO012-MailboxForwarding.md) | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
+| MET-EXO013 | [Spoof Intelligence Allow-List](docs/checks/MET-EXO013-SpoofIntelligenceAllowList.md) | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
+| MET-EXO014 | [Advanced Delivery Policy](docs/checks/MET-EXO014-AdvancedDeliveryPolicy.md) | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
+| MET-EXO015 | [External Sender Warning Tag](docs/checks/MET-EXO015-ExternalSenderTag.md) | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
+| MET-EXO016 | [ARC Trusted Sealers Review](docs/checks/MET-EXO016-ArcTrustedSealers.md) | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
+| MET-EXO017 | [Quarantine Notification Cadence](docs/checks/MET-EXO017-QuarantineNotificationCadence.md) | Low | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
+| MET-EXO018 | [Remote Domain Automatic Forwarding](docs/checks/MET-EXO018-RemoteDomainForwarding.md) | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
+| MET-EXO019 | [SMTP Client Authentication](docs/checks/MET-EXO019-SmtpAuthentication.md) | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
+| MET-EXO020 | [Connection Filter Policy Hygiene](docs/checks/MET-EXO020-ConnectionFilterPolicy.md) | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
+| MET-EXO021 | [Mailbox Audit Logging](docs/checks/MET-EXO021-MailboxAuditing.md) | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
+| MET-EXO022 | [Calendar and Contact Sharing Policies](docs/checks/MET-EXO022-SharingPolicy.md) | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
+| MET-EXO023 | [Unified Audit Log Ingestion](docs/checks/MET-EXO023-UnifiedAuditLog.md) | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
 
 ### Teams - Microsoft Teams Threat Protection
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| [MET-Teams001](docs/checks/MET-Teams001-SafeLinks.md) | Safe Links for Teams | High | Effective, precedence-resolved Safe Links policy per mailbox (same preset-vs-custom resolver as MET-MDO001) has EnableSafeLinksForTeams enabled |
-| [MET-Teams002](docs/checks/MET-Teams002-SafeAttachments.md) | Safe Attachments for Teams | High | EnableATPForSPOTeamsODB (the single documented toggle for SPO/OneDrive/Teams) |
-| [MET-Teams003](docs/checks/MET-Teams003-MeetingProtection.md) | Meeting Protection | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
-| [MET-Teams004](docs/checks/MET-Teams004-ZAPForTeams.md) | ZAP for Teams | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
-| [MET-Teams005](docs/checks/MET-Teams005-TeamsUserReporting.md) | Teams User Reporting | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
-| [MET-Teams006](docs/checks/MET-Teams006-ExternalAccess.md) | External Access / Federation Allow-List | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
-| [MET-Teams007](docs/checks/MET-Teams007-GuestConfiguration.md) | Guest Messaging/Calling Configuration | Medium | Guest-initiated 1:1 chat and private calling configuration |
-| [MET-Teams008](docs/checks/MET-Teams008-AppPermissionPolicy.md) | App Permission Policy | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |
-| [MET-Teams009](docs/checks/MET-Teams009-TrialTenantFederation.md) | Trial Tenant Federation Exposure | High | ExternalAccessWithTrialTenants allows communication with disposable trial-license tenants |
-| [MET-Teams010](docs/checks/MET-Teams010-ExternalAccessPolicyDrift.md) | Per-User External Access Policy Drift | Medium | Non-Global CsExternalAccessPolicy instances re-opening federation/public-cloud access for a specific user set |
-| [MET-Teams011](docs/checks/MET-Teams011-SecOpsBlocklistAuthority.md) | SecOps Blocklist Authority & Blocked Entities | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
-| [MET-Teams012](docs/checks/MET-Teams012-CallReporting.md) | Call Reporting | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
-| [MET-Teams014](docs/checks/MET-Teams014-CrossTenantAccess.md) | Cross-Tenant Guest & External Collaboration Restrictions | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
-| [MET-Teams015](docs/checks/MET-Teams015-EmailIntegration.md) | Teams Email Integration | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
+| MET-Teams001 | [Safe Links for Teams](docs/checks/MET-Teams001-SafeLinks.md) | High | Effective, precedence-resolved Safe Links policy per mailbox (same preset-vs-custom resolver as MET-MDO001) has EnableSafeLinksForTeams enabled |
+| MET-Teams002 | [Safe Attachments for Teams](docs/checks/MET-Teams002-SafeAttachments.md) | High | EnableATPForSPOTeamsODB (the single documented toggle for SPO/OneDrive/Teams) |
+| MET-Teams003 | [Meeting Protection](docs/checks/MET-Teams003-MeetingProtection.md) | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
+| MET-Teams004 | [ZAP for Teams](docs/checks/MET-Teams004-ZAPForTeams.md) | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
+| MET-Teams005 | [Teams User Reporting](docs/checks/MET-Teams005-TeamsUserReporting.md) | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
+| MET-Teams006 | [External Access / Federation Allow-List](docs/checks/MET-Teams006-ExternalAccess.md) | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
+| MET-Teams007 | [Guest Messaging/Calling Configuration](docs/checks/MET-Teams007-GuestConfiguration.md) | Medium | Guest-initiated 1:1 chat and private calling configuration |
+| MET-Teams008 | [App Permission Policy](docs/checks/MET-Teams008-AppPermissionPolicy.md) | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |
+| MET-Teams009 | [Trial Tenant Federation Exposure](docs/checks/MET-Teams009-TrialTenantFederation.md) | High | ExternalAccessWithTrialTenants allows communication with disposable trial-license tenants |
+| MET-Teams010 | [Per-User External Access Policy Drift](docs/checks/MET-Teams010-ExternalAccessPolicyDrift.md) | Medium | Non-Global CsExternalAccessPolicy instances re-opening federation/public-cloud access for a specific user set |
+| MET-Teams011 | [SecOps Blocklist Authority & Blocked Entities](docs/checks/MET-Teams011-SecOpsBlocklistAuthority.md) | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
+| MET-Teams012 | [Call Reporting](docs/checks/MET-Teams012-CallReporting.md) | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
+| MET-Teams014 | [Cross-Tenant Guest & External Collaboration Restrictions](docs/checks/MET-Teams014-CrossTenantAccess.md) | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
+| MET-Teams015 | [Teams Email Integration](docs/checks/MET-Teams015-EmailIntegration.md) | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
 
 ---
 
