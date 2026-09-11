@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Safe Attachments for Teams'
+    Severity       = 'High'
+    Description    = 'Verifies EnableATPForSPOTeamsODB on Get-AtpPolicyForO365, the sole documented toggle for Safe Attachments protection in SharePoint, OneDrive, and Teams.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $atpGlobal = Get-AtpPolicyForO365 -ErrorAction Stop
 }

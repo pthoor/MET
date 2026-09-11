@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Mail Flow Connector Hygiene'
+    Severity       = 'High'
+    Description    = 'Flags enabled inbound connectors with RequireTls off or no effective source-IP/TLS-certificate authentication binding.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $connectors = Get-InboundConnector -ErrorAction Stop
 }

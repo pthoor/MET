@@ -1,4 +1,15 @@
-﻿try {
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Anti-Spoofing'
+    Severity       = 'High'
+    Description    = 'Checks AuthenticationFailAction, DMARC honor settings, and unauthenticated sender visual indicators on the anti-phish policy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+try {
     $antiPhishRules    = @(Get-AntiPhishRule    -ErrorAction Stop | Sort-Object Priority)
     $antiPhishPolicies = @(Get-AntiPhishPolicy  -ErrorAction Stop)
 }

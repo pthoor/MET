@@ -1,4 +1,15 @@
-﻿# Use pre-fetched accepted domains from context when available; fall back to a live query.
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'SPF'
+    Severity       = 'High'
+    Description    = 'Verifies an SPF record is present, does not use +all or ?all, prefers -all over ~all, and stays within the 10-lookup limit.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+# Use pre-fetched accepted domains from context when available; fall back to a live query.
 $domains = $null
 if ($METContext -and $METContext.AcceptedDomains.Count -gt 0) {
     $domains = @($METContext.AcceptedDomains | Where-Object { $_.Default -or $_.DomainType -eq 'Authoritative' })

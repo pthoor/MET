@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'External Sender Warning Tag'
+    Severity       = 'Medium'
+    Description    = 'Checks Get-ExternalInOutlook for the native Outlook "External" sender banner.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 # Get-ExternalInOutlook hit the same generic server-side error as
 # Get-ExoPhishSimOverrideRule/Get-ExoSecOpsOverrideRule when -ErrorAction is
 # bound explicitly (see MET-EXO014 for the confirmed root cause). Use

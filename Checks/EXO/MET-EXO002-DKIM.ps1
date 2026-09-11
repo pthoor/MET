@@ -1,4 +1,15 @@
-﻿try {
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'DKIM'
+    Severity       = 'High'
+    Description    = 'Verifies DKIM signing is enabled for every accepted domain with a key length of at least 2048 bits.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+try {
     $dkimConfigs = Get-DkimSigningConfig -ErrorAction Stop
 }
 catch {

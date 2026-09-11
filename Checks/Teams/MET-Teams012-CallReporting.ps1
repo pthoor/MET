@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Call Reporting'
+    Severity       = 'Medium'
+    Description    = 'Checks ReportCall across all Get-CsTeamsCallingPolicy instances, the closest native control to helpdesk-vishing attacks over a Teams call.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $issues = [System.Collections.Generic.List[string]]::new()
 
 $referenceUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/new-csteamscallingpolicy'

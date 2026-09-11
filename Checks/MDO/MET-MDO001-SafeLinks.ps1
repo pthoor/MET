@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Safe Links Effective Coverage'
+    Severity       = 'High'
+    Description    = 'Resolves the precedence-winning Safe Links policy per mailbox and flags recipients whose effective policy disables Safe Links for email or Office apps, or has TrackClicks/EnableForInternalSenders/real-time scanning misconfigured.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $allMailboxes = $null
 if ($METContext -and $METContext.AllMailboxes) {
     $allMailboxes = @($METContext.AllMailboxes)

@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Quarantine Policy Verdict Alignment'
+    Severity       = 'High'
+    Description    = 'Cross-references every filter policy with its assigned quarantine tag and verifies PermissionToRelease is false for Malware and High-Confidence Phish verdicts.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 # Verifies that quarantine policies assigned to Malware and High-Confidence Phish verdicts
 # prevent user self-release, the only two verdicts with a restrictive floor per Microsoft's
 # own Standard/Strict preset matrix. Every

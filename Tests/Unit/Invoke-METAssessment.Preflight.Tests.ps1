@@ -136,9 +136,9 @@ Describe 'Invoke-METAssessment check selection' {
         Invoke-METAssessment -CheckId 'MET-XXX999' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
 
         ($warnings -join ' ') | Should -Match 'MET-XXX999'
-        # Get-METCheck does not exist in this module - the dry-run is -ListChecks.
-        ($warnings -join ' ') | Should -Match '-ListChecks'
-        ($warnings -join ' ') | Should -Not -Match 'Get-METCheck'
+        # The warning now points at Get-METCheck, the discovery cmdlet -ListChecks itself
+        # delegates to, rather than telling the user to re-run -ListChecks.
+        ($warnings -join ' ') | Should -Match 'Get-METCheck'
     }
 
     It 'warns when a CheckId is missing the MET- prefix' {

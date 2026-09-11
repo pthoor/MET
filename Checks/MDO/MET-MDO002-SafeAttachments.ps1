@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Safe Attachments'
+    Severity       = 'High'
+    Description    = 'Verifies Safe Attachments policies are enabled with an action of Block or DynamicDelivery, flagging any policy set to Allow.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $atpGlobal = $null
 $atpRetrievalError = $null
 

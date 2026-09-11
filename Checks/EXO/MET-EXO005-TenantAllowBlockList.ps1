@@ -1,4 +1,15 @@
-﻿$cutoff = (Get-Date).ToUniversalTime().AddDays(-90)
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Tenant Allow/Block List'
+    Severity       = 'Low'
+    Description    = 'Reviews the Tenant Allow/Block List for stale allow entries older than 90 days, overly broad wildcard allows, and the ratio of allows to blocks.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+$cutoff = (Get-Date).ToUniversalTime().AddDays(-90)
 
 $allEntries      = [System.Collections.Generic.List[PSCustomObject]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()

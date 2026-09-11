@@ -1,4 +1,98 @@
 ﻿function Invoke-METAssessment {
+    <#
+    .SYNOPSIS
+        Runs MET's posture checks against the connected tenant and returns the results.
+
+    .DESCRIPTION
+        Discovers check scripts fresh from Checks/ on every call - so dropping a new file into
+        Checks/<Category>/ registers it with no manifest to update - filters them by
+        -Category/-CheckId/-ExcludeCheckId, then runs each one against the Exchange Online,
+        Graph and Teams sessions Connect-METSession established.
+
+        Exchange Online must already be connected (Connect-METSession aborts if it cannot
+        connect, so this is normally already true); Invoke-METAssessment throws immediately if
+        it is not, rather than let every MDO/EXO check fail individually. -ListChecks is exempt
+        from this guard, since it is a documented dry run that must work before connecting at
+        all.
+
+        A terminating error in any one check script is caught and converted into a synthetic
+        Fail/High result carrying the exception text in Error, so one broken check never aborts
+        the whole run.
+
+        By default, multiple result objects that share the same CheckId (for example one per
+        domain, or one per policy) are collapsed into a single aggregate object per check,
+        inheriting the worst Result/Severity among them and listing each item's AffectedObject
+        and Finding in the aggregate's Finding text. Pass -Detailed to skip this and get the
+        full per-object results instead. -PassThru streams each result as its check completes,
+        rather than buffering the whole run before returning anything.
+
+    .PARAMETER Category
+        Restricts the run to one or more categories: MDO, EXO, or Teams. Combines with -CheckId
+        and -ExcludeCheckId.
+
+    .PARAMETER CheckId
+        Restricts the run to specific check IDs (e.g. 'MET-MDO001'), including the 'MET-'
+        prefix. Tab-completes from Get-METCheck. A CheckId that matches nothing emits a warning
+        naming it, rather than failing silently.
+
+    .PARAMETER ExcludeCheckId
+        Excludes specific check IDs from an otherwise full or -Category/-CheckId-scoped run.
+        Tab-completes from Get-METCheck the same way -CheckId does.
+
+    .PARAMETER DelegatedOrganization
+        Declared for future MSSP support but not yet wired into check execution - delegation
+        happens entirely at Connect-METSession time, and Invoke-METAssessment runs against
+        whichever session is already live. Passing this parameter does not change behaviour
+        today.
+
+    .PARAMETER PassThru
+        Streams each result object as its check completes, instead of buffering the full run
+        and returning one collection at the end. Implies no aggregation - every result object
+        is emitted individually, as if -Detailed had also been passed.
+
+    .PARAMETER ListChecks
+        Dry-run mode: lists the checks that -Category/-CheckId/-ExcludeCheckId would select,
+        with their name, category, severity and description, without connecting to anything or
+        executing a single check. Delegates to Get-METCheck, so the two always agree on what
+        exists.
+
+    .PARAMETER Detailed
+        Returns the full, un-aggregated per-object results instead of the default one-summary-
+        object-per-CheckId view. Use this when a check that reports once per domain or per
+        policy needs to be inspected item by item rather than as a rolled-up Finding.
+
+    .OUTPUTS
+        PSCustomObject[]. One or more MET.CheckResult objects (or, with -ListChecks, MET.CheckInfo
+        objects) per selected check. Get-METReport consumes this output directly.
+
+    .EXAMPLE
+        $results = Invoke-METAssessment
+
+        Runs every check and returns the default, aggregated collection - one result object per
+        CheckId, even for checks (like DMARC/SPF) that internally assess one item per domain.
+
+    .EXAMPLE
+        Invoke-METAssessment -ListChecks
+
+        The dry run: lists every check that would run, with its description and severity, and
+        connects to nothing. Useful for deciding which -Category or -CheckId values to pass
+        before spending the time to sign in.
+
+    .EXAMPLE
+        $summary  = Invoke-METAssessment -Category EXO
+        $detailed = Invoke-METAssessment -Category EXO -Detailed
+
+        Contrasts the default aggregation with -Detailed for the same scoped run: $summary
+        collapses MET-EXO001 (DMARC) into one result covering every accepted domain, while
+        $detailed returns one result object per domain so a specific domain's finding can be
+        inspected on its own.
+
+    .EXAMPLE
+        Invoke-METAssessment -ExcludeCheckId MET-EXO007 | Get-METReport -Format HTML -OutputPath ./assessments
+
+        Runs everything except the informational transport rule audit, then pipes straight into
+        an HTML report - the common pattern for a single end-to-end assessment.
+    #>
     [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]
@@ -6,9 +100,20 @@
         [string[]] $Category,
 
         [Parameter()]
+        [ArgumentCompleter({
+            param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+            # Not ValidateSet: checks are discovered from disk on every run so that dropping
+            # a file into Checks/<Category>/ registers it, and a ValidateSet would freeze the
+            # list at parse time.
+            (Get-METCheck).CheckId | Where-Object { $_ -like "$wordToComplete*" }
+        })]
         [string[]] $CheckId,
 
         [Parameter()]
+        [ArgumentCompleter({
+            param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+            (Get-METCheck).CheckId | Where-Object { $_ -like "$wordToComplete*" }
+        })]
         [string[]] $ExcludeCheckId,
 
         [Parameter()]
@@ -91,23 +196,23 @@
 
     foreach ($requested in @($CheckId) + @($ExcludeCheckId)) {
         if ($requested -and $knownCheckIds -notcontains $requested) {
-            Write-Warning "'$requested' matched no check. Run Invoke-METAssessment -ListChecks to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
+            Write-Warning "'$requested' matched no check. Run Get-METCheck to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
         }
     }
 
     if (@($checkFiles).Count -eq 0) {
-        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Invoke-METAssessment -ListChecks to list the available checks.'
+        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Get-METCheck to list the available checks.'
     }
 
     if ($ListChecks) {
-        return $checkFiles | ForEach-Object {
-            $parts = $_.BaseName -split '-', 3
-            [PSCustomObject]@{
-                CheckId  = "$($parts[0])-$($parts[1])"
-                Category = $_.Directory.Name
-                Script   = $_.Name
-            }
-        }
+        $resolvedIds = @($checkFiles | ForEach-Object { ($_.BaseName -split '-')[0..1] -join '-' })
+
+        # An empty -CheckId is falsy, so passing one through would skip Get-METCheck's
+        # filter and list all 51 checks for a filter combination that resolved to none -
+        # the dry run would then claim work that the real run will not do.
+        if ($resolvedIds.Count -eq 0) { return }
+
+        return Get-METCheck -CheckId $resolvedIds
     }
 
     # Pre-fetch shared context. Check scripts access $METContext via the

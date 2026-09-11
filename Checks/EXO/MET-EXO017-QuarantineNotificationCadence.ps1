@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Quarantine Notification Cadence'
+    Severity       = 'Low'
+    Description    = 'Reports EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy (DefaultGlobalTag).'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $globalPolicy = Get-QuarantinePolicy -QuarantinePolicyType GlobalQuarantinePolicy -ErrorAction Stop | Select-Object -First 1
 }

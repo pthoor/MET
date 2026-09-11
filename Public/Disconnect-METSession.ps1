@@ -1,4 +1,52 @@
 function Disconnect-METSession {
+    <#
+    .SYNOPSIS
+        Tears down the Exchange Online, Microsoft Graph and Microsoft Teams sessions Connect-METSession established.
+
+    .DESCRIPTION
+        Disconnects each of the three legs (Exchange Online, Microsoft Graph, Microsoft Teams)
+        in its own try/catch, so a failure disconnecting one leg does not prevent the others
+        from being torn down. Each failure is surfaced as a warning naming the leg.
+
+        The module's tracked tenant identity (used by Connect-METSession to verify a reused
+        session actually belongs to the tenant just requested) is cleared only when every leg is
+        confirmed disconnected. If any leg fails to disconnect, the tracking is left in place and
+        Connect-METSession will refuse to switch -DelegatedOrganization until the failure is
+        resolved - clearing it unconditionally would let a later Connect-METSession call reuse a
+        leg that never actually disconnected, the exact cross-customer session leak this tracking
+        exists to prevent, reopened from the disconnect side instead of connect.
+
+        Run this before switching to a different -DelegatedOrganization in the same PowerShell
+        session.
+
+    .OUTPUTS
+        None. Progress and any per-leg disconnect failures are reported via Write-Verbose and
+        Write-Warning, not returned as objects.
+
+    .EXAMPLE
+        Disconnect-METSession
+
+        Tears down all three legs at the end of an assessment session.
+
+    .EXAMPLE
+        Connect-METSession -DelegatedOrganization customerA.onmicrosoft.com
+        Invoke-METAssessment | Get-METReport -Format All -OutputPath ./assessments/customerA/
+        Disconnect-METSession
+        Connect-METSession -DelegatedOrganization customerB.onmicrosoft.com
+
+        The required step between two customers in an MSSP engagement run from a single
+        PowerShell process - Connect-METSession will not switch -DelegatedOrganization on a live
+        session for a different customer without this in between.
+
+    .EXAMPLE
+        Disconnect-METSession -WarningVariable disconnectWarnings -WarningAction SilentlyContinue
+        if ($disconnectWarnings) {
+            Write-Host 'One or more legs failed to disconnect cleanly - see the captured warnings.'
+        }
+
+        Capturing any per-leg disconnect failures in script code, since Disconnect-METSession
+        communicates them only via Write-Warning rather than a return value or thrown error.
+    #>
     [CmdletBinding()]
     param()
 

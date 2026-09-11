@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Mailbox Audit Logging'
+    Severity       = 'Medium'
+    Description    = 'Checks AuditDisabled on Get-OrganizationConfig, the tenant-wide mailbox audit logging setting.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $orgConfig = Get-OrganizationConfig -ErrorAction Stop
 }

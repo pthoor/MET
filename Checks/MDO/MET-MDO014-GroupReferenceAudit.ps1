@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Group Reference Audit'
+    Severity       = 'High'
+    Description    = 'Resolves every group referenced by an enabled EOP/MDO rule''s SentToMemberOf condition, reports member count per group, and flags 0-member groups as silently inert policies.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $allMailboxes = $null
 if ($METContext -and $METContext.AllMailboxes) {
     $allMailboxes = $METContext.AllMailboxes

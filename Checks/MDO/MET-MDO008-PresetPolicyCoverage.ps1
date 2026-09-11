@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Preset Policy Coverage'
+    Severity       = 'High'
+    Description    = 'Determines which users and groups are covered by a Standard or Strict preset security policy and flags uncovered recipient gaps.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 # ── Mailbox list (lazy-cached in context) ────────────────────────────────────
 $allMailboxes = $null
 if ($METContext -and $METContext.AllMailboxes) {

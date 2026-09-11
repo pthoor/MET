@@ -50,6 +50,34 @@ New-METCheckResult -CheckId 'MET-XXX999' -Category MDO -Name 'My Check' `
     -ReferenceUrl 'https://aka.ms/...'
 ```
 
+#### Declare `$METCheckInfo`
+
+Every check script opens with a metadata header, immediately before the assessment logic:
+
+```powershell
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'My Check'
+    Severity       = 'High'
+    Description    = 'One to two plain-English sentences describing what this check assesses and why.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+```
+
+Four fields, all required:
+
+- `Name` - human-readable check name (if the check emits more than one `Name` across its results, declare whichever best represents the check as a whole)
+- `Severity` - the *worst* severity this check can emit across all the results it returns, not just the common case
+- `Description` - one to two sentences; this is what `Get-METReport`'s HTML report now uses to generate each check's control-card description, so keep it accurate
+- `RequiresModule` - `string[]`, not a single string. Category does not imply module - list every module this check's cmdlet calls actually need (a Teams-category check calling only Exchange-hosted cmdlets declares `ExchangeOnlineManagement`, not `MicrosoftTeams`; one needing both declares both)
+
+The `SuppressMessageAttribute` line and the empty `param()` above it are both required, in that order, and must precede the header exactly as shown. `$METCheckInfo` is assigned and never read by the check itself - it exists to be read statically off the AST by `Get-METCheck` - and without the suppression, PSScriptAnalyzer's `PSUseDeclaredVarsMoreThanAssignments` rule flags that assignment as unused on every check file, burying real lint findings under 51 identical warnings.
+
+`Tests/Unit/CheckMetadata.Tests.ps1` re-derives `Severity`, `Name`, and `RequiresModule` from the rest of the script's own code (the `-Severity`/`-Name` arguments the script actually passes to `New-METCheckResult`, and the cmdlets it actually calls) and fails if your declared header disagrees - a wrong or stale header fails CI rather than shipping, so get it right rather than copy-pasting another check's header.
+
 ### 3. Follow the result schema
 
 | Field | Rules |
@@ -120,7 +148,9 @@ Create `docs/checks/MET-<ID>-<ShortName>.md` using the structure:
 
 ### 6. Update the README
 
-Add the new check to the check inventory table in `README.md`.
+Add the new check to the check inventory table in `README.md`, with the same `Severity` you declared in the check's `$METCheckInfo` header. You do **not** need to add an entry anywhere for the HTML report's control descriptions - `CONTROLS_META` is generated at report-render time from every check's own `$METCheckInfo.Description` via `Get-METCheck`, so the `Description` field you wrote in step 2 is the report description; there is no second copy to keep in sync.
+
+The `Severity` you write in the README table and in the new check's `docs/checks/*.md` `**Severity:**` line are not auto-generated the way `Description` is - `Tests/Unit/DocsSeverityParity.Tests.ps1` enforces them instead. It re-derives every check's Severity from its `$METCheckInfo` header (the same header `Tests/Unit/CheckMetadata.Tests.ps1` proves is correct against the check's own code) and fails, naming the specific `CheckId`, if either the README row or the doc front-matter line disagrees with it. Get both right the first time and the test passes silently; get either wrong and `Invoke-Pester -Path ./Tests/Unit` will tell you exactly which one.
 
 ---
 
@@ -157,12 +187,13 @@ Invoke-Pester -Configuration $config
 ## Pull request checklist
 
 - [ ] New check file created with correct naming
+- [ ] `$METCheckInfo` declared with `Name`, `Severity`, `Description`, and `RequiresModule`, preceded by the `SuppressMessageAttribute`/`param()` pair
 - [ ] `New-METCheckResult` used for all output
 - [ ] `try/catch` wraps all remote calls
 - [ ] Pester tests added (Pass, Fail, API-error, and absent-property scenarios)
 - [ ] Check doc added to `docs/checks/`
 - [ ] README check inventory updated
-- [ ] All unit tests pass locally (`Invoke-Pester -Configuration $config`)
+- [ ] All unit tests pass locally (`Invoke-Pester -Configuration $config`), including `Tests/Unit/CheckMetadata.Tests.ps1` against the new check's header
 
 ---
 

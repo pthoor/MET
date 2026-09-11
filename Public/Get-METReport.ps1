@@ -18,6 +18,99 @@ function Get-METModuleVersion {
 }
 
 function Get-METReport {
+    <#
+    .SYNOPSIS
+        Formats MET check results as a console summary, JSON export, or self-contained HTML report.
+
+    .DESCRIPTION
+        Takes the result objects produced by Invoke-METAssessment (or re-hydrated by
+        Import-METReport) and renders them in one or more formats: a coloured console summary
+        with a posture score and a Fail/Warning table, a machine-readable JSON document suitable
+        for SIEM ingestion or a CI gate, or a single self-contained HTML file (all CSS/JS
+        inlined, no external dependencies) that auto-opens in the default browser.
+
+        Every result carries a per-run tenant provenance stamp. Get-METReport refuses to render
+        a result set that spans more than one tenant - a mixed set would otherwise be labelled
+        with one customer's identity while carrying another's configuration, which is exactly
+        the cross-customer exposure the provenance stamp exists to catch. When -TenantName is
+        not given, the tenant label is inferred first from that provenance, then from the live
+        Connect-METSession state.
+
+    .PARAMETER InputObject
+        The check result objects to report on, typically the output of Invoke-METAssessment or
+        Import-METReport. Accepts pipeline input, so `$results | Get-METReport` is the normal
+        usage; not Mandatory, because a mandatory pipeline parameter would prompt interactively
+        on an empty pipeline and hang a CI process instead of failing it.
+
+    .PARAMETER Format
+        Which report format(s) to produce: Console (default; writes a summary to the host and
+        returns nothing), JSON, HTML, or All (writes both JSON and HTML). HTML and All require
+        -OutputPath, since the HTML report is too long to usefully write to the console.
+
+    .PARAMETER OutputPath
+        Where to write the report file(s), for -Format JSON, HTML, or All. For a single format
+        (JSON or HTML), pass a file path to name the output file directly, or a directory to
+        accept the default filename (MET-report.json / MET-report.html) inside it. For -Format
+        All, pass a directory - both files are written into it. Ignored, with a warning, when
+        -Format is Console. Known current-behaviour caveat: the report is presently written into
+        a timestamped subfolder created under the location given here, rather than at the exact
+        path/filename passed - this is a known, separately tracked defect, not an intended part
+        of this parameter's contract, and is expected to be fixed in a future release.
+
+    .PARAMETER TenantName
+        Overrides the tenant label shown in the console header, JSON `tenant` field, and HTML
+        report header. When omitted, the label is inferred from the results' own provenance
+        metadata, falling back to the live Connect-METSession state if no provenance is present.
+
+    .PARAMETER NoLaunch
+        Suppresses automatically opening the generated HTML report in the default browser.
+        Has no effect for -Format Console or -Format JSON, which never auto-launch anything.
+
+    .PARAMETER PassThru
+        Returns a System.IO.FileInfo object for each report file actually written to disk - one
+        for JSON and/or one for HTML, whichever formats were written with -OutputPath. Returns
+        nothing for -Format Console, and nothing for -Format JSON when -OutputPath is not
+        supplied, because no file is written to disk in either case (JSON without -OutputPath
+        instead emits the report JSON text itself to the pipeline, independently of -PassThru).
+
+    .OUTPUTS
+        None by default. With -PassThru, System.IO.FileInfo[] - one object per report file
+        written to disk this call, in the order written (JSON before HTML for -Format All);
+        an empty array if -PassThru was passed but no format that writes a file actually did
+        (-Format Console, or -Format JSON without -OutputPath).
+
+    .EXAMPLE
+        $results | Get-METReport
+
+        Prints the default console summary: overall posture score, per-category breakdown,
+        a Fail/Warning table, and a Pass count - the quickest way to review a run interactively.
+
+    .EXAMPLE
+        $results | Get-METReport -Format HTML -OutputPath ./assessments
+
+        Writes the interactive, self-contained HTML report under ./assessments and opens it in
+        the default browser - the report an analyst hands to a customer or keeps for review.
+
+    .EXAMPLE
+        $results | Get-METReport -Format JSON -OutputPath ./assessments
+
+        Writes the machine-readable JSON report under ./assessments, suitable for SIEM ingestion
+        or a CI/CD gate that inspects postureScore or individual check results.
+
+    .EXAMPLE
+        $results | Get-METReport -Format All -OutputPath ./assessments/contoso-2026-06-01/
+
+        Writes both the JSON and HTML reports into one directory in a single call - the pattern
+        used for a per-customer, per-run assessment archive.
+
+    .EXAMPLE
+        $written = $results | Get-METReport -Format JSON -OutputPath ./assessments -PassThru
+        $written.FullName
+
+        Captures the FileInfo object(s) for whatever was actually written to disk, to chain into
+        further automation (e.g. uploading the file, or reading its path back for logging)
+        without re-deriving the output path yourself.
+    #>
     [CmdletBinding(PositionalBinding = $false)]
     param(
         # Not Mandatory: a mandatory pipeline parameter prompts interactively when the
@@ -119,6 +212,50 @@ function Get-METReport {
         }
       }
 
+      # Imported results (via Import-METReport) carry the authentication of the run that
+      # produced them, stamped on Metadata.METRunAuthentication. That record beats the
+      # current session's $script:METSessionInfo, which describes whoever this process
+      # happens to be connected to right now - a different run entirely. Precedence: imported
+      # provenance wins when present; the live session is used only as a fallback. When more
+      # than one distinct imported auth block is present (checks from two different runs of
+      # the same tenant, piped together), only the first is used to label the report - warn
+      # so that choice isn't silent, the same way a tenant mismatch is surfaced above.
+      $allImportedAuth = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunAuthentication')) {
+            $_.Metadata['METRunAuthentication'] | ConvertTo-Json -Compress -Depth 5
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -Unique)
+
+      if ($allImportedAuth.Count -gt 1) {
+        Write-Warning "These results were imported from more than one run with different authentication provenance. The report is labelled with the first run's authentication."
+      }
+
+      $importedAuth = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunAuthentication')) {
+            $_.Metadata['METRunAuthentication']
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -First 1)
+
+      # Imported results carry the timestamp of the run that produced them, stamped on
+      # Metadata.METRunTimestamp - same precedence rule as $importedAuth above: imported
+      # provenance wins when present, so re-rendering a saved report doesn't relabel stale
+      # findings with the re-render time. Falls back to "now" only when nothing was imported
+      # (a live assessment just completed).
+      $importedTimestamp = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTimestamp')) {
+            $_.Metadata['METRunTimestamp']
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -First 1)
+
         $scorable = $allResults | Where-Object { $_.Result -in 'Pass','Fail','Warning' -and $null -ne $_.Score }
 
         $overallScore = if ($scorable) {
@@ -167,7 +304,12 @@ function Get-METReport {
             }
         }
 
-        $runTimestampUtc = [datetime]::UtcNow
+        # Imported provenance wins over "now" when present - see $importedTimestamp above.
+        $runTimestampUtc = if ($importedTimestamp) {
+          [datetime]$importedTimestamp[0]
+        } else {
+          [datetime]::UtcNow
+        }
         $safeTenantName = if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
           'unknown-tenant'
         }
@@ -275,16 +417,46 @@ function Get-METReport {
         # *now*, not who gathered these results, and a wrong auth description is
         # worse than none.
         $authInfoLine = $null
-        if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
-            $info = $script:METSessionInfo
-            $modeLabel = switch ($info.AuthMode) {
+        # $provenanceDisagreesWithLiveSession only means the *live* session's auth details
+        # would mislabel results gathered elsewhere - it says nothing about $importedAuth,
+        # which describes the very run being rendered and travels beside the same tenant
+        # label those results are already stamped with. So imported auth is let through
+        # unconditionally when present, and the flag gates only the live-session fallback.
+        $authSource = if ($importedAuth) {
+            $importedAuth
+        } elseif (-not $provenanceDisagreesWithLiveSession) {
+            $script:METSessionInfo
+        } else {
+            $null
+        }
+        if ($authSource) {
+            # $importedAuth round-tripped through JSON (Import-METReport reads it straight off
+            # the saved file), so its property names are camelCase - authMode, deviceCodeUsed,
+            # tenantIdentity, servicesConnected. $script:METSessionInfo is a live module-scoped
+            # object with PascalCase properties. Reading either through the other's casing would
+            # silently no-op under PowerShell's case-insensitive property access - the exact
+            # accident C-20 exists to fix - so each source is read out explicitly rather than
+            # normalized into one shared $info variable.
+            if ($importedAuth) {
+                $authMode          = $importedAuth.authMode
+                $deviceCodeUsed    = $importedAuth.deviceCodeUsed
+                $tenantIdentity    = $importedAuth.tenantIdentity
+                $servicesConnected = $importedAuth.servicesConnected
+            }
+            else {
+                $authMode          = $script:METSessionInfo.AuthMode
+                $deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
+                $tenantIdentity    = $script:METSessionInfo.TenantIdentity
+                $servicesConnected = $script:METSessionInfo.ServicesConnected
+            }
+            $modeLabel = switch ($authMode) {
                 'ServicePrincipal' { 'Service Principal (certificate)' }
                 'ManagedIdentity'  { 'Managed Identity' }
-                default            { if ($info.DeviceCodeUsed) { 'Interactive (device code)' } else { 'Interactive' } }
+                default            { if ($deviceCodeUsed) { 'Interactive (device code)' } else { 'Interactive' } }
             }
             $authInfoLine = $modeLabel
-            if ($info.TenantIdentity) { $authInfoLine += " - $($info.TenantIdentity)" }
-            if ($info.ServicesConnected -and $info.ServicesConnected.Count) { $authInfoLine += " - $($info.ServicesConnected -join ', ')" }
+            if ($tenantIdentity) { $authInfoLine += " - $tenantIdentity" }
+            if ($servicesConnected -and @($servicesConnected).Count) { $authInfoLine += " - $(@($servicesConnected) -join ', ')" }
         }
 
         # ── Console ──────────────────────────────────────────────────────────
@@ -363,7 +535,19 @@ function Get-METReport {
                 tenant         = $effectiveTenantName
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
-                authentication = if ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
+                # Imported provenance (camelCase, from a prior Import-METReport) wins over the
+                # live session (PascalCase) unconditionally when present - see the console/HTML
+                # auth block above ($authSource) for why $provenanceDisagreesWithLiveSession
+                # gates only the live-session fallback, and why the two shapes are read out by
+                # name instead of merged through case-insensitive access.
+                authentication = if ($importedAuth) {
+                    [ordered]@{
+                        authMode          = $importedAuth.authMode
+                        deviceCodeUsed    = $importedAuth.deviceCodeUsed
+                        tenantIdentity    = $importedAuth.tenantIdentity
+                        servicesConnected = @($importedAuth.servicesConnected)
+                    }
+                } elseif ($script:METSessionInfo -and -not $provenanceDisagreesWithLiveSession) {
                     [ordered]@{
                         authMode          = $script:METSessionInfo.AuthMode
                         deviceCodeUsed    = $script:METSessionInfo.DeviceCodeUsed
@@ -450,6 +634,17 @@ function Get-METReport {
             # with whitespace before '>' would bypass a literal-string replace.
             $tenantIdJson  = $tenantIdJson  -replace '<', '\u003C'
             $checksJson    = $checksJson    -replace '<', '\u003C'
+
+            # CONTROLS_META used to be 51 descriptions hand-maintained inside the client
+            # script below - a second copy of facts the check scripts already state, which
+            # had drifted for two checks. Generated here from each check's own
+            # $METCheckInfo header instead, via Get-METCheck. Each description is serialized
+            # with ConvertTo-Json rather than hand-escaped, so a backslash, newline, or quote
+            # in a drop-in check's description can't corrupt the surrounding JS object literal.
+            $controlsMetaEntries = (Get-METCheck | ForEach-Object {
+                $descriptionJson = ($_.Description | ConvertTo-Json -Compress) -replace '<', '\u003C'
+                "  '$($_.CheckId)': $descriptionJson,"
+            }) -join "`n"
 
             $html = @"
 <!DOCTYPE html>
@@ -835,57 +1030,7 @@ const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(-
 function sevOf(s){ return s || 'Informational'; }
 
 const CONTROLS_META = {
-  'MET-MDO001': 'Safe Links enabled for email and Office apps; verifies TrackClicks, EnableForInternalSenders, and real-time scanning are configured.',
-  'MET-MDO002': 'Safe Attachments enabled with Block or DynamicDelivery action - flags any policy set to Allow.',
-  'MET-MDO003': 'Impersonation protection, mailbox intelligence, first-contact safety tips, and action on impersonation detection.',
-  'MET-MDO004': 'AuthenticationFailAction setting, DMARC honor policy, and unauthenticated sender visual indicators.',
-  'MET-MDO005': 'ZAP enabled, file filter enabled, admin notifications configured, and common attachment filter active.',
-  'MET-MDO006': 'SCL thresholds, bulk complaint level, high-confidence spam action, and phishing action settings.',
-  'MET-MDO007': 'Auto-forward restrictions, outbound sending limits, and external forwarding rules.',
-  'MET-MDO008': 'Which users and groups are covered by Standard or Strict preset policies; flags uncovered recipient gaps.',
-  'MET-MDO009': 'Zero-Hour Auto Purge (ZAP) enabled for spam and phish in all active anti-spam/anti-phish policies.',
-  'MET-MDO010': 'Priority account tags applied and a differentiated protection policy is active for those accounts.',
-  'MET-MDO011': 'User tags are in use and alert policies referencing user tags exist.',
-  'MET-MDO012': 'Safe Documents (EnableSafeDocs) enabled and AllowSafeDocsOpen disabled via AtpPolicyForO365.',
-  'MET-MDO013': 'Custom anti-spam/anti-malware/Anti-Phish/Safe Links/Safe Attachments rules whose recipients are also covered by a Standard/Strict preset - flags precedence conflicts.',
-  'MET-MDO014': 'Every group referenced by an enabled EOP/MDO rule\'s SentToMemberOf; reports member count and flags 0-member groups as silently inert.',
-  'MET-EXO001': 'DMARC record present; policy is quarantine or reject (not none); rua reporting address configured.',
-  'MET-EXO002': 'DKIM signing enabled for all accepted domains; key length is at least 2048 bits.',
-  'MET-EXO003': 'SPF record present; no use of +all (pass-all); within the 10 DNS lookup limit.',
-  'MET-EXO004': 'Default quarantine policies reviewed; user notification enabled; no AdminOnlyAccessPolicy on high-confidence phish quarantine.',
-  'MET-EXO005': 'Stale allow entries older than 90 days; overly broad wildcard allows; ratio of allows to blocks.',
-  'MET-EXO006': 'User submission mailbox configured and reporting to Microsoft enabled.',
-  'MET-EXO007': 'Transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links - informational audit.',
-  'MET-EXO008': 'QuarantineRetentionPeriod is at least 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30).',
-  'MET-EXO009': 'Cross-references filter policies with their assigned quarantine tag; verifies PermissionToRelease is false for Malware and High-Confidence Phish verdicts.',
-  'MET-EXO010': 'RejectDirectSend on the organization config - unauthenticated senders relaying mail through the tenant\'s own domain without SMTP auth.',
-  'MET-EXO011': 'Enabled inbound connectors with RequireTls off or no effective source-IP/TLS-certificate authentication binding.',
-  'MET-EXO012': 'Mailbox forwarding (ForwardingSmtpAddress/ForwardingAddress/DeliverToMailboxAndForward), flagging silent forwarding with no local copy as the higher-risk pattern.',
-  'MET-EXO013': 'Standing spoof-intelligence allow entries, distinguishing Internal vs. External spoof type.',
-  'MET-EXO014': 'Enforceable phishing-simulation and SecOps mailbox override rules - informational listing for periodic review.',
-  'MET-EXO015': 'The native Outlook "External" sender banner (Get-ExternalInOutlook) - a user-facing signal against lookalike-domain/BEC senders.',
-  'MET-EXO016': 'ARC trusted sealer domains (Get-ArcConfig) - informational listing of domains trusted to vouch for authentication results.',
-  'MET-EXO017': 'EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy - informational cadence listing.',
-  'MET-EXO018': 'Remote domain AutoForwardEnabled - whether automatic forwarding to external domains is permitted, the control plane behind inbox-rule exfiltration.',
-  'MET-EXO019': 'Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides - legacy SMTP AUTH is a basic-auth endpoint exempt from most conditional access.',
-  'MET-EXO020': 'Connection filter IPAllowList and EnableSafeList - allow-listed sources skip spam filtering and spoof intelligence entirely.',
-  'MET-EXO021': 'Organization-wide AuditDisabled - whether mailbox audit records exist to reconstruct what a compromised account accessed.',
-  'MET-EXO022': 'Sharing policies exposing calendar detail or contacts to all domains or anonymously - reconnaissance surface for internal-impersonation phishing.',
-  'MET-EXO023': 'UnifiedAuditLogIngestionEnabled - the tenant-wide record investigations are reconstructed from; retention is not asserted by this check.',
-  'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
-  'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
-  'MET-Teams003': 'External access settings, anonymous join policy, and lobby bypass settings reviewed for security posture.',
-  'MET-Teams004': 'TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy.',
-  'MET-Teams005': 'ReportTeamsMsgEnabled in submission policy and AllowSecurityEndUserReporting in Teams messaging policy.',
-  'MET-Teams006': 'Tenant federation config - open AllowAllKnownDomains federation, Teams consumer/personal-account access, and an empty BlockedDomains deny-list.',
-  'MET-Teams007': 'Guest messaging/calling configuration - AllowUserChat and AllowPrivateCalling for guest accounts.',
-  'MET-Teams008': 'App permission policies not restricted to an explicit AllowedAppList/BlockedAppList for global/private/store catalog apps.',
-  'MET-Teams009': 'ExternalAccessWithTrialTenants on the tenant federation config - exposure to disposable trial-tenant federation.',
-  'MET-Teams010': 'Per-user CsExternalAccessPolicy instances re-opening federation/public-cloud access for specific users under a restrictive tenant baseline.',
-  'MET-Teams011': 'SecurityTeamAllowBlockListDelegation and currently-blocked entities - whether SecOps can block malicious domains/users mid-incident.',
-  'MET-Teams012': 'ReportCall on Teams calling policies - closest native control to helpdesk-vishing attacks over a Teams call.',
-  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.',
-  'MET-Teams015': 'AllowEmailIntoChannel on the Teams client configuration - channel email addresses accept external mail that bypasses the mailbox delivery path.'
+$controlsMetaEntries
 };
 
 const CONTROLS_CATEGORIES = [

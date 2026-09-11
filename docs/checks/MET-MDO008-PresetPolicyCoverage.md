@@ -1,6 +1,6 @@
 ﻿# MET-MDO008 - Preset Policy Coverage
 
-**Category:** MDO | **Severity:** Medium
+**Category:** MDO | **Severity:** High
 
 ## What it checks
 

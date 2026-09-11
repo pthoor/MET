@@ -29,5 +29,31 @@
         </TableRowEntries>
       </TableControl>
     </View>
+    <View>
+      <Name>MET.CheckInfo</Name>
+      <ViewSelectedBy>
+        <TypeName>MET.CheckInfo</TypeName>
+      </ViewSelectedBy>
+      <TableControl>
+        <TableHeaders>
+          <TableColumnHeader><Label>CheckId</Label><Width>14</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Category</Label><Width>8</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Severity</Label><Width>13</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Name</Label><Width>38</Width></TableColumnHeader>
+          <TableColumnHeader><Label>Description</Label></TableColumnHeader>
+        </TableHeaders>
+        <TableRowEntries>
+          <TableRowEntry>
+            <TableColumnItems>
+              <TableColumnItem><PropertyName>CheckId</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Category</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Severity</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Name</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>Description</PropertyName></TableColumnItem>
+            </TableColumnItems>
+          </TableRowEntry>
+        </TableRowEntries>
+      </TableControl>
+    </View>
   </ViewDefinitions>
 </Configuration>

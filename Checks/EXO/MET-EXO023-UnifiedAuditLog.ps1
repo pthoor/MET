@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Unified Audit Log Ingestion'
+    Severity       = 'High'
+    Description    = 'Checks UnifiedAuditLogIngestionEnabled on Get-AdminAuditLogConfig, the tenant-wide record investigations are reconstructed from.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $auditConfig = Get-AdminAuditLogConfig -ErrorAction Stop
 }

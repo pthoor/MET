@@ -1,4 +1,15 @@
-﻿try {
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'User Reported Message Settings'
+    Severity       = 'High'
+    Description    = 'Checks the report button mode, EnableReportToMicrosoft, SecOps mailbox routing for Junk/Not Junk/Phishing, and post-review user notifications.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+try {
     $policy = Get-ReportSubmissionPolicy -ErrorAction Stop
 }
 catch {

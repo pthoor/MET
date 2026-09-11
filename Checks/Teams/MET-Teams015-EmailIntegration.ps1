@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Teams Email Integration'
+    Severity       = 'Medium'
+    Description    = 'Checks AllowEmailIntoChannel on Get-CsTeamsClientConfiguration, since channel email bypasses Exchange transport rules and mailbox-level policy.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $referenceUrl = 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-csteamsclientconfiguration'
 
 try {

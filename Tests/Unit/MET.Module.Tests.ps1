@@ -290,3 +290,28 @@ Describe 'Loader failure handling' {
         $script:Module = Get-Module -Name 'MET'
     }
 }
+
+Describe 'about_MET conceptual help' {
+
+    It 'Ships an about topic' {
+        $topic = Join-Path $script:ModuleRoot 'en-US' 'about_MET.help.txt'
+        Test-Path -LiteralPath $topic | Should -BeTrue
+    }
+
+    It 'Uses the header shape Get-Help requires to find it' {
+        # A topic file whose first non-blank line is not TOPIC is silently not found by
+        # Get-Help, which fails exactly like having written nothing at all.
+        $topic = Get-Content (Join-Path $script:ModuleRoot 'en-US' 'about_MET.help.txt') -Raw
+        $topic | Should -Match '(?m)^TOPIC\s*$'
+        $topic | Should -Match '(?m)^\s+about_MET\s*$'
+        $topic | Should -Match '(?m)^SHORT DESCRIPTION\s*$'
+        $topic | Should -Match '(?m)^LONG DESCRIPTION\s*$'
+    }
+
+    It 'Covers the five subjects that exist nowhere a PSGallery installer can see' {
+        $topic = Get-Content (Join-Path $script:ModuleRoot 'en-US' 'about_MET.help.txt') -Raw
+        foreach ($subject in @('Managed Identity', 'Microsoft.Identity.Client', 'posture score', '-Detailed', 'DelegatedOrganization')) {
+            $topic | Should -BeLike "*$subject*" -Because "about_MET must cover $subject"
+        }
+    }
+}

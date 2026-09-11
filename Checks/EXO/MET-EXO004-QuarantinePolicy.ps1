@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Quarantine Policies'
+    Severity       = 'Medium'
+    Description    = 'Reviews genuinely custom quarantine policies (excluding the 4 immutable built-ins) for ESNEnabled combined with a granted end-user permission.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $policies = Get-QuarantinePolicy -ErrorAction Stop
 }
