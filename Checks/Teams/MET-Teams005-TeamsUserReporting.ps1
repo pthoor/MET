@@ -1,4 +1,15 @@
-﻿$issues = [System.Collections.Generic.List[string]]::new()
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Teams User Reporting'
+    Severity       = 'Medium'
+    Description    = 'Checks ReportChatMessageEnabled and ReportChatMessageToCustomizedAddressEnabled in the report submission policy, plus AllowSecurityEndUserReporting in the Teams messaging policy.'
+    RequiresModule = @('ExchangeOnlineManagement', 'MicrosoftTeams')
+}
+
+$issues = [System.Collections.Generic.List[string]]::new()
 $messagingPolicyError = $null
 
 # ── Defender portal: report submission policy (Teams-specific properties) ─────

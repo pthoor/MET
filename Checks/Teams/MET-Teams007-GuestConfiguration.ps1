@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Guest Messaging/Calling Configuration'
+    Severity       = 'Medium'
+    Description    = 'Checks Get-CsTeamsGuestMessagingConfiguration and Get-CsTeamsGuestCallingConfiguration for guest-initiated 1:1 chat and private calling.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 

@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Per-User External Access Policy Drift'
+    Severity       = 'Medium'
+    Description    = 'Enumerates non-Global Get-CsExternalAccessPolicy instances and flags EnableFederationAccess/EnablePublicCloudAccess re-opening access under a restrictive tenant baseline.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $results = [System.Collections.Generic.List[object]]::new()
 
 try {

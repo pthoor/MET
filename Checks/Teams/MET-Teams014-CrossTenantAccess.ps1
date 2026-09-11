@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Cross-Tenant Guest & External Collaboration Restrictions'
+    Severity       = 'Medium'
+    Description    = 'Checks the Microsoft Graph cross-tenant access default policy and authorization policy for guest invitation and external collaboration settings.'
+    RequiresModule = @('Microsoft.Graph')
+}
+
 $defaultPolicy = $null
 $authPolicy = $null
 

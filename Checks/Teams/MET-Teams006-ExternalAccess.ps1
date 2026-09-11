@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'External Access / Federation Allow-List'
+    Severity       = 'High'
+    Description    = 'Checks Get-CsTenantFederationConfiguration for open federation (AllowAllKnownDomains), Teams consumer access settings, and an empty BlockedDomains deny-list.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 

@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'SecOps Blocklist Authority & Blocked Entities'
+    Severity       = 'Medium'
+    Description    = 'Checks SecurityTeamAllowBlockListDelegation on Get-CsTenantFederationConfiguration and currently-blocked entities via Get-CsTeamsExternalAccessConfiguration.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $delegationRetrieved = $false
 $delegationValue = $null
 $delegationError = $null

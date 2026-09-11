@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'App Permission Policy'
+    Severity       = 'Medium'
+    Description    = 'Checks Get-CsTeamsAppPermissionPolicy for any *CatalogAppsType not restricted to an explicit AllowedAppList/BlockedAppList.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 $issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 

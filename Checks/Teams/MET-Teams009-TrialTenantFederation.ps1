@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Trial Tenant Federation Exposure'
+    Severity       = 'High'
+    Description    = 'Checks ExternalAccessWithTrialTenants on Get-CsTenantFederationConfiguration for exposure to disposable trial-tenant federation.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
 try {
     $config = Get-CsTenantFederationConfiguration -ErrorAction Stop
 }

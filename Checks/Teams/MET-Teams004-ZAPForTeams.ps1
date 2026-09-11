@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'ZAP for Teams'
+    Severity       = 'High'
+    Description    = 'Checks ZapEnabled on the Teams protection policy and verifies malware and high-confidence phish quarantine tags are set to AdminOnlyAccessPolicy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $ruleRetrievalError = $null
 
 try {

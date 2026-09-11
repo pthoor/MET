@@ -1,4 +1,15 @@
-﻿$issues = [System.Collections.Generic.List[string]]::new()
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Meeting Protection'
+    Severity       = 'Medium'
+    Description    = 'Reviews external access settings, anonymous join policy, and lobby bypass settings (AllowPSTNUsersToBypassLobby) across all Get-CsTeamsMeetingPolicy instances.'
+    RequiresModule = @('MicrosoftTeams')
+}
+
+$issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
 $unobservedSettingClauses = [System.Collections.Generic.List[string]]::new()
 $unobservedSettingNames = [System.Collections.Generic.List[string]]::new()
