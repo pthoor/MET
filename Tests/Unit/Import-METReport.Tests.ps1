@@ -117,4 +117,56 @@ Describe 'Import-METReport' {
         'plain text' | Set-Content -LiteralPath $notJson -Encoding utf8
         { Import-METReport -Path $notJson } | Should -Throw
     }
+
+    It 'Preserves a saved score of 0 rather than mangling it to null or empty' {
+        # 0 is the falsy value most likely to be lost in a hand-rolled conversion - guard
+        # against Score coming back $null or '' instead of the integer 0.
+        $mdo001 = @(Import-METReport -Path $script:SavedReport) | Where-Object { $_.CheckId -eq 'MET-MDO001' }
+        $mdo001.Score | Should -Be 0
+        $mdo001.Score | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Import-METReport auth provenance survives a disagreeing live session' {
+    # Reproduces the exact scenario C-20 exists to fix: an operator reviewing a saved
+    # customer report while their own Exchange Online session points at a different
+    # tenant entirely (or still lingers from a previous customer). $provenanceDisagreesWithLiveSession
+    # exists to stop the *live* session's auth details from mislabelling results gathered
+    # elsewhere - it must not also suppress the imported auth block, which describes the
+    # very run being rendered and is self-consistent with the imported tenant label
+    # already on the page. Without a live EXO session, Get-AcceptedDomain must be mocked
+    # to actually drive $provenanceDisagreesWithLiveSession to $true - otherwise this test
+    # would pass vacuously, the same gap the reviewer flagged in fix round 1.
+    BeforeAll {
+        function global:Get-AcceptedDomain { [CmdletBinding()] param() }
+        Mock Get-AcceptedDomain {
+            [PSCustomObject]@{ DomainName = 'fabrikam.onmicrosoft.com'; Default = $true }
+        } -ModuleName MET
+    }
+
+    AfterAll {
+        Remove-Item function:global:Get-AcceptedDomain -ErrorAction SilentlyContinue
+    }
+
+    It 'Keeps the imported authMode in the JSON output, not the live session''s' {
+        $warnings = @()
+        $json = Import-METReport -Path $script:SavedReport |
+            Get-METReport -Format JSON -WarningVariable warnings -WarningAction SilentlyContinue |
+            ConvertFrom-Json
+        # The tenant-disagreement warning still fires - fabrikam.onmicrosoft.com is genuinely
+        # the live session's tenant and contoso.onmicrosoft.com is genuinely the imported
+        # report's tenant. Only the auth block's suppression is being asserted against here.
+        $json.authentication | Should -Not -BeNullOrEmpty
+        $json.authentication.authMode | Should -Be 'ServicePrincipal'
+        $json.authentication.tenantIdentity | Should -Be 'contoso.onmicrosoft.com'
+    }
+
+    It 'Keeps the imported auth line in the console/HTML output too' {
+        $folder = Join-Path $TestDrive 'rerendered-mismatch'
+        Import-METReport -Path $script:SavedReport |
+            Get-METReport -Format HTML -OutputPath $folder -NoLaunch -WarningAction SilentlyContinue | Out-Null
+        $generated = Get-ChildItem -Path $folder -Recurse -Filter '*.html' | Select-Object -First 1
+        $generated | Should -Not -BeNullOrEmpty
+        (Get-Content -LiteralPath $generated.FullName -Raw) | Should -BeLike '*Service Principal*'
+    }
 }

@@ -289,7 +289,19 @@ function Get-METReport {
         # *now*, not who gathered these results, and a wrong auth description is
         # worse than none.
         $authInfoLine = $null
-        if (($importedAuth -or $script:METSessionInfo) -and -not $provenanceDisagreesWithLiveSession) {
+        # $provenanceDisagreesWithLiveSession only means the *live* session's auth details
+        # would mislabel results gathered elsewhere - it says nothing about $importedAuth,
+        # which describes the very run being rendered and travels beside the same tenant
+        # label those results are already stamped with. So imported auth is let through
+        # unconditionally when present, and the flag gates only the live-session fallback.
+        $authSource = if ($importedAuth) {
+            $importedAuth
+        } elseif (-not $provenanceDisagreesWithLiveSession) {
+            $script:METSessionInfo
+        } else {
+            $null
+        }
+        if ($authSource) {
             # $importedAuth round-tripped through JSON (Import-METReport reads it straight off
             # the saved file), so its property names are camelCase - authMode, deviceCodeUsed,
             # tenantIdentity, servicesConnected. $script:METSessionInfo is a live module-scoped
@@ -396,9 +408,11 @@ function Get-METReport {
                 runTimestamp   = $runTimestampUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
                 METVersion    = $METVersion
                 # Imported provenance (camelCase, from a prior Import-METReport) wins over the
-                # live session (PascalCase) - see the console/HTML auth block above for why the
-                # two are read out by name instead of merged through case-insensitive access.
-                authentication = if ($importedAuth -and -not $provenanceDisagreesWithLiveSession) {
+                # live session (PascalCase) unconditionally when present - see the console/HTML
+                # auth block above ($authSource) for why $provenanceDisagreesWithLiveSession
+                # gates only the live-session fallback, and why the two shapes are read out by
+                # name instead of merged through case-insensitive access.
+                authentication = if ($importedAuth) {
                     [ordered]@{
                         authMode          = $importedAuth.authMode
                         deviceCodeUsed    = $importedAuth.deviceCodeUsed
