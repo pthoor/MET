@@ -15,14 +15,16 @@ LONG DESCRIPTION
     51 checks ship across three categories: 14 MDO checks (Safe Links, Safe
     Attachments, anti-phish, anti-spoofing, anti-malware, inbound/outbound
     anti-spam, preset policy coverage, ZAP, priority accounts, user tags,
-    Safe Documents, and policy precedence conflicts), 23 EXO checks
-    (DMARC/DKIM/SPF, quarantine policy and retention hygiene, the Tenant
-    Allow/Block List, transport rule audits, Direct Send, connector
-    hygiene, mailbox forwarding, SMTP client authentication, mailbox and
-    unified audit logging, calendar/contact sharing, and more), and 14
-    Teams checks (Safe Links and Safe Attachments for Teams, meeting
-    protection, ZAP for Teams, user reporting, external access and
-    federation, guest configuration, app permission policy, cross-tenant
+    Safe Documents, policy precedence conflicts, and group reference
+    audit), 23 EXO checks (DMARC/DKIM/SPF, quarantine policy and retention
+    hygiene, the Tenant Allow/Block List, transport rule audits, Direct
+    Send, connector hygiene, mailbox forwarding, SMTP client
+    authentication, mailbox and unified audit logging, calendar/contact
+    sharing, and more), and 14 Teams checks (Safe Links and Safe
+    Attachments for Teams, meeting protection, ZAP for Teams, user
+    reporting, external access and federation, guest configuration, app
+    permission policy, trial tenant federation, per-user external access
+    drift, SecOps blocklist authority, call reporting, cross-tenant
     access, and channel email integration). Run Get-METCheck to list every
     check with its category, severity and description - it reads static
     metadata from each check script and needs no connection at all, so it

@@ -216,11 +216,41 @@ function Get-METReport {
       # produced them, stamped on Metadata.METRunAuthentication. That record beats the
       # current session's $script:METSessionInfo, which describes whoever this process
       # happens to be connected to right now - a different run entirely. Precedence: imported
-      # provenance wins when present; the live session is used only as a fallback.
+      # provenance wins when present; the live session is used only as a fallback. When more
+      # than one distinct imported auth block is present (checks from two different runs of
+      # the same tenant, piped together), only the first is used to label the report - warn
+      # so that choice isn't silent, the same way a tenant mismatch is surfaced above.
+      $allImportedAuth = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunAuthentication')) {
+            $_.Metadata['METRunAuthentication'] | ConvertTo-Json -Compress -Depth 5
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -Unique)
+
+      if ($allImportedAuth.Count -gt 1) {
+        Write-Warning "These results were imported from more than one run with different authentication provenance. The report is labelled with the first run's authentication."
+      }
+
       $importedAuth = @($allResults |
         ForEach-Object {
           if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunAuthentication')) {
             $_.Metadata['METRunAuthentication']
+          }
+        } |
+        Where-Object { $_ } |
+        Select-Object -First 1)
+
+      # Imported results carry the timestamp of the run that produced them, stamped on
+      # Metadata.METRunTimestamp - same precedence rule as $importedAuth above: imported
+      # provenance wins when present, so re-rendering a saved report doesn't relabel stale
+      # findings with the re-render time. Falls back to "now" only when nothing was imported
+      # (a live assessment just completed).
+      $importedTimestamp = @($allResults |
+        ForEach-Object {
+          if ($_.PSObject.Properties['Metadata'] -and $_.Metadata -and $_.Metadata.ContainsKey('METRunTimestamp')) {
+            $_.Metadata['METRunTimestamp']
           }
         } |
         Where-Object { $_ } |
@@ -274,7 +304,12 @@ function Get-METReport {
             }
         }
 
-        $runTimestampUtc = [datetime]::UtcNow
+        # Imported provenance wins over "now" when present - see $importedTimestamp above.
+        $runTimestampUtc = if ($importedTimestamp) {
+          [datetime]$importedTimestamp[0]
+        } else {
+          [datetime]::UtcNow
+        }
         $safeTenantName = if ([string]::IsNullOrWhiteSpace($effectiveTenantName)) {
           'unknown-tenant'
         }
@@ -603,12 +638,12 @@ function Get-METReport {
             # CONTROLS_META used to be 51 descriptions hand-maintained inside the client
             # script below - a second copy of facts the check scripts already state, which
             # had drifted for two checks. Generated here from each check's own
-            # $METCheckInfo header instead, via Get-METCheck. The block is emitted into a
-            # single-quoted JS object literal, so an apostrophe in a description must be
-            # escaped or it would terminate the string and blank the whole report.
+            # $METCheckInfo header instead, via Get-METCheck. Each description is serialized
+            # with ConvertTo-Json rather than hand-escaped, so a backslash, newline, or quote
+            # in a drop-in check's description can't corrupt the surrounding JS object literal.
             $controlsMetaEntries = (Get-METCheck | ForEach-Object {
-                $description = $_.Description -replace "'", "\'" -replace '<', '\u003C'
-                "  '$($_.CheckId)': '$description',"
+                $descriptionJson = ($_.Description | ConvertTo-Json -Compress) -replace '<', '\u003C'
+                "  '$($_.CheckId)': $descriptionJson,"
             }) -join "`n"
 
             $html = @"

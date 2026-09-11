@@ -9,8 +9,9 @@ function Import-METReport {
         (CheckId, Category, Result, ...) rather than the camelCase ConvertFrom-Json would
         otherwise yield straight off the JSON.
 
-        The report's tenant and authentication metadata are folded into each result's Metadata
-        (as METRunTenant and METRunAuthentication) rather than kept at the collection level, so
+        The report's tenant, run timestamp, and authentication metadata are folded into each
+        result's Metadata (as METRunTenant, METRunTimestamp, and METRunAuthentication) rather
+        than kept at the collection level, so
         that provenance survives being filtered or concatenated with Where-Object or by piping
         two imports together - a collection-level stamp would be lost the moment that happened.
         This lets a saved report be piped straight back into Get-METReport (to regenerate an
@@ -72,11 +73,21 @@ function Import-METReport {
         throw "'$Path' is not valid JSON: $($_.Exception.Message)"
     }
 
-    if (-not $report.PSObject.Properties['checks']) {
+    if (-not $report.PSObject.Properties['checks'] -or $null -eq $report.checks -or
+        $report.checks -isnot [array]) {
         throw "'$Path' is not a MET report - it has no 'checks' array. Reports are produced by Get-METReport -Format JSON."
     }
 
-    foreach ($check in @($report.checks)) {
+    $runTimestamp = $null
+    if ($report.PSObject.Properties['runTimestamp'] -and $report.runTimestamp) {
+        $runTimestamp = [datetime]::Parse(
+            $report.runTimestamp,
+            [cultureinfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor
+                [System.Globalization.DateTimeStyles]::AssumeUniversal)
+    }
+
+    foreach ($check in $report.checks) {
         # Provenance travels on every result rather than alongside the collection, because
         # Get-METReport reads it per-result and a collection-level stamp would be lost the
         # moment someone filtered or concatenated the results (e.g. Where-Object, or piping
@@ -89,6 +100,9 @@ function Import-METReport {
         }
         if ($report.PSObject.Properties['tenant'] -and $report.tenant) {
             $metadata['METRunTenant'] = [string]$report.tenant
+        }
+        if ($runTimestamp) {
+            $metadata['METRunTimestamp'] = $runTimestamp
         }
         if ($report.PSObject.Properties['authentication'] -and $report.authentication) {
             # Left as-is (camelCase, straight off the JSON) rather than reshaped into the

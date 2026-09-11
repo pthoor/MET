@@ -125,6 +125,36 @@ Describe 'Import-METReport' {
         $mdo001.Score | Should -Be 0
         $mdo001.Score | Should -Not -BeNullOrEmpty
     }
+
+    It 'Carries the original run timestamp on every result, so a re-render is not dated to the re-render' {
+        foreach ($result in (Import-METReport -Path $script:SavedReport)) {
+            $result.Metadata['METRunTimestamp'] | Should -BeOfType [datetime]
+            $result.Metadata['METRunTimestamp'] | Should -Be ([datetime]::Parse('2026-06-01T14:32:00Z').ToUniversalTime())
+        }
+    }
+
+    It 'Uses the imported run timestamp, not "now", when re-rendered through Get-METReport' {
+        $folder = Join-Path $TestDrive 'rerendered-timestamp'
+        Import-METReport -Path $script:SavedReport |
+            Get-METReport -Format JSON -OutputPath $folder | Out-Null
+        $jsonPath = Get-ChildItem -Path $folder -Recurse -Filter '*.json' | Select-Object -First 1
+        # ConvertFrom-Json auto-detects ISO-8601-looking strings and returns a [datetime]
+        # rather than the original string, so compare as datetimes rather than string equality.
+        $reRendered = Get-Content -LiteralPath $jsonPath.FullName -Raw | ConvertFrom-Json
+        [datetime]$reRendered.runTimestamp | Should -Be ([datetime]::Parse('2026-06-01T14:32:00Z').ToUniversalTime())
+    }
+
+    It 'Throws on a report whose checks array is JSON null' {
+        $nullChecks = Join-Path $TestDrive 'null-checks.json'
+        '{"tenant":"contoso.onmicrosoft.com","checks":null}' | Set-Content -LiteralPath $nullChecks -Encoding utf8
+        { Import-METReport -Path $nullChecks } | Should -Throw '*checks*'
+    }
+
+    It 'Throws on a report whose checks property is a JSON object rather than an array' {
+        $objectChecks = Join-Path $TestDrive 'object-checks.json'
+        '{"tenant":"contoso.onmicrosoft.com","checks":{}}' | Set-Content -LiteralPath $objectChecks -Encoding utf8
+        { Import-METReport -Path $objectChecks } | Should -Throw '*checks*'
+    }
 }
 
 Describe 'Import-METReport auth provenance survives a disagreeing live session' {

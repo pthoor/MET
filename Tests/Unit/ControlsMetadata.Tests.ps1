@@ -55,26 +55,22 @@ Describe 'CONTROLS_META generation' {
         $html = Get-Content -LiteralPath $generated.FullName -Raw
 
         $sample = Get-METCheck -CheckId 'MET-Teams002'
-        $html | Should -BeLike "*$($sample.Description -replace "'", "\\'")*"
+        $html | Should -BeLike "*$($sample.Description)*"
     }
 
-    It 'Escapes an apostrophe so one description cannot break the client script' {
-        # CONTROLS_META is emitted into a single-quoted JS object literal. An unescaped
-        # apostrophe in a description would terminate the string and kill the whole script,
-        # which is exactly the blank-page failure mode the HTML tests were added for.
-        # The escape happens in PowerShell where the entries are built, which is earlier in
-        # the file than the CONTROLS_META literal itself - so assert against the whole
-        # source, not a window around the literal. This only proves the code PATTERN
-        # exists - it is deliberately paired with the rendered-output assertion below,
-        # which is the one that actually exercises the escape.
-        $script:ReportSource | Should -Match "Description\s+-replace"
+    It 'Serializes each description with ConvertTo-Json rather than hand-escaping' {
+        # CONTROLS_META is emitted as `'CheckId': <json-string>,` - the value comes straight
+        # out of ConvertTo-Json, so quotes, backslashes, and newlines in a drop-in check's
+        # description can never corrupt the surrounding JS object literal, unlike a
+        # hand-built single-quoted-and-escaped string would.
+        $script:ReportSource | Should -Match "ConvertTo-Json\s+-Compress"
     }
 
-    It 'Backslash-escapes the apostrophe in the two descriptions that actually contain one, in the rendered output' {
-        # 'Description -replace' existing in the source (above) only proves a pattern is
+    It 'Renders the apostrophe in the two descriptions that actually contain one, unescaped inside a JSON string' {
+        # 'ConvertTo-Json -Compress' existing in the source (above) only proves a pattern is
         # present - it says nothing about what the rendered HTML actually contains, and
         # 'Carries each check description verbatim' above samples MET-Teams002, which has
-        # no apostrophe, so neither test exercises the escape path. MET-EXO010 ("tenant's")
+        # no apostrophe, so neither test exercises this path. MET-EXO010 ("tenant's")
         # and MET-MDO014 ("rule's") are the only two of the 51 descriptions that contain an
         # apostrophe, so they are the only ones that can prove this. A fresh subfolder is
         # used so this test cannot pick up a stale report from an earlier run/test.
@@ -88,10 +84,11 @@ Describe 'CONTROLS_META generation' {
             $check = Get-METCheck -CheckId $id
             $check.Description | Should -Match "'" -Because "$id is asserted here specifically because its header description contains an apostrophe"
 
-            $escapedDescription = $check.Description -replace "'", "\'"
-            $html | Should -BeLike "*'$($id)': '$escapedDescription',*" -Because (
-                "$id's apostrophe must render as \' inside its CONTROLS_META entry - an " +
-                "unescaped apostrophe here would terminate the JS string and blank the report")
+            $expectedJson = $check.Description | ConvertTo-Json -Compress
+            $html | Should -BeLike "*'$($id)': $expectedJson,*" -Because (
+                "$id's description must render as a plain JSON string inside its CONTROLS_META " +
+                "entry - a JSON string is double-quoted, so its apostrophe needs no escaping and " +
+                "cannot terminate the literal")
         }
     }
 }

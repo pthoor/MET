@@ -25,6 +25,10 @@ Describe 'Docs/README severity parity with check headers' {
         . (Join-Path $script:Root 'Private' 'Get-METCheckMetadata.ps1')
         . (Join-Path $script:Root 'Public'  'Get-METCheck.ps1')
 
+        # Re-fetched here (rather than reusing $script:DiscoveryHeaders) because top-level
+        # Discovery-phase variables aren't reliably visible from an It body at Run time once
+        # more than one spec file is loaded in the same Pester invocation - only the -ForEach
+        # argument list itself (evaluated at Discovery) is guaranteed to have survived.
         $script:Headers = @(Get-METCheck) | Sort-Object CheckId
 
         $script:ReadmePath = Join-Path $script:Root 'README.md'
@@ -60,7 +64,7 @@ Describe 'Docs/README severity parity with check headers' {
     }
 
     It 'Has at least 51 checks to compare (sanity check on discovery itself)' {
-        $script:Headers.Count | Should -BeGreaterThan 0
+        $script:Headers.Count | Should -BeGreaterOrEqual 51
     }
 
     Context 'Per check' {
