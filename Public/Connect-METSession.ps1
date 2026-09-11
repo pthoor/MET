@@ -1,4 +1,139 @@
 function Connect-METSession {
+    <#
+    .SYNOPSIS
+        Connects the Exchange Online, Microsoft Teams and Microsoft Graph sessions MET's checks run against.
+
+    .DESCRIPTION
+        Wraps Connect-ExchangeOnline, Connect-MicrosoftTeams and Connect-MgGraph in one call and
+        tracks which tenant each leg authenticated to.
+
+        Exchange Online is a hard requirement - every MDO and EXO check needs it, and so do
+        MET-Teams001, MET-Teams002 and MET-Teams004, which call Exchange-hosted cmdlets. If that
+        leg fails, Connect-METSession throws. The Teams and Graph legs are optional: a failure on
+        either is a warning, and the checks that need them report NotApplicable rather than
+        aborting the run.
+
+        An existing session is reused only after its tenant, organization and auth mode are
+        verified to match what was requested. A mismatch throws and names the organization that
+        is actually connected, rather than silently assessing the wrong customer.
+
+    .PARAMETER UserPrincipalName
+        Pre-selects the account to use for interactive sign-in, so the browser prompt does not
+        ask which account to use. Interactive parameter set only.
+
+    .PARAMETER DisableWAM
+        Bypasses the Web Account Manager broker. Valid in every parameter set, not just
+        Interactive - WAM affects Managed Identity and app-only flows on Windows too.
+        Connect-METSession passes this automatically on Linux and macOS, where WAM does not
+        apply. On Windows it is the first remedy to try for a WAM broker error such as
+        'A specified logon session does not exist' (0x80070520), which usually means the
+        console has no interactive desktop logon session - an elevated prompt, or a
+        remote/service/scheduled-task session.
+
+    .PARAMETER UseDeviceAuthentication
+        Authenticates by device code. Device-code flow is an actively abused phishing vector
+        (Storm-2372 and follow-on campaigns) - Microsoft's own current guidance is "block
+        wherever possible, allow only where necessary." This is scoped to genuinely headless
+        hosts where no browser can be reached at all; using it emits a warning and should be
+        the last option tried, not the default retry. Interactive parameter set only.
+
+    .PARAMETER AppId
+        Application (client) ID of the service principal to authenticate as. Required with
+        -CertificateThumbprint or -CertificatePath in the ServicePrincipal parameter set.
+
+    .PARAMETER TenantId
+        The tenant to authenticate against. Required for service-principal and managed-identity
+        authentication. When Exchange Online is being connected (i.e. -SkipExchangeOnline is not
+        used), this must be the tenant's primary .onmicrosoft.com domain name, not the tenant
+        GUID - Connect-ExchangeOnline's -Organization parameter for app-only authentication
+        rejects GUIDs outright, and Connect-METSession fails fast with this same guidance if it
+        detects one. Graph and Teams accept either form. A GUID is only accepted alongside
+        -SkipExchangeOnline.
+
+    .PARAMETER CertificateThumbprint
+        Thumbprint of a certificate in the Windows certificate store, used for service-principal
+        authentication. Windows only, per Microsoft's own documentation - on Linux, macOS or a
+        Codespace, use -CertificatePath and -CertificatePassword instead. Mutually exclusive with
+        -CertificatePath.
+
+    .PARAMETER CertificatePath
+        Path to a PFX certificate file used for service-principal authentication. Works on any
+        platform, including Linux, macOS and Codespaces, unlike -CertificateThumbprint. Requires
+        -CertificatePassword. A path such as '~/cert.pfx' is resolved to an absolute path before
+        use, since the underlying certificate-loading APIs do not expand '~' themselves.
+
+    .PARAMETER CertificatePassword
+        The PFX file's password, as a SecureString. Required together with -CertificatePath.
+
+    .PARAMETER ManagedIdentity
+        Authenticates using the host's managed identity (system-assigned by default, or the
+        identity named by -ManagedIdentityAccountId), for MET running inside Azure Automation,
+        an Azure VM, or another host with managed identity support. Mandatory in the
+        ManagedIdentity parameter set.
+
+    .PARAMETER ManagedIdentityAccountId
+        Client ID of a user-assigned managed identity to use instead of the host's
+        system-assigned identity. Honoured by the Exchange Online and Graph legs. Connect-MicrosoftTeams
+        accepts only -Identity for managed-identity sign-in, so this is not honoured for the
+        Teams leg - Teams authenticates with the host's default managed identity instead, which
+        may differ from the one named here or may fail outright; pass -SkipTeams if only the
+        user-assigned identity carries Teams permissions.
+
+    .PARAMETER DelegatedOrganization
+        The customer tenant to connect to under a CSP/GDAP delegated-admin relationship, as a
+        domain name (e.g. 'customer.onmicrosoft.com'). Threaded through to all three legs -
+        Exchange Online natively, and Graph and Teams via their own -TenantId parameter, which
+        both accept a domain string for exactly this scenario. Valid in every parameter set.
+        Run Disconnect-METSession before switching to a different -DelegatedOrganization in the
+        same PowerShell session.
+
+    .PARAMETER SkipExchangeOnline
+        Skips the Exchange Online leg entirely. Every MDO and EXO check, and MET-Teams001/002/004,
+        need Exchange Online, so checks in those areas will fail without it.
+
+    .PARAMETER SkipGraph
+        Skips the Microsoft Graph leg. Use this if you only need Exchange Online/Teams checks, or
+        if Graph is unavailable - the module already treats a failed Graph connection as
+        non-fatal and continues without it.
+
+    .PARAMETER SkipTeams
+        Skips the Microsoft Teams leg, for example if the MicrosoftTeams module is not installed
+        or only EXO/MDO checks are being run.
+
+    .OUTPUTS
+        None. Connection state is tracked in module scope and surfaced in Get-METReport's header.
+
+    .EXAMPLE
+        Connect-METSession
+
+        Interactive sign-in in the default browser. The usual choice for an analyst assessing
+        their own tenant.
+
+    .EXAMPLE
+        Connect-METSession -AppId $appId -TenantId $tenantId -CertificateThumbprint $thumb
+
+        Unattended service-principal sign-in on Windows, reading the certificate from the local
+        certificate store - suitable for a scheduled or CI-driven assessment run from a Windows
+        agent.
+
+    .EXAMPLE
+        $certPassword = ConvertTo-SecureString $env:MET_CERT_PASSWORD -AsPlainText -Force
+        Connect-METSession -AppId $appId -TenantId $tenantId -CertificatePath './met-ci.pfx' -CertificatePassword $certPassword
+
+        The same service-principal sign-in from Linux, macOS or a Codespace, where the Windows
+        certificate store does not exist. This is also the recommended alternative to device-code
+        auth for unattended/CI use on any non-Windows host.
+
+    .EXAMPLE
+        Connect-METSession -DelegatedOrganization customerA.onmicrosoft.com
+        Invoke-METAssessment | Get-METReport -Format All -OutputPath ./assessments/customerA-2026-09-09/
+        Disconnect-METSession
+
+        An MSSP running against a customer tenant through a GDAP relationship. Run
+        Disconnect-METSession before connecting to a different customer in the same PowerShell
+        session - Exchange Online, Graph and Teams share one MSAL assembly context per process,
+        so tenant residue between customers is a real risk.
+    #>
     [CmdletBinding(DefaultParameterSetName = 'Interactive', PositionalBinding = $false)]
     param(
         [Parameter(ParameterSetName = 'Interactive')]

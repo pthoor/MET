@@ -1,4 +1,57 @@
 ﻿function Test-METPrerequisites {
+    <#
+    .SYNOPSIS
+        Checks the local PowerShell version and required/optional modules before running MET.
+
+    .DESCRIPTION
+        Verifies the PowerShell version (7.4+) and each dependency MET needs: the required
+        ExchangeOnlineManagement module at its minimum version, and the optional
+        Microsoft.Graph.Identity.SignIns, Microsoft.Graph.Groups and MicrosoftTeams modules -
+        a missing or outdated optional module is reported but does not fail the check, since
+        Connect-METSession already degrades gracefully when Graph or Teams are unavailable. On
+        non-Windows platforms it also reports whether a DNS fallback tool (dig or nslookup) is
+        available for the DMARC/SPF checks, which otherwise rely on Resolve-DnsName.
+
+        Results are always printed to the console as a coloured table. Nothing is returned by
+        default; -PassThru additionally returns the check objects, and -Quiet suppresses the
+        console table and returns a single boolean instead, for use in an `if` condition or a
+        CI gate that only needs a yes/no answer.
+
+    .PARAMETER PassThru
+        Also returns the underlying per-component check objects (Component, Required, Installed,
+        Optional, Status, Notes) to the pipeline, in addition to the console table.
+
+    .PARAMETER Quiet
+        Suppresses the console table and returns $true or $false instead, answering whether all
+        required (non-optional) prerequisites are met. Without this switch, the function's
+        return value is not itself a reliable yes/no answer - a non-empty array is always truthy
+        in PowerShell, so `if (Test-METPrerequisites)` would evaluate to $true even when a
+        required prerequisite is failing.
+
+    .OUTPUTS
+        None by default (console output only). PSCustomObject[] with -PassThru. System.Boolean
+        with -Quiet.
+
+    .EXAMPLE
+        Test-METPrerequisites
+
+        Prints a coloured table of every required and optional dependency, with install commands
+        for anything missing or below its minimum version.
+
+    .EXAMPLE
+        if (-not (Test-METPrerequisites -Quiet)) {
+            throw 'MET prerequisites are not met - run Test-METPrerequisites for details.'
+        }
+
+        The CI-gate pattern: fail fast, with no console table, before attempting to connect.
+
+    .EXAMPLE
+        $checks = Test-METPrerequisites -PassThru
+        $checks | Where-Object Status -like 'Fail*'
+
+        Captures the per-component results as objects (in addition to the printed table) so the
+        failing ones can be filtered and inspected programmatically.
+    #>
     [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]

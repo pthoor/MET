@@ -1,4 +1,58 @@
 function Import-METReport {
+    <#
+    .SYNOPSIS
+        Reads a MET JSON report back into check result objects, without losing tenant provenance.
+
+    .DESCRIPTION
+        Reads a report file written by Get-METReport -Format JSON (or -Format All) and rebuilds
+        one MET.CheckResult object per saved check, restoring PascalCase property names
+        (CheckId, Category, Result, ...) rather than the camelCase ConvertFrom-Json would
+        otherwise yield straight off the JSON.
+
+        The report's tenant and authentication metadata are folded into each result's Metadata
+        (as METRunTenant and METRunAuthentication) rather than kept at the collection level, so
+        that provenance survives being filtered or concatenated with Where-Object or by piping
+        two imports together - a collection-level stamp would be lost the moment that happened.
+        This lets a saved report be piped straight back into Get-METReport (to regenerate an
+        HTML/console view, or to re-run the cross-tenant provenance check) without re-running
+        the assessment itself. A path that is missing, not valid JSON, or valid JSON without a
+        'checks' array (i.e. not a MET report) throws a descriptive error rather than returning
+        an empty or partial result set.
+
+    .PARAMETER Path
+        Path to a JSON report file previously written by Get-METReport -Format JSON or -Format All.
+
+    .OUTPUTS
+        MET.CheckResult[]. One object per check recorded in the report, with the same shape
+        Invoke-METAssessment produces, so it can be piped into Get-METReport or filtered like
+        any other MET result collection.
+
+    .EXAMPLE
+        Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json
+
+        Reads a previously saved report back into result objects.
+
+    .EXAMPLE
+        Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json | Get-METReport -Format HTML -OutputPath ./assessments/contoso-2026-06-01/
+
+        Regenerates the HTML report from a saved JSON file - for example after an HTML rendering
+        fix ships - without needing a live tenant connection or re-running the assessment.
+
+    .EXAMPLE
+        $old = Import-METReport -Path ./assessments/contoso-2026-05-01/MET-report.json
+        $new = Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json
+        Compare-Object $old $new -Property CheckId, Result
+
+        Compares two saved runs for the same tenant to see which checks changed result between
+        assessments.
+
+    .EXAMPLE
+        Get-ChildItem ./assessments -Filter 'MET-report.json' -Recurse |
+            ForEach-Object { Import-METReport -Path $_.FullName }
+
+        Re-hydrates every saved report under an assessments folder in one pass, for example to
+        build a historical view across many past runs.
+    #>
     [CmdletBinding(PositionalBinding = $false)]
     [OutputType('MET.CheckResult')]
     param(

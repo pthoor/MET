@@ -18,6 +18,83 @@ function Get-METModuleVersion {
 }
 
 function Get-METReport {
+    <#
+    .SYNOPSIS
+        Formats MET check results as a console summary, JSON export, or self-contained HTML report.
+
+    .DESCRIPTION
+        Takes the result objects produced by Invoke-METAssessment (or re-hydrated by
+        Import-METReport) and renders them in one or more formats: a coloured console summary
+        with a posture score and a Fail/Warning table, a machine-readable JSON document suitable
+        for SIEM ingestion or a CI gate, or a single self-contained HTML file (all CSS/JS
+        inlined, no external dependencies) that auto-opens in the default browser.
+
+        Every result carries a per-run tenant provenance stamp. Get-METReport refuses to render
+        a result set that spans more than one tenant - a mixed set would otherwise be labelled
+        with one customer's identity while carrying another's configuration, which is exactly
+        the cross-customer exposure the provenance stamp exists to catch. When -TenantName is
+        not given, the tenant label is inferred first from that provenance, then from the live
+        Connect-METSession state.
+
+    .PARAMETER InputObject
+        The check result objects to report on, typically the output of Invoke-METAssessment or
+        Import-METReport. Accepts pipeline input, so `$results | Get-METReport` is the normal
+        usage; not Mandatory, because a mandatory pipeline parameter would prompt interactively
+        on an empty pipeline and hang a CI process instead of failing it.
+
+    .PARAMETER Format
+        Which report format(s) to produce: Console (default; writes a summary to the host and
+        returns nothing), JSON, HTML, or All (writes both JSON and HTML). HTML and All require
+        -OutputPath, since the HTML report is too long to usefully write to the console.
+
+    .PARAMETER OutputPath
+        Where to write the report file(s), for -Format JSON, HTML, or All. For a single format
+        (JSON or HTML), pass a file path to name the output file directly, or a directory to
+        accept the default filename (MET-report.json / MET-report.html) inside it. For -Format
+        All, pass a directory - both files are written into it. Ignored, with a warning, when
+        -Format is Console.
+
+    .PARAMETER TenantName
+        Overrides the tenant label shown in the console header, JSON `tenant` field, and HTML
+        report header. When omitted, the label is inferred from the results' own provenance
+        metadata, falling back to the live Connect-METSession state if no provenance is present.
+
+    .PARAMETER NoLaunch
+        Suppresses automatically opening the generated HTML report in the default browser.
+        Has no effect for -Format Console or -Format JSON, which never auto-launch anything.
+
+    .PARAMETER PassThru
+        Also returns the underlying report data object (the same structure written to JSON)
+        instead of (or in addition to, depending on -Format) only producing console/file output.
+
+    .OUTPUTS
+        None by default for Console/HTML/JSON file output. With -PassThru, the PSCustomObject
+        report data structure (the same shape written to JSON) is returned to the pipeline.
+
+    .EXAMPLE
+        $results | Get-METReport
+
+        Prints the default console summary: overall posture score, per-category breakdown,
+        a Fail/Warning table, and a Pass count - the quickest way to review a run interactively.
+
+    .EXAMPLE
+        $results | Get-METReport -Format HTML -OutputPath ./assessments
+
+        Writes the interactive, self-contained HTML report under ./assessments and opens it in
+        the default browser - the report an analyst hands to a customer or keeps for review.
+
+    .EXAMPLE
+        $results | Get-METReport -Format JSON -OutputPath ./assessments
+
+        Writes the machine-readable JSON report under ./assessments, suitable for SIEM ingestion
+        or a CI/CD gate that inspects postureScore or individual check results.
+
+    .EXAMPLE
+        $results | Get-METReport -Format All -OutputPath ./assessments/contoso-2026-06-01/
+
+        Writes both the JSON and HTML reports into one directory in a single call - the pattern
+        used for a per-customer, per-run assessment archive.
+    #>
     [CmdletBinding(PositionalBinding = $false)]
     param(
         # Not Mandatory: a mandatory pipeline parameter prompts interactively when the
