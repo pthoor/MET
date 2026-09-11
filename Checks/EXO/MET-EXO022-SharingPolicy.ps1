@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Calendar and Contact Sharing Policies'
+    Severity       = 'Medium'
+    Description    = 'Checks Domains on Get-SharingPolicy for enabled policies sharing calendar detail or contacts with * or Anonymous.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $policies = @(Get-SharingPolicy -ErrorAction Stop)
 }

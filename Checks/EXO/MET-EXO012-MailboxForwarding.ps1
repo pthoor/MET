@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Mailbox Forwarding'
+    Severity       = 'High'
+    Description    = 'Checks ForwardingSmtpAddress, ForwardingAddress, and DeliverToMailboxAndForward on every mailbox, flagging silent forwarding with no local copy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $referenceUrl = 'https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/get-exomailbox'
 
 try {

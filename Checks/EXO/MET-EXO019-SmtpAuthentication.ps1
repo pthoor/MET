@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'SMTP Client Authentication'
+    Severity       = 'High'
+    Description    = 'Checks SmtpClientAuthenticationDisabled on Get-TransportConfig tenant-wide, and per-mailbox re-enables via Get-EXOCasMailbox when the tenant-wide setting is disabled.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $referenceUrl = 'https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/authenticated-client-smtp-submission'
 
 $recommendation = 'Microsoft''s guidance is to disable SMTP AUTH tenant-wide and re-enable it only on the specific mailboxes that still need it. Run: Set-TransportConfig -SmtpClientAuthenticationDisabled $true, then, for each mailbox that genuinely requires client submission, Set-CASMailbox -Identity <mailbox> -SmtpClientAuthenticationDisabled $false. Inventory the appliances and applications still submitting mail this way (multifunction printers, scanners, monitoring and line-of-business apps) before turning it off - mail from anything left behind will start failing to submit. Separately, block Basic authentication for the protocol with an authentication policy (Set-AuthenticationPolicy -AllowBasicAuthSmtp $false): SMTP AUTH also supports OAuth, so blocking Basic leaves OAuth-capable clients working while closing the password-only path. Where the device supports neither, move it to a dedicated authenticated relay connector scoped to its source IP.'

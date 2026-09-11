@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Remote Domain Automatic Forwarding'
+    Severity       = 'High'
+    Description    = 'Checks AutoForwardEnabled on Get-RemoteDomain for every remote domain, flagging the tenant-wide * domain as the highest-risk case.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 $referenceUrl = 'https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/remote-domains/remote-domains'
 
 try {

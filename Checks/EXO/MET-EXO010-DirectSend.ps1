@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Direct Send Protection'
+    Severity       = 'Critical'
+    Description    = 'Checks RejectDirectSend on Get-OrganizationConfig to determine whether unauthenticated senders can relay mail through the tenant''s own domain without SMTP auth.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $orgConfig = Get-OrganizationConfig -ErrorAction Stop
 }

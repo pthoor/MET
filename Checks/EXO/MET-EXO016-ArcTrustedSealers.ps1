@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'ARC Trusted Sealers Review'
+    Severity       = 'Low'
+    Description    = 'Lists ArcTrustedSealers on Get-ArcConfig, the domains trusted to vouch for message authentication results via Authenticated Received Chain.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $arcConfig = Get-ArcConfig -ErrorAction Stop
 }

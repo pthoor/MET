@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Quarantine Retention'
+    Severity       = 'Low'
+    Description    = 'Verifies QuarantineRetentionPeriod is at least 30 days in default and custom anti-spam policies.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $spamRules    = @(Get-HostedContentFilterRule    -ErrorAction Stop | Sort-Object Priority)
     $spamPolicies = @(Get-HostedContentFilterPolicy  -ErrorAction Stop)

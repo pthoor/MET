@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Advanced Delivery Policy'
+    Severity       = 'Medium'
+    Description    = 'Surfaces enforceable phishing-simulation and SecOps mailbox override rules from Get-ExoPhishSimOverrideRule and Get-ExoSecOpsOverrideRule for periodic review.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 function ConvertTo-METIPv4AddressValue {
     param([Parameter(Mandatory)][string] $IPAddressString)
 

@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Spoof Intelligence Allow-List'
+    Severity       = 'High'
+    Description    = 'Reviews standing spoof-intelligence allow entries from Get-TenantAllowBlockListSpoofItems, distinguishing Internal from External spoof type.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $allowEntries = @(Get-TenantAllowBlockListSpoofItems -Action Allow -ErrorAction Stop)
 }

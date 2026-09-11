@@ -1,3 +1,14 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Connection Filter Policy Hygiene'
+    Severity       = 'High'
+    Description    = 'Checks IPAllowList and EnableSafeList on Get-HostedConnectionFilterPolicy, since allow-listed sources skip spam filtering and spoof intelligence.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
 try {
     $policies = @(Get-HostedConnectionFilterPolicy -ErrorAction Stop)
 }

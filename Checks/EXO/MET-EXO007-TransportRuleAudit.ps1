@@ -1,4 +1,15 @@
-﻿try {
+﻿[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Transport Rule Audit'
+    Severity       = 'Medium'
+    Description    = 'Lists transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+
+try {
     $rules = Get-TransportRule -ResultSize Unlimited -ErrorAction Stop
 }
 catch {
