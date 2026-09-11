@@ -57,3 +57,49 @@ Describe 'Get-METCheck' {
         { Get-METCheck -Category 'Purview' } | Should -Throw
     }
 }
+
+Describe '-ListChecks delegation' {
+
+    BeforeAll {
+        . (Join-Path $script:Root 'Public' 'Invoke-METAssessment.ps1')
+    }
+
+    It 'Returns the same objects Get-METCheck returns' {
+        # C-16: the old -ListChecks emitted CheckId/Category/Script only, so the documented
+        # dry run could not answer "what does this check do?" - the question it exists for.
+        $listed = @(Invoke-METAssessment -ListChecks)
+        $direct = @(Get-METCheck)
+        $listed.CheckId | Should -Be $direct.CheckId
+        $listed[0].PSObject.Properties.Name | Should -Contain 'Description'
+        $listed[0].PSObject.Properties.Name | Should -Contain 'Severity'
+        $listed[0].Description | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Still honours -Category when listing' {
+        @(Invoke-METAssessment -ListChecks -Category Teams | Where-Object Category -ne 'Teams') |
+            Should -BeNullOrEmpty
+    }
+
+    It 'Lists nothing when the filters resolve to no checks' {
+        # An empty array is falsy in PowerShell, so a naive delegation lists everything
+        # here - the dry run would promise 51 checks for a run that executes none.
+        @(Invoke-METAssessment -ListChecks -CheckId 'MET-NOPE999' -WarningAction SilentlyContinue) |
+            Should -BeNullOrEmpty
+    }
+
+    It 'Completes -CheckId from the checks on disk' {
+        # cursorColumn is the literal string length (verified: 'Invoke-METAssessment
+        # -CheckId MET-EXO01'.Length -eq 39), not length + 2 as the brief's snippet had it -
+        # TabExpansion2 throws PSArgumentException on an out-of-range cursorIndex rather than
+        # just returning nothing.
+        $inputScript = 'Invoke-METAssessment -CheckId MET-EXO01'
+        $completions = TabExpansion2 -inputScript $inputScript -cursorColumn $inputScript.Length
+        @($completions.CompletionMatches.CompletionText) | Should -Contain 'MET-EXO010'
+    }
+
+    It 'Completes -ExcludeCheckId the same way' {
+        $inputScript = 'Invoke-METAssessment -ExcludeCheckId MET-MDO01'
+        $completions = TabExpansion2 -inputScript $inputScript -cursorColumn $inputScript.Length
+        @($completions.CompletionMatches.CompletionText) | Should -Contain 'MET-MDO010'
+    }
+}

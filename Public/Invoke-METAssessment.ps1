@@ -6,9 +6,20 @@
         [string[]] $Category,
 
         [Parameter()]
+        [ArgumentCompleter({
+            param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+            # Not ValidateSet: checks are discovered from disk on every run so that dropping
+            # a file into Checks/<Category>/ registers it, and a ValidateSet would freeze the
+            # list at parse time.
+            (Get-METCheck).CheckId | Where-Object { $_ -like "$wordToComplete*" }
+        })]
         [string[]] $CheckId,
 
         [Parameter()]
+        [ArgumentCompleter({
+            param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+            (Get-METCheck).CheckId | Where-Object { $_ -like "$wordToComplete*" }
+        })]
         [string[]] $ExcludeCheckId,
 
         [Parameter()]
@@ -91,23 +102,23 @@
 
     foreach ($requested in @($CheckId) + @($ExcludeCheckId)) {
         if ($requested -and $knownCheckIds -notcontains $requested) {
-            Write-Warning "'$requested' matched no check. Run Invoke-METAssessment -ListChecks to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
+            Write-Warning "'$requested' matched no check. Run Get-METCheck to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
         }
     }
 
     if (@($checkFiles).Count -eq 0) {
-        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Invoke-METAssessment -ListChecks to list the available checks.'
+        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Get-METCheck to list the available checks.'
     }
 
     if ($ListChecks) {
-        return $checkFiles | ForEach-Object {
-            $parts = $_.BaseName -split '-', 3
-            [PSCustomObject]@{
-                CheckId  = "$($parts[0])-$($parts[1])"
-                Category = $_.Directory.Name
-                Script   = $_.Name
-            }
-        }
+        $resolvedIds = @($checkFiles | ForEach-Object { ($_.BaseName -split '-')[0..1] -join '-' })
+
+        # An empty -CheckId is falsy, so passing one through would skip Get-METCheck's
+        # filter and list all 51 checks for a filter combination that resolved to none -
+        # the dry run would then claim work that the real run will not do.
+        if ($resolvedIds.Count -eq 0) { return }
+
+        return Get-METCheck -CheckId $resolvedIds
     }
 
     # Pre-fetch shared context. Check scripts access $METContext via the
