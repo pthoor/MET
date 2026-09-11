@@ -308,7 +308,7 @@ MET is assessment-only and never changes tenant configuration. The separate [Pro
 | MET-MDO007 | [Anti-Spam Outbound Effective Coverage](docs/checks/MET-MDO007-AntiSpamOutbound.md) | High | Auto-forward disabled, send limit action, admin alerts |
 | MET-MDO008 | [Preset Policy Coverage](docs/checks/MET-MDO008-PresetPolicyCoverage.md) | High | % of mailboxes covered by Standard or Strict preset |
 | MET-MDO009 | [ZAP Effective Coverage](docs/checks/MET-MDO009-ZAP.md) | High | ZAP enabled for spam and phishing in all policies |
-| MET-MDO010 | [Priority Account Protection Toggle](docs/checks/MET-MDO010-PriorityAccounts.md) | High | Priority Account tag usage + differentiated protection policy |
+| MET-MDO010 | [Priority Account Protection Toggle](docs/checks/MET-MDO010-PriorityAccounts.md) | High | Tenant-wide `EnablePriorityAccountProtection` toggle and Priority Account tag presence via `Get-User -IsVIP` |
 | MET-MDO011 | [User Tags](docs/checks/MET-MDO011-UserTags.md) | Low | Portal-review pointer for user tags and tag-aware alert policies; no programmatic assessment (always Info/Low). |
 | MET-MDO012 | [Safe Documents](docs/checks/MET-MDO012-SafeDocuments.md) | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
 | MET-MDO013 | [Policy Precedence Conflicts](docs/checks/MET-MDO013-PolicyPrecedenceConflicts.md) | High | Custom rules targeting recipients already covered by a Standard/Strict preset |

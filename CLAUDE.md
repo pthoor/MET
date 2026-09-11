@@ -35,7 +35,7 @@ MET/
 ├── Private/
 │   ├── New-METCheckResult.ps1       # Factory for the standard check result object
 │   ├── Get-METCheckWeight.ps1       # Returns severity weight for scoring
-│   ├── Get-METSafeSeverity.ps1       # Returns the safer of two severities
+│   ├── Get-METSafeSeverity.ps1       # Normalizes missing or unknown severity to Informational
 │   ├── Get-METWorstSeverity.ps1      # Returns the worst severity in a result family
 │   ├── Get-METRuleScope.ps1         # Formats rule scope label for check findings
 │   ├── Get-METAssessableMailboxes.ps1 # Enumerates mailboxes eligible for effective-policy coverage
@@ -430,13 +430,13 @@ Each check result renders as a card:
 
 ```
 ┌─ [HIGH] MET-MDO001 · Safe Links Effective Coverage ───── [FAIL] ─┐
-│  Affected: Default Safe Links Policy                        │
-│  Finding:  Safe Links is disabled for email                 │
-│  ▼ How to fix                                               │
-│    1. Navigate to security.microsoft.com > Policies >...   │
-│    2. ...                                                   │
-│    📖 Microsoft Docs   ✓ Accept Risk                        │
-└─────────────────────────────────────────────────────────────┘
+│  Affected: Default Safe Links Policy                             │
+│  Finding:  Safe Links is disabled for email                      │
+│  ▼ How to fix                                                    │
+│    1. Navigate to security.microsoft.com > Policies >...         │
+│    2. ...                                                        │
+│    📖 Microsoft Docs   ✓ Accept Risk                              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 - Card border color = Severity (red=Critical, orange=High, yellow=Medium, blue=Low, grey=Info)
@@ -547,8 +547,8 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 | MET-MDO007 | Anti-Spam Outbound Effective Coverage | Forwarding rules, sending limits, auto-forward disabled per policy |
 | MET-MDO008 | Preset Policy Coverage | Which users/groups are covered by Standard or Strict preset; uncovered recipient gap |
 | MET-MDO009 | ZAP Effective Coverage | ZAP enabled for spam and phish in all active policies |
-| MET-MDO010 | Priority Account Protection Toggle | Tenant-wide priority account protection toggle (`Get-EmailTenantSettings`); priority account tag applied and a differentiated protection policy active (emitted as a separate `Priority Account Tagging` result) |
-| MET-MDO011 | User Tags | Tags in use; alert policies referencing tags exist |
+| MET-MDO010 | Priority Account Protection Toggle | Tenant-wide `EnablePriorityAccountProtection` toggle and Priority Account tag presence via `Get-User -IsVIP` |
+| MET-MDO011 | User Tags | Portal-review pointer for user tags and tag-aware alert policies; no programmatic assessment (always Info/Low). |
 | MET-MDO012 | Safe Documents | `EnableSafeDocs` enabled; `AllowSafeDocsOpen` disabled (via `Get-AtpPolicyForO365`) |
 | MET-MDO013 | Policy Precedence Conflicts | Finds custom anti-spam, anti-malware, Anti-Phish, Safe Links, and Safe Attachments rules whose targeted recipients are also covered by a Standard/Strict preset; incomplete source data produces a failed check instead of a clean result |
 | MET-MDO014 | Group Reference Audit | Every group referenced by an enabled EOP/MDO rule's `SentToMemberOf`; reports member count per group, flags 0-member groups as a silent-inert-policy condition |
