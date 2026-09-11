@@ -97,6 +97,7 @@ jobs:
             azure.archive.ubuntu.com:80
             archive.ubuntu.com:443
             security.ubuntu.com:443
+            release-assets.githubusercontent.com:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -118,13 +119,45 @@ jobs:
         shell: pwsh
         run: Install-Module -Name Pester -RequiredVersion 5.9.0 -Repository PSGallery -Force -AcceptLicense -Scope CurrentUser
 
+      - name: Exercise Windows Resolve-DnsName branch
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          function global:Resolve-DnsName {
+            param(
+              [string] $Name,
+              [string] $Type,
+              [switch] $DnsOnly,
+              [string] $ErrorAction
+            )
+
+            return [PSCustomObject]@{
+              Name    = $Name
+              Type    = $Type
+              TTL     = 60
+              Strings = @('branch-exercised')
+            }
+          }
+
+          . ./Private/Resolve-METDnsName.ps1
+          $result = Resolve-METDnsName -Name 'contoso.com' -Type TXT
+          if ($result.Strings[0] -ne 'branch-exercised') {
+            throw 'Resolve-METDnsName did not return the expected Windows-branch result.'
+          }
+
       - name: Run unit tests with coverage
         shell: pwsh
         env:
           MET_ENFORCE_COVERAGE: ${{ matrix.enforce_coverage }}
         run: |
           $config = New-PesterConfiguration
-          $config.Run.Path = './Tests/Unit'
+          if ($env:RUNNER_OS -eq 'Windows') {
+            $config.Run.Path = @(Get-ChildItem -Path ./Tests/Unit -Filter '*.Tests.ps1' | Where-Object Name -ne 'Resolve-METDnsName.Tests.ps1' | ForEach-Object { $_.FullName })
+            Write-Host 'Skipping Resolve-METDnsName.Tests.ps1 on Windows; the file asserts the non-Windows DNS-over-HTTPS fallback path.'
+          }
+          else {
+            $config.Run.Path = './Tests/Unit'
+          }
           $config.Run.PassThru = $true
           $config.Output.Verbosity = 'Detailed'
           $config.TestResult.Enabled = $true
