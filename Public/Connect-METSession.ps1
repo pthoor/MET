@@ -565,6 +565,16 @@ function Connect-METSession {
                         }
                         'ManagedIdentity' {
                             $teamsParams['Identity'] = $true
+                            # Connect-MicrosoftTeams's ManagedServiceLogin parameter set takes only
+                            # -Identity plus -ManagedServiceHostName/Port/Secret; -AccountId belongs
+                            # to UserCredential, so there is no supported way to select a
+                            # user-assigned managed identity for the Teams leg. Passing -AccountId
+                            # here would be a parameter-set binding failure, not a fix. Say so
+                            # instead of letting Teams silently authenticate as a different
+                            # identity than Exchange Online and Graph did.
+                            if ($ManagedIdentityAccountId) {
+                                Write-Warning 'Microsoft Teams does not support selecting a user-assigned managed identity: Connect-MicrosoftTeams accepts only -Identity for managed-identity sign-in, so -ManagedIdentityAccountId cannot be honoured for the Teams leg (Exchange Online and Graph do honour it). Teams will authenticate with the host''s default managed identity, which may be a different identity or may fail outright. Pass -SkipTeams if only the user-assigned identity carries Teams permissions.'
+                            }
                         }
                     }
                     Connect-MicrosoftTeams @teamsParams

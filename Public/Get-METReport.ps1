@@ -321,8 +321,12 @@ function Get-METReport {
 
             # Sort-Object Severity is a string sort, which ordered the table
             # Critical, High, Low, Medium. Weight descending is the real order.
+            # The summary puts any result carrying an Error into its own Error bucket regardless
+            # of Result, so a check that failed to run with, say, NotApplicable was counted above
+            # but missing from this table - which then printed 'No Fail or Warning findings'
+            # underneath a non-zero Error count. Select on the same condition the summary uses.
             $actionable = $allResults |
-                Where-Object { $_.Result -in 'Fail','Warning' } |
+                Where-Object { $_.Result -in 'Fail','Warning' -or $_.Error } |
                 Sort-Object -Property @{ Expression = { Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $_.Severity) }; Descending = $true },
                                       @{ Expression = 'CheckId'; Descending = $false }
             if ($actionable) {
@@ -344,7 +348,7 @@ function Get-METReport {
 
                 $erroredCount = @($allResults | Where-Object { $_.Error }).Count
                 if ($erroredCount -gt 0) {
-                    Write-Host "  ($erroredCount check(s) could not run - see the Error column and the Error field on each result.)" -ForegroundColor DarkYellow
+                    Write-Host "  ($erroredCount check(s) could not run - listed as Error in the Result column above; the exception text is in each result's Error field.)" -ForegroundColor DarkYellow
                 }
             } else {
                 Write-Host '  No Fail or Warning findings.' -ForegroundColor Green

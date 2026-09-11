@@ -34,7 +34,15 @@
         # with ExchangeOnlineManagement not installed this leaked a raw
         # CommandNotFoundException instead of the actionable guard below.
         $exoCmdletAvailable = [bool](Get-Command -Name 'Get-ConnectionInformation' -ErrorAction SilentlyContinue)
-        $exoSession = if ($exoCmdletAvailable) { Get-ConnectionInformation -ErrorAction SilentlyContinue } else { $null }
+        # Get-ConnectionInformation also returns records whose State is Disconnected or
+        # Reconnecting. Treating any record as a live session let a stale connection past this
+        # guard and straight back into the all-error report it exists to prevent, so filter on
+        # State exactly as the connection-reuse logic in Connect-METSession.ps1 already does.
+        $exoSession = if ($exoCmdletAvailable) {
+            @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                Where-Object { $_.State -eq 'Connected' })
+        }
+        else { @() }
 
         if (-not $exoSession) {
             $message = if ($exoCmdletAvailable) {

@@ -155,6 +155,42 @@ Describe 'Connect-METSession Teams leg' {
                 $Identity -eq $true
             }
         }
+
+        # Connect-MicrosoftTeams's ManagedServiceLogin set is -Identity plus
+        # -ManagedServiceHostName/Port/Secret; -AccountId belongs to UserCredential, so there is
+        # no supported way to target a user-assigned identity for Teams. Passing it anyway would
+        # be a parameter-set binding failure, so MET warns instead of silently letting Teams
+        # authenticate as a different identity than Exchange Online and Graph used.
+        It 'warns that a user-assigned identity cannot be targeted for Teams' {
+            $warnings = @()
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -ManagedIdentityAccountId 'bf6dcc76-4331-4942-8d50-87ea41d6e8a1' `
+                -WarningVariable warnings -WarningAction SilentlyContinue
+
+            ($warnings -join ' ') | Should -Match 'user-assigned managed identity'
+            ($warnings -join ' ') | Should -Match 'SkipTeams'
+        }
+
+        It 'never passes -AccountId on the managed-identity Teams call' {
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -ManagedIdentityAccountId 'bf6dcc76-4331-4942-8d50-87ea41d6e8a1' `
+                -WarningAction SilentlyContinue
+
+            Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
+                $Identity -eq $true -and -not $AccountId
+            }
+        }
+
+        It 'does not warn when no user-assigned identity was requested' {
+            $warnings = @()
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -WarningVariable warnings -WarningAction SilentlyContinue
+
+            ($warnings -join ' ') | Should -Not -Match 'user-assigned managed identity'
+        }
     }
 
     Context 'Teams connection fails' {

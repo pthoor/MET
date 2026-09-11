@@ -37,6 +37,48 @@ Describe 'Invoke-METAssessment connection preflight' {
         { Invoke-METAssessment -CheckId 'MET-XXX999' -WarningAction SilentlyContinue } | Should -Not -Throw
     }
 
+    # Get-ConnectionInformation keeps returning records after a session drops, with State
+    # Disconnected or Reconnecting. Any-record-means-connected let those past the guard and
+    # straight back into the all-error report it exists to prevent.
+    It 'refuses a session whose State is Disconnected' {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith {
+            [PSCustomObject]@{ State = 'Disconnected'; Organization = 'contoso.onmicrosoft.com' }
+        }
+        Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }
+
+        $caught = $null
+        try { Invoke-METAssessment } catch { $caught = $_ }
+
+        $caught                             | Should -Not -BeNullOrEmpty
+        $caught.FullyQualifiedErrorId        | Should -BeLike 'METNotConnected*'
+        Should -Invoke -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -Times 0
+    }
+
+    It 'refuses a session whose State is Reconnecting' {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith {
+            [PSCustomObject]@{ State = 'Reconnecting'; Organization = 'contoso.onmicrosoft.com' }
+        }
+        Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }
+
+        $caught = $null
+        try { Invoke-METAssessment } catch { $caught = $_ }
+
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METNotConnected*'
+    }
+
+    # A stale record alongside a live one must still count as connected.
+    It 'accepts a connected session even when a stale record is also returned' {
+        Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith {
+            @(
+                [PSCustomObject]@{ State = 'Disconnected'; Organization = 'old.onmicrosoft.com' }
+                [PSCustomObject]@{ State = 'Connected';    Organization = 'contoso.onmicrosoft.com' }
+            )
+        }
+        Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }
+
+        { Invoke-METAssessment -CheckId 'MET-XXX999' -WarningAction SilentlyContinue } | Should -Not -Throw
+    }
+
     It 'does not run any check before the guard fires' {
         Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith { }
         Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }

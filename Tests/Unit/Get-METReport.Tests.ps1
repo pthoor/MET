@@ -71,6 +71,51 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Error | Should -Be 2
     }
 
+    # The summary buckets any result carrying an Error under Error regardless of its Result, so a
+    # check that failed to run as NotApplicable was counted there while the issues table - which
+    # selected only Fail/Warning - omitted it and printed 'No Fail or Warning findings' below a
+    # non-zero Error count.
+    It 'lists a check that failed to run in the console issues table' {
+        $results = @(
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams009'; Category = 'Teams'; Name = 'Pass check'
+                Result = 'Pass'; Severity = 'High'; Score = 100; AffectedObject = 'Tenant'
+                Finding = 'ok'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = $null
+            },
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams014'; Category = 'Teams'; Name = 'NotApplicable with error detail'
+                Result = 'NotApplicable'; Severity = 'Medium'; Score = $null; AffectedObject = 'Tenant'
+                Finding = 'Graph unavailable'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = 'Authentication needed. Please call Connect-MgGraph.'
+            }
+        )
+
+        $console = ($results | Get-METReport -Format Console 6>&1 | Out-String)
+
+        $console | Should -Match 'MET-Teams014'
+        $console | Should -Match 'Issues requiring attention'
+        $console | Should -Not -Match 'No Fail or Warning findings'
+    }
+
+    # The table has no Error column - it has a Result column whose value becomes Error - so the
+    # footnote pointed readers at something that does not exist.
+    It 'describes where the errored checks actually appear' {
+        $results = @(
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams014'; Category = 'Teams'; Name = 'NotApplicable with error detail'
+                Result = 'NotApplicable'; Severity = 'Medium'; Score = $null; AffectedObject = 'Tenant'
+                Finding = 'Graph unavailable'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = 'Authentication needed. Please call Connect-MgGraph.'
+            }
+        )
+
+        $console = ($results | Get-METReport -Format Console 6>&1 | Out-String)
+
+        $console | Should -Match 'Result column'
+        $console | Should -Not -Match 'see the Error column'
+    }
+
     It 'renders an HTML banner that counts an errored check once, under Error only' {
         $output = Join-Path $TestDrive 'reports-error-summary-html'
         $results = @(
