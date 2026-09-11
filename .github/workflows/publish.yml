@@ -87,7 +87,7 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          Install-Module -Name Pester -RequiredVersion 6.1.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+          Install-Module -Name Pester -RequiredVersion 5.9.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
 
           $unitConfig = New-PesterConfiguration
           $unitConfig.Run.Path = './Tests/Unit'

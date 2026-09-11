@@ -105,9 +105,18 @@ jobs:
         with:
           Version: ${{ matrix.pwsh_version }}
 
+      - name: Verify PowerShell version
+        shell: pwsh
+        run: |
+          $expected = [version]'${{ matrix.pwsh_version }}'
+          $actual = $PSVersionTable.PSVersion
+          if ($actual -ne $expected) {
+            throw "Expected PowerShell $expected but workflow is running $actual."
+          }
+
       - name: Install Pester
         shell: pwsh
-        run: Install-Module -Name Pester -RequiredVersion 6.1.0 -Repository PSGallery -Force -AcceptLicense -Scope CurrentUser
+        run: Install-Module -Name Pester -RequiredVersion 5.9.0 -Repository PSGallery -Force -AcceptLicense -Scope CurrentUser
 
       - name: Run unit tests with coverage
         shell: pwsh
