@@ -11,9 +11,16 @@ BeforeAll {
     $script:CheckFiles = @(Get-ChildItem -Path (Join-Path $script:Root 'Checks') -Recurse -Filter 'MET-*.ps1' |
         Sort-Object Name)
 
+    # Indexed by every top-level function NAME a Private/*.ps1 file defines, not by the
+    # file's basename - Get-METPolicyOrderingObservations.ps1 defines two MET-prefixed
+    # functions, and a direct call to the second one must still resolve to that file.
     $script:PrivateFiles = @{}
     Get-ChildItem -Path (Join-Path $script:Root 'Private') -Filter '*.ps1' | ForEach-Object {
-        $script:PrivateFiles[$_.BaseName] = $_.FullName
+        $filePath = $_.FullName
+        $fileTokens = $null; $fileErrors = $null
+        $fileAst = [System.Management.Automation.Language.Parser]::ParseFile($filePath, [ref] $fileTokens, [ref] $fileErrors)
+        $fileAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
+            ForEach-Object { $script:PrivateFiles[$_.Name] = $filePath }
     }
 
     # Commands that are PowerShell built-ins or ship with the OS. None of them implies an
@@ -39,14 +46,30 @@ BeforeAll {
             Where-Object { $_ } | Sort-Object -Unique)
     }
 
+    # A file's own top-level function names are not external dependencies - whatever they
+    # themselves call is already swept in by the same whole-file AST scan (FindAll walks
+    # into every function body regardless of where the call site sits). Without this, a
+    # bare local helper like Get-METRuleScope.ps1's Format-ScopeList would match none of
+    # -Mg/-Cs/$IgnoredCommands and fall into the ExchangeOnlineManagement catch-all below -
+    # a false positive that could one day block a correct Teams-only or Graph-only header.
+    function Get-METDefinedFunctionName {
+        param([string] $Path)
+        $tokens = $null; $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref] $tokens, [ref] $errors)
+        @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
+            ForEach-Object { $_.Name })
+    }
+
     # MET-prefixed helpers are expanded into the commands they themselves call, because a
     # check that reaches Exchange Online only through Resolve-METSafeLinksEffectivePolicy
     # depends on Exchange Online just as hard as one that calls Get-SafeLinksPolicy itself.
     function Get-METReachedCommandName {
         param([string] $Path, [System.Collections.Generic.HashSet[string]] $Visited)
         if (-not $Visited) { $Visited = [System.Collections.Generic.HashSet[string]]::new() }
+        $localFunctionNames = @(Get-METDefinedFunctionName -Path $Path)
         $reached = [System.Collections.Generic.HashSet[string]]::new()
         foreach ($command in Get-METInvokedCommandName -Path $Path) {
+            if ($command -in $localFunctionNames) { continue }
             if ($command -match '^[A-Za-z]+-MET') {
                 $helperName = $command
                 if ($Visited.Add($helperName) -and $script:PrivateFiles.ContainsKey($helperName)) {
