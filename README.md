@@ -5,7 +5,22 @@
 
 <h1 align="center">MET - Security Posture Scanner for MDO, EXO and Teams</h1>
 
+[![CI](https://github.com/pthoor/MET/actions/workflows/pester.yml/badge.svg)](https://github.com/pthoor/MET/actions/workflows/pester.yml)
+[![Latest release](https://img.shields.io/github/v/release/pthoor/MET)](https://github.com/pthoor/MET/releases/latest)
+
 <p align="center">Open-source PowerShell module for assessing the security posture of a Microsoft 365 tenant across Microsoft Defender for Office 365 (MDO), Exchange Online Protection (EOP), and Microsoft Teams threat protection.</p>
+
+MET runs 51 read-only security posture checks across Microsoft Defender for Office 365, Exchange Online Protection, and Microsoft Teams.
+
+## Quick start
+
+```powershell
+Install-Module MET -Repository PSGallery -Scope CurrentUser
+Test-METPrerequisites
+Connect-METSession
+$results = Invoke-METAssessment
+$results | Get-METReport -Format HTML -OutputPath ./assessments
+```
 
 ---
 
@@ -17,7 +32,7 @@
 |---|---|
 | **Minimum** | PowerShell **7.4** |
 | **Tested on** | PowerShell **7.4**, **7.6** |
-| **Platform** | Windows (full support). Linux/macOS: all checks except DMARC (EXO001) and SPF (EXO003), which require `Resolve-DnsName` - a Windows-only cmdlet. `Connect-METSession` applies `-DisableWAM` automatically off-Windows, which is sufficient on a normal Linux/macOS desktop or a Codespace with a reachable browser tab - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). Device-code auth (`-UseDeviceAuthentication`) is only needed on a genuinely headless host with no browser reachable at all, and is a documented phishing vector otherwise - see the troubleshooting section below before using it. |
+| **Platform** | All 51 checks run on Windows, Linux, and macOS. EXO001 and EXO003 use `Resolve-DnsName` on Windows, then `dig`, `nslookup`, and configurable DNS-over-HTTPS elsewhere. DNS-over-HTTPS discloses queried domains to its resolver and can be disabled with `MET_DOH_RESOLVER=none`. `Connect-METSession` applies `-DisableWAM` automatically off-Windows, which is sufficient on a normal Linux/macOS desktop or a Codespace with a reachable browser tab - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). Device-code auth (`-UseDeviceAuthentication`) is only needed on a genuinely headless host with no browser reachable at all, and is a documented phishing vector otherwise - see the troubleshooting section below before using it. |
 
 ### Required modules
 
@@ -52,7 +67,7 @@ MET is **read-only** - it never modifies tenant configuration. Follow the princi
 
 | Role / permission | Why it is needed |
 |---|---|
-| **Security Reader** (EXO role group) | Read all MDO/EOP policy cmdlets: `Get-SafeLinksPolicy`, `Get-AntiPhishPolicy`, `Get-MalwareFilterPolicy`, `Get-HostedContentFilterPolicy`, `Get-QuarantinePolicy`, `Get-TenantAllowBlockListItems`, `Get-ReportSubmissionPolicy`, `Get-DkimSigningConfig`, `Get-TransportRule`, `Get-AtpPolicyForO365`, `Get-ProtectionAlert`, `Get-Tag` |
+| **Security Reader** (EXO role group) | Read all MDO/EOP policy cmdlets: `Get-SafeLinksPolicy`, `Get-AntiPhishPolicy`, `Get-MalwareFilterPolicy`, `Get-HostedContentFilterPolicy`, `Get-QuarantinePolicy`, `Get-TenantAllowBlockListItems`, `Get-ReportSubmissionPolicy`, `Get-DkimSigningConfig`, `Get-TransportRule`, `Get-AtpPolicyForO365` |
 | **View-Only Recipients** (EXO management role) | Enumerate mailboxes and distribution group membership (`Get-EXOMailbox`, `Get-DistributionGroupMember`, `Get-User`, `Get-AcceptedDomain`, `Get-EOPProtectionPolicyRule`) |
 
 > The **Security Reader** EXO role group already includes View-Only Configuration, so you only need to add **View-Only Recipients** on top of it. Do _not_ use Organization Management or Security Administrator - those grant write access.
@@ -114,46 +129,17 @@ New-ManagementRoleAssignment -Role 'View-Only Recipients' -App $appId
 
 ---
 
-## Install
+## Usage
 
-From the PowerShell Gallery (once published):
+`Invoke-METTriage` remains available as an alias for `Invoke-METAssessment`.
 
-```powershell
-Install-Module -Name MET -Repository PSGallery -Scope CurrentUser
-```
-
-Or clone and import locally:
-
-```powershell
-git clone https://github.com/pthoor/MET
-Import-Module ./MET/MET.psd1
-```
-
----
-
-## Quickstart
-
-```powershell
-# 1. Install dependencies (first time only)
-Install-Module ExchangeOnlineManagement, Microsoft.Graph.Identity.SignIns, Microsoft.Graph.Groups -Scope CurrentUser
-
-# 2. Connect (interactive browser login)
-Connect-METSession
-
-# 3. Run all checks
-$results = Invoke-METAssessment
-
-# 4. View in console
-$results | Get-METReport
-
-# 5. Open interactive HTML report in your browser
-$results | Get-METReport -Format HTML -OutputPath ./assessments
-
-# 6. Export JSON (for SIEM / CI gates)
-$results | Get-METReport -Format JSON -OutputPath ./assessments
-```
-
-`Invoke-METTriage` remains available as an alias.
+| Option | Current behavior |
+|---|---|
+| `Connect-METSession -ManagedIdentity` | Authenticates from an Azure host using its system-assigned managed identity by default, or the identity named by `-ManagedIdentityAccountId`. |
+| `Connect-METSession -SkipExchangeOnline` | Skips Exchange Online; all MDO and EXO checks plus Teams001, Teams002, and Teams004 need it and fail without it. |
+| `Invoke-METAssessment -ListChecks` | Lists the checks selected by the scope parameters without connecting or running checks. |
+| `Invoke-METAssessment -Detailed` | Returns full, unaggregated per-object results instead of the default one-summary-result-per-check view. |
+| `Get-METReport -PassThru` | Returns a `System.IO.FileInfo` for each report file actually written to disk. |
 
 ### Discover checks before connecting
 
@@ -303,235 +289,9 @@ Device-code authentication (`-UseDeviceAuthentication`) is only the right answer
 
 ---
 
-## Custom Policy Baseline - Promotions Folder
+## Optional remediation baseline
 
-Microsoft's **Strict and Standard preset policies** apply a fixed, all-or-nothing configuration. The newer **Promotions folder** feature (currently in Preview) routes bulk email below the BCL threshold to a dedicated Promotions folder in supported Outlook clients - but **`BulkMovesEnabled` is Off in both preset policies and cannot be turned on within them**.
-
-The only way to enable the Promotions folder is to move affected users out of the preset policies and onto **custom policies for every protection type**. Because preset policies bundle anti-spam, anti-phishing, anti-malware, Safe Links, and Safe Attachments together, removing users from a preset drops them back to the (weaker) default policies for all five areas unless you explicitly create custom equivalents.
-
-The baseline below creates Strict-equivalent custom policies for all five protection types, then adds the Promotions folder toggle on top of the anti-spam policy.
-
-> **Prerequisite:** Two things must both be in place for the Promotions folder to work:
-> 1. A mail flow rule that stamps external bulk mail with the `X-MS-Exchange-Organization-BulkStamping: 1` header
-> 2. `BulkMovesEnabled = On` in the anti-spam policy applied to those users
-
-### Step 1 - Create the opt-in security group
-
-```powershell
-New-DistributionGroup `
-    -Name                  'Promotions-OptIn' `
-    -DisplayName           'Promotions Folder - Opt In' `
-    -Alias                 'promotions-optin' `
-    -Type                  Security `
-    -MemberJoinRestriction Open
-```
-
-> `MemberJoinRestriction Open` lets users join or leave the group themselves to opt in or out. Change to `Closed` for admin-only control. To apply the Promotions folder to everyone, skip the group and replace `-SentToMemberOf 'Promotions-OptIn'` with `-RecipientDomainIs (Get-AcceptedDomain).DomainName` in each rule below.
-
-### Step 2 - Create the bulk-stamping mail flow rule
-
-```powershell
-New-TransportRule `
-    -Name               'Bulk Mail ID - Promotions Stamp' `
-    -FromScope          NotInOrganization `
-    -SentToMemberOf     'Promotions-OptIn' `
-    -SetHeaderName      'X-MS-Exchange-Organization-BulkStamping' `
-    -SetHeaderValue     '1' `
-    -StopRuleProcessing $false `
-    -Priority           0
-```
-
-### Step 3 - Custom anti-spam policy (Strict + Promotions folder)
-
-```powershell
-New-HostedContentFilterPolicy `
-    -Name                             'Custom-Strict-AntiSpam' `
-    -BulkThreshold                    5 `
-    -BulkSpamAction                   Quarantine `
-    -BulkQuarantineTag                DefaultFullAccessWithNotificationPolicy `
-    -BulkMovesEnabled                 On `
-    -SpamAction                       Quarantine `
-    -SpamQuarantineTag                DefaultFullAccessWithNotificationPolicy `
-    -HighConfidenceSpamAction         Quarantine `
-    -HighConfidenceSpamQuarantineTag  DefaultFullAccessWithNotificationPolicy `
-    -PhishSpamAction                  Quarantine `
-    -PhishQuarantineTag               DefaultFullAccessWithNotificationPolicy `
-    -HighConfidencePhishAction        Quarantine `
-    -HighConfidencePhishQuarantineTag AdminOnlyAccessPolicy `
-    -MarkAsSpamBulkMail               On `
-    -SpamZapEnabled                   $true `
-    -PhishZapEnabled                  $true `
-    -QuarantineRetentionPeriod        30
-
-New-HostedContentFilterRule `
-    -Name                      'Custom-Strict-AntiSpam' `
-    -HostedContentFilterPolicy 'Custom-Strict-AntiSpam' `
-    -SentToMemberOf            'Promotions-OptIn' `
-    -Priority                  0
-```
-
-### Step 4 - Custom anti-phishing policy (Strict equivalent)
-
-```powershell
-New-AntiPhishPolicy `
-    -Name                                'Custom-Strict-AntiPhish' `
-    -PhishThresholdLevel                 4 `
-    -EnableSpoofIntelligence             $true `
-    -AuthenticationFailAction            Quarantine `
-    -SpoofQuarantineTag                  DefaultFullAccessWithNotificationPolicy `
-    -EnableFirstContactSafetyTips        $true `
-    -EnableMailboxIntelligence           $true `
-    -EnableMailboxIntelligenceProtection $true `
-    -MailboxIntelligenceProtectionAction Quarantine `
-    -MailboxIntelligenceQuarantineTag    DefaultFullAccessWithNotificationPolicy `
-    -EnableOrganizationDomainsProtection $true `
-    -TargetedDomainProtectionAction      Quarantine `
-    -TargetedDomainQuarantineTag         DefaultFullAccessWithNotificationPolicy `
-    -EnableTargetedUserProtection        $true `
-    -TargetedUserProtectionAction        Quarantine `
-    -TargetedUserQuarantineTag           DefaultFullAccessWithNotificationPolicy `
-    -EnableSimilarUsersSafetyTips        $true `
-    -EnableSimilarDomainsSafetyTips      $true `
-    -EnableUnusualCharactersSafetyTips   $true `
-    -EnableUnauthenticatedSender         $true `
-    -EnableViaTag                        $true `
-    -HonorDmarcPolicy                    $true
-
-New-AntiPhishRule `
-    -Name            'Custom-Strict-AntiPhish' `
-    -AntiPhishPolicy 'Custom-Strict-AntiPhish' `
-    -SentToMemberOf  'Promotions-OptIn' `
-    -Priority        0
-```
-
-> `EnableTargetedUserProtection` only activates once you populate `-TargetedUsersToProtect` with your high-value accounts. Pull them directly from your Priority Account tags and format them as required:
-> ```powershell
-> $vipUsers = Get-User -IsVIP -ResultSize Unlimited |
->     ForEach-Object { "$($_.DisplayName);$($_.WindowsEmailAddress)" }
-> Set-AntiPhishPolicy -Identity 'Custom-Strict-AntiPhish' -TargetedUsersToProtect $vipUsers
-> ```
-> Max 350 entries. Mailbox intelligence impersonation (`EnableMailboxIntelligenceProtection`) covers all users automatically, so targeted user protection adds an extra layer specifically for your VIPs.
-
-### Step 5 - Custom anti-malware policy (same settings as Standard and Strict)
-
-When creating a malware filter policy via PowerShell without `-FileTypes`, the file type list starts **empty** even if `EnableFileFilter` is `$true`. The fix is to copy the list from the Default policy, which Microsoft maintains and updates over time.
-
-```powershell
-# Copy the current file type list from the Default policy
-$defaultFileTypes = (Get-MalwareFilterPolicy -Identity Default).FileTypes
-
-New-MalwareFilterPolicy `
-    -Name             'Custom-Strict-AntiMalware' `
-    -EnableFileFilter $true `
-    -FileTypes        $defaultFileTypes `
-    -FileTypeAction   Reject `
-    -ZapEnabled       $true `
-    -QuarantineTag    AdminOnlyAccessPolicy
-
-New-MalwareFilterRule `
-    -Name                'Custom-Strict-AntiMalware' `
-    -MalwareFilterPolicy 'Custom-Strict-AntiMalware' `
-    -SentToMemberOf      'Promotions-OptIn' `
-    -Priority            0
-```
-
-> The Default policy contains Microsoft's maintained default file type list (`ace, ani, apk, app, appx, arj, bat, cab, cmd, com, deb, dex, dll, docm, elf, exe, hta, img, iso, jar, jnlp, kext, lha, lib, library, lnk, lzh, macho, msc, msi, msix, msp, mst, pif, ppa, ppam, reg, rev, scf, scr, sct, sys, uif, vb, vbe, vbs, vxd, wsc, wsf, wsh, xll, xz, z` and more). Copying from it instead of hardcoding ensures your custom policy stays in sync as Microsoft adds new types.
-
-### Step 6 - Custom Safe Links policy (same settings as Standard and Strict)
-
-```powershell
-New-SafeLinksPolicy `
-    -Name                     'Custom-Strict-SafeLinks' `
-    -EnableSafeLinksForEmail  $true `
-    -EnableSafeLinksForTeams  $true `
-    -EnableSafeLinksForOffice $true `
-    -ScanUrls                 $true `
-    -DeliverMessageAfterScan  $true `
-    -EnableForInternalSenders $true `
-    -AllowClickThrough        $false `
-    -TrackClicks              $true `
-    -DisableUrlRewrite        $false
-
-New-SafeLinksRule `
-    -Name            'Custom-Strict-SafeLinks' `
-    -SafeLinksPolicy 'Custom-Strict-SafeLinks' `
-    -SentToMemberOf  'Promotions-OptIn' `
-    -Priority        0
-```
-
-### Step 7 - Custom Safe Attachments policy (same settings as Standard and Strict)
-
-```powershell
-New-SafeAttachmentPolicy `
-    -Name          'Custom-Strict-SafeAttachments' `
-    -Enable        $true `
-    -Action        Block `
-    -QuarantineTag AdminOnlyAccessPolicy
-
-New-SafeAttachmentRule `
-    -Name                 'Custom-Strict-SafeAttachments' `
-    -SafeAttachmentPolicy 'Custom-Strict-SafeAttachments' `
-    -SentToMemberOf       'Promotions-OptIn' `
-    -Priority             0
-```
-
-### Step 8 - Exclude the opt-in group from preset policies
-
-Users in `Promotions-OptIn` must be excluded from both the Standard and Strict preset scope, otherwise the preset wins the priority order and the custom policies never apply. Presets have two rule sets: EOP (anti-spam, anti-phish, anti-malware) and ATP (Safe Links, Safe Attachments).
-
-```powershell
-# View current preset scope
-Get-EOPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
-Get-ATPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
-
-# Exclude from Strict preset - EOP rules
-Set-EOPProtectionPolicyRule `
-    -Identity               'Strict Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
-
-# Exclude from Strict preset - ATP rules (Safe Links + Safe Attachments)
-Set-ATPProtectionPolicyRule `
-    -Identity               'Strict Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
-
-# Repeat for Standard preset if users are also covered by it
-Set-EOPProtectionPolicyRule `
-    -Identity               'Standard Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
-
-Set-ATPProtectionPolicyRule `
-    -Identity               'Standard Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
-```
-
-### How the Promotions folder feature works after setup
-
-| Bulk mail BCL | What happens |
-|---|---|
-| BCL ≥ 5 (meets/exceeds threshold) | Quarantined (`BulkSpamAction = Quarantine`) |
-| BCL < 5, stamped by mail flow rule | Delivered to **Promotions** folder |
-| Sender is in user's Safe Senders list | Delivered to Inbox (bypasses Promotions) |
-| Sender is internal / accepted domain | Not stamped by the rule - delivered normally |
-
-Microsoft 365 learns from user behaviour in the Promotions folder (moving messages in or out) and applies those preferences automatically to future messages.
-
-### MET checks that assess this baseline
-
-| Check | What it verifies |
-|---|---|
-| MET-MDO001 | Safe Links enabled, internal senders covered, click-through blocked |
-| MET-MDO002 | Safe Attachments action is Block or DynamicDelivery |
-| MET-MDO003 | Anti-phish: mailbox intelligence, impersonation, safety tips |
-| MET-MDO004 | Anti-spoofing action and DMARC honour settings |
-| MET-MDO005 | Anti-malware: file filter, ZAP, quarantine tag |
-| MET-MDO006 | BCL threshold, bulk action, spam/phish actions, ZAP |
-| MET-MDO008 | Preset policy coverage - opt-in users on custom policies will show as uncovered; this is expected and accepted for this scenario |
-| MET-MDO009 | ZAP enabled in all active policies including the custom ones |
-| MET-EXO007 | Transport rule audit - bulk-stamping rule listed as informational |
-| MET-EXO008 | Quarantine retention ≥ 30 days in the custom anti-spam policy |
-| MET-EXO009 | Quarantine tag permissiveness for Malware/High-Confidence Phish across all custom policies |
-
----
+MET is assessment-only and never changes tenant configuration. The separate [Promotions Folder baseline](docs/baselines/promotions-folder.md) is optional deployment guidance for administrators who deliberately want that mail-flow design; its `New-*` and `Set-*` commands are not run by MET.
 
 ## Check Inventory
 
@@ -539,67 +299,67 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| MET-MDO001 | Safe Links | High | Email + Office app URL scanning, click-through, internal senders |
-| MET-MDO002 | Safe Attachments | High | Policy enabled, action is Block or DynamicDelivery |
-| MET-MDO003 | Anti-Phishing | High | Mailbox intelligence, impersonation protection, safety tips |
-| MET-MDO004 | Anti-Spoofing | High | Spoof intelligence, DMARC honor, auth failure action |
-| MET-MDO005 | Anti-Malware | High | ZAP, common attachment filter, admin notifications |
-| MET-MDO006 | Anti-Spam Inbound | Medium | Spam/phish actions, high-confidence thresholds, BCL |
-| MET-MDO007 | Anti-Spam Outbound | High | Auto-forward disabled, send limit action, admin alerts |
-| MET-MDO008 | Preset Policy Coverage | High | % of mailboxes covered by Standard or Strict preset |
-| MET-MDO009 | Zero-Hour Auto Purge | High | ZAP enabled for spam and phishing in all policies |
-| MET-MDO010 | Priority Accounts | High | Priority Account tag usage + differentiated protection policy |
-| MET-MDO011 | User Tags | Low | Custom tags defined + alert policies referencing them |
-| MET-MDO012 | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
-| MET-MDO013 | Policy Precedence Conflicts | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
-| MET-MDO014 | Group Reference Audit | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
+| [MET-MDO001](docs/checks/MET-MDO001-SafeLinks.md) | Safe Links Effective Coverage | High | Email + Office app URL scanning, click-through, internal senders |
+| [MET-MDO002](docs/checks/MET-MDO002-SafeAttachments.md) | Safe Attachments | High | Policy enabled, action is Block or DynamicDelivery |
+| [MET-MDO003](docs/checks/MET-MDO003-AntiPhish.md) | Anti-Phishing Effective Coverage | High | Mailbox intelligence, impersonation protection, safety tips |
+| [MET-MDO004](docs/checks/MET-MDO004-AntiSpoofing.md) | Anti-Spoofing | High | Spoof intelligence, DMARC honor, auth failure action |
+| [MET-MDO005](docs/checks/MET-MDO005-AntiMalware.md) | Anti-Malware Effective Coverage | High | ZAP, common attachment filter, admin notifications |
+| [MET-MDO006](docs/checks/MET-MDO006-AntiSpamInbound.md) | Anti-Spam Inbound Effective Coverage | Medium | Spam/phish actions, high-confidence thresholds, BCL |
+| [MET-MDO007](docs/checks/MET-MDO007-AntiSpamOutbound.md) | Anti-Spam Outbound Effective Coverage | High | Auto-forward disabled, send limit action, admin alerts |
+| [MET-MDO008](docs/checks/MET-MDO008-PresetPolicyCoverage.md) | Preset Policy Coverage | High | % of mailboxes covered by Standard or Strict preset |
+| [MET-MDO009](docs/checks/MET-MDO009-ZAP.md) | ZAP Effective Coverage | High | ZAP enabled for spam and phishing in all policies |
+| [MET-MDO010](docs/checks/MET-MDO010-PriorityAccounts.md) | Priority Account Protection Toggle | High | Priority Account tag usage + differentiated protection policy |
+| [MET-MDO011](docs/checks/MET-MDO011-UserTags.md) | User Tags | Low | Portal-review pointer for user tags and tag-aware alert policies; no programmatic assessment (always Info/Low). |
+| [MET-MDO012](docs/checks/MET-MDO012-SafeDocuments.md) | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
+| [MET-MDO013](docs/checks/MET-MDO013-PolicyPrecedenceConflicts.md) | Policy Precedence Conflicts | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
+| [MET-MDO014](docs/checks/MET-MDO014-GroupReferenceAudit.md) | Group Reference Audit | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
 
 ### EXO - Exchange Online / Email Authentication
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| MET-EXO001 | DMARC | High | Record present, policy quarantine/reject, rua reporting |
-| MET-EXO002 | DKIM | High | Signing enabled, key ≥ 2048 bit, CNAME status valid |
-| MET-EXO003 | SPF | High | Record present, -all enforcement, ≤ 10 DNS lookups |
-| MET-EXO004 | Quarantine Policies | Medium | Custom (non-built-in) quarantine policies with notifications off but end-user permissions granted |
-| MET-EXO005 | Tenant Allow/Block List | Low | Stale allows (>90 days), wildcard allows, allow/block ratio |
-| MET-EXO006 | Submission Policy | High | Report-to-Microsoft on, custom submission mailbox configured |
-| MET-EXO007 | Transport Rule Audit | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
-| MET-EXO008 | Quarantine Retention | Low | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
-| MET-EXO009 | Quarantine Policy Verdict Alignment | High | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
-| MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
-| MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
-| MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
-| MET-EXO013 | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
-| MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
-| MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
-| MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
-| MET-EXO017 | Quarantine Notification Cadence | Low | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
-| MET-EXO018 | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
-| MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
-| MET-EXO020 | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
-| MET-EXO021 | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
-| MET-EXO022 | Calendar and Contact Sharing | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
-| MET-EXO023 | Unified Audit Log Ingestion | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
+| [MET-EXO001](docs/checks/MET-EXO001-DMARC.md) | DMARC | High | Record present, policy quarantine/reject, rua reporting |
+| [MET-EXO002](docs/checks/MET-EXO002-DKIM.md) | DKIM | High | Signing enabled, key ≥ 2048 bit, CNAME status valid |
+| [MET-EXO003](docs/checks/MET-EXO003-SPF.md) | SPF | High | Record present, -all enforcement, ≤ 10 DNS lookups |
+| [MET-EXO004](docs/checks/MET-EXO004-QuarantinePolicy.md) | Quarantine Policies | Medium | Custom (non-built-in) quarantine policies with notifications off but end-user permissions granted |
+| [MET-EXO005](docs/checks/MET-EXO005-TenantAllowBlockList.md) | Tenant Allow/Block List | Low | Stale allows (>90 days), wildcard allows, allow/block ratio |
+| [MET-EXO006](docs/checks/MET-EXO006-SubmissionPolicy.md) | User Reported Message Settings | High | Report-to-Microsoft on, custom submission mailbox configured |
+| [MET-EXO007](docs/checks/MET-EXO007-TransportRuleAudit.md) | Transport Rule Audit | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
+| [MET-EXO008](docs/checks/MET-EXO008-QuarantineRetention.md) | Quarantine Retention | Low | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
+| [MET-EXO009](docs/checks/MET-EXO009-QuarantinePolicyVerdictAlignment.md) | Quarantine Policy Verdict Alignment | High | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
+| [MET-EXO010](docs/checks/MET-EXO010-DirectSend.md) | Direct Send Protection | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
+| [MET-EXO011](docs/checks/MET-EXO011-ConnectorHygiene.md) | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
+| [MET-EXO012](docs/checks/MET-EXO012-MailboxForwarding.md) | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
+| [MET-EXO013](docs/checks/MET-EXO013-SpoofIntelligenceAllowList.md) | Spoof Intelligence Allow-List | High | Standing spoof-intelligence allow entries, split by Internal vs External spoof type |
+| [MET-EXO014](docs/checks/MET-EXO014-AdvancedDeliveryPolicy.md) | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
+| [MET-EXO015](docs/checks/MET-EXO015-ExternalSenderTag.md) | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
+| [MET-EXO016](docs/checks/MET-EXO016-ArcTrustedSealers.md) | ARC Trusted Sealers Review | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
+| [MET-EXO017](docs/checks/MET-EXO017-QuarantineNotificationCadence.md) | Quarantine Notification Cadence | Low | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
+| [MET-EXO018](docs/checks/MET-EXO018-RemoteDomainForwarding.md) | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
+| [MET-EXO019](docs/checks/MET-EXO019-SmtpAuthentication.md) | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
+| [MET-EXO020](docs/checks/MET-EXO020-ConnectionFilterPolicy.md) | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
+| [MET-EXO021](docs/checks/MET-EXO021-MailboxAuditing.md) | Mailbox Audit Logging | Medium | Organization-wide AuditDisabled - the evidence base a BEC investigation depends on |
+| [MET-EXO022](docs/checks/MET-EXO022-SharingPolicy.md) | Calendar and Contact Sharing Policies | Medium | Sharing policies exposing calendar detail or contacts to all domains or anonymously |
+| [MET-EXO023](docs/checks/MET-EXO023-UnifiedAuditLog.md) | Unified Audit Log Ingestion | High | UnifiedAuditLogIngestionEnabled (retention duration is a documented manual review item, not asserted here) |
 
 ### Teams - Microsoft Teams Threat Protection
 
 | ID | Name | Severity | What it assesses |
 |---|---|---|---|
-| MET-Teams001 | Safe Links for Teams | High | Effective, precedence-resolved Safe Links policy per mailbox (same preset-vs-custom resolver as MET-MDO001) has EnableSafeLinksForTeams enabled |
-| MET-Teams002 | Safe Attachments for Teams | High | EnableATPForSPOTeamsODB (the single documented toggle for SPO/OneDrive/Teams) |
-| MET-Teams003 | Meeting Protection | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
-| MET-Teams004 | ZAP for Teams | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
-| MET-Teams005 | Teams User Reporting | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
-| MET-Teams006 | External Access / Federation | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
-| MET-Teams007 | Guest Messaging/Calling | Medium | Guest-initiated 1:1 chat and private calling configuration |
-| MET-Teams008 | App Permission Policy Exposure | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |
-| MET-Teams009 | Trial Tenant Federation Exposure | High | ExternalAccessWithTrialTenants allows communication with disposable trial-license tenants |
-| MET-Teams010 | External Access Policy Drift | Medium | Non-Global CsExternalAccessPolicy instances re-opening federation/public-cloud access for a specific user set |
-| MET-Teams011 | SecOps Blocklist Authority | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
-| MET-Teams012 | Call Reporting | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
-| MET-Teams014 | Cross-Tenant Guest Access | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
-| MET-Teams015 | Teams Email Integration | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
+| [MET-Teams001](docs/checks/MET-Teams001-SafeLinks.md) | Safe Links for Teams | High | Effective, precedence-resolved Safe Links policy per mailbox (same preset-vs-custom resolver as MET-MDO001) has EnableSafeLinksForTeams enabled |
+| [MET-Teams002](docs/checks/MET-Teams002-SafeAttachments.md) | Safe Attachments for Teams | High | EnableATPForSPOTeamsODB (the single documented toggle for SPO/OneDrive/Teams) |
+| [MET-Teams003](docs/checks/MET-Teams003-MeetingProtection.md) | Meeting Protection | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
+| [MET-Teams004](docs/checks/MET-Teams004-ZAPForTeams.md) | ZAP for Teams | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
+| [MET-Teams005](docs/checks/MET-Teams005-TeamsUserReporting.md) | Teams User Reporting | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
+| [MET-Teams006](docs/checks/MET-Teams006-ExternalAccess.md) | External Access / Federation Allow-List | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
+| [MET-Teams007](docs/checks/MET-Teams007-GuestConfiguration.md) | Guest Messaging/Calling Configuration | Medium | Guest-initiated 1:1 chat and private calling configuration |
+| [MET-Teams008](docs/checks/MET-Teams008-AppPermissionPolicy.md) | App Permission Policy | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |
+| [MET-Teams009](docs/checks/MET-Teams009-TrialTenantFederation.md) | Trial Tenant Federation Exposure | High | ExternalAccessWithTrialTenants allows communication with disposable trial-license tenants |
+| [MET-Teams010](docs/checks/MET-Teams010-ExternalAccessPolicyDrift.md) | Per-User External Access Policy Drift | Medium | Non-Global CsExternalAccessPolicy instances re-opening federation/public-cloud access for a specific user set |
+| [MET-Teams011](docs/checks/MET-Teams011-SecOpsBlocklistAuthority.md) | SecOps Blocklist Authority & Blocked Entities | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
+| [MET-Teams012](docs/checks/MET-Teams012-CallReporting.md) | Call Reporting | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
+| [MET-Teams014](docs/checks/MET-Teams014-CrossTenantAccess.md) | Cross-Tenant Guest & External Collaboration Restrictions | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
+| [MET-Teams015](docs/checks/MET-Teams015-EmailIntegration.md) | Teams Email Integration | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
 
 ---
 
@@ -667,7 +427,7 @@ Settings MET deliberately does not assess as a check. Two different reasons land
 
 The HTML report is a **single self-contained file** - all CSS and JavaScript are inlined, no CDN or internet connection required to view it.
 
-When `-OutputPath` is provided, MET now creates a timestamped run folder and writes reports inside it (for example `./assessments/20260602-102530-contoso_onmicrosoft.com/`).
+When `-OutputPath` is provided, MET creates a timestamped run folder and writes reports inside it (for example `./assessments/20260602-102530-contoso.onmicrosoft.com/`).
 
 ### Re-render a saved report
 
