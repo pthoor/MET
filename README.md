@@ -155,6 +155,22 @@ $results | Get-METReport -Format JSON -OutputPath ./assessments
 
 `Invoke-METTriage` remains available as an alias.
 
+### Discover checks before connecting
+
+```powershell
+# List every check MET can run - no module, connection, or tenant required
+Get-METCheck
+
+# Scope to a category or severity
+Get-METCheck -Category EXO
+Get-METCheck -Severity Critical, High
+
+# Look up specific checks by ID
+Get-METCheck -CheckId MET-EXO001, MET-MDO009
+```
+
+`Get-METCheck` reads each check's declared name, severity, description, and required module straight off the script file, so it works before you have run `Connect-METSession` at all - useful for deciding what a check does, or which `-Category`/`-CheckId`/`-Severity` scope you want, before connecting to a tenant. `Invoke-METAssessment -ListChecks` uses the same data.
+
 ### Service Principal (unattended / CI)
 
 ```powershell
@@ -652,6 +668,15 @@ Settings MET deliberately does not assess as a check. Two different reasons land
 The HTML report is a **single self-contained file** - all CSS and JavaScript are inlined, no CDN or internet connection required to view it.
 
 When `-OutputPath` is provided, MET now creates a timestamped run folder and writes reports inside it (for example `./assessments/20260602-102530-contoso_onmicrosoft.com/`).
+
+### Re-render a saved report
+
+```powershell
+Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json |
+    Get-METReport -Format HTML -OutputPath ./assessments/contoso-2026-06-01/
+```
+
+`Import-METReport` reads a JSON report `Get-METReport` previously wrote and rebuilds the original check-result objects, including the tenant and authentication provenance from that run - so a saved report can be re-rendered to console/HTML, compared against a later run, or filtered, without a live tenant connection or re-running the assessment.
 
 ---
 

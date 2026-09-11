@@ -47,7 +47,9 @@ AUTHENTICATION MODES
         Browser sign-in. -UserPrincipalName pre-selects the account so the
         browser prompt does not ask which one to use. -DisableWAM bypasses
         the Web Account Manager broker; Connect-METSession already passes
-        it automatically on Linux and macOS, where WAM does not apply.
+        it automatically for the Teams leg on Linux and macOS, where WAM
+        does not apply - the Exchange Online leg only gets -DisableWAM
+        when you pass the switch yourself.
         -UseDeviceAuthentication signs in by device code instead of a
         browser. Device-code flow is a documented phishing vector
         (Storm-2372 and follow-on campaigns) - Microsoft's own current

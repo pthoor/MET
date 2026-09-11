@@ -26,7 +26,9 @@ MET/
 ├── MET.psm1                         # Module root - dot-sources Public/ and Private/
 ├── Public/
 │   ├── Invoke-METAssessment.ps1     # Main entry point - runs all or selected checks
+│   ├── Get-METCheck.ps1             # Lists checks with Name/Severity/Description/RequiresModule - no connection required
 │   ├── Get-METReport.ps1            # Formats and exports results (console / JSON / HTML)
+│   ├── Import-METReport.ps1         # Rehydrates a saved JSON report into check-result objects, preserving tenant/auth provenance
 │   ├── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
 │   ├── Disconnect-METSession.ps1    # Tears down all three legs; clears tenant-identity tracking
 │   └── Test-METPrerequisites.ps1    # Verifies required module versions before triage
@@ -44,7 +46,8 @@ MET/
 │   ├── Test-METIsPresetSecurityPolicyName.ps1 # Bool wrapper over Get-METPresetSecurityPolicyTier - is this policy name preset-generated?
 │   ├── Test-METIsBuiltInQuarantinePolicyName.ps1 # Is this one of the 4 immutable built-in quarantine policies (not admin-editable)?
 │   ├── Get-METCertificateFromFile.ps1 # Loads an X509Certificate2 from a PFX file + SecureString password, for Graph/Teams cert-based auth on non-Windows
-│   └── Resolve-METTenantGuid.ps1    # Resolves a domain name or GUID to the tenant's GUID via unauthenticated OIDC discovery, for tenant-mismatch checks in Connect-METSession
+│   ├── Resolve-METTenantGuid.ps1    # Resolves a domain name or GUID to the tenant's GUID via unauthenticated OIDC discovery, for tenant-mismatch checks in Connect-METSession
+│   └── Get-METCheckMetadata.ps1     # Reads one check script's $METCheckInfo header via AST parsing, without executing it - backs Get-METCheck
 ├── Checks/
 │   ├── MDO/
 │   │   ├── MET-MDO001-SafeLinks.ps1
@@ -247,6 +250,8 @@ Returns `[PSCustomObject[]]` - the full collection of check results. `Get-METRep
 
 > `-DelegatedOrganization` is declared on the param block but not yet wired into the check-execution path - it's a placeholder for future MSSP support (hence its exclusion from `PSReviewUnusedParameter` in `PSScriptAnalyzerSettings.psd1`). Don't assume it changes behavior today.
 
+`-CheckId` and `-ExcludeCheckId` have argument completers registered on `Invoke-METAssessment`, sourced from `Get-METCheck` - tab-completing either parameter lists real check IDs, and a typo is caught at the shell before a run rather than silently matching zero checks.
+
 ### Check Execution Model
 
 `Invoke-METAssessment` does not dot-source `Checks/` at module load time (unlike `Public/` and `Private/`, which `MET.psm1` loads on import). Instead, each call to `Invoke-METAssessment`:
@@ -256,6 +261,67 @@ Returns `[PSCustomObject[]]` - the full collection of check results. `Get-METRep
 3. Runs each check inside a wrapper scriptblock - `& { param($METContext) . $checkPath } $METContext` - rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METAssessment` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
 4. Catches any terminating error per-check and converts it into a synthetic `Fail`/`High` result with the exception text in `Error`, so one broken check never aborts the run.
 5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object - see `Get-METAggregationNoun` in `Invoke-METAssessment.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
+
+#### The `$METCheckInfo` header
+
+Every check script under `Checks/<Category>/` opens with a required metadata header, immediately before the assessment logic:
+
+```powershell
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseDeclaredVarsMoreThanAssignments', 'METCheckInfo',
+    Justification = 'Check metadata. Read from the AST by Get-METCheck and never executed.')]
+param()
+
+$METCheckInfo = @{
+    Name           = 'Priority Account Protection Toggle'
+    Severity       = 'High'
+    Description    = 'Checks whether the priority account protection toggle is enabled and whether priority account tags are applied to a differentiated protection policy.'
+    RequiresModule = @('ExchangeOnlineManagement')
+}
+```
+
+Four fields, always in this shape:
+
+- **`Name`** - human-readable check name. A check that emits more than one `Name` across its result objects (e.g. MET-MDO010 emits both `Priority Account Protection Toggle` and `Priority Account Tagging`) declares whichever one best represents the check as a whole; both remain real, individually emitted names.
+- **`Severity`** - the *worst* severity the check can emit, not necessarily what any single run observes. Several checks emit more than one `Result`/`Severity` pair across the objects they return (once per domain, per policy, etc.) - `Severity` here is the ceiling across all of them.
+- **`Description`** - one to two sentences, plain English, no Markdown - this is the same text `Get-METReport`'s HTML report now generates its 51 control-card descriptions from (see `CONTROLS_META` in `Public/Get-METReport.ps1`), so a change here changes the report too.
+- **`RequiresModule`** - `string[]`, not a single string. Category does not imply module: `MET-Teams001`/`MET-Teams002`/`MET-Teams004` call Exchange-hosted cmdlets and declare only `ExchangeOnlineManagement`; `MET-Teams014` calls Microsoft Graph directly and declares only `Microsoft.Graph`; `MET-Teams005` needs both `Get-Cs*` and Exchange-hosted cmdlets and declares both.
+
+The `SuppressMessageAttribute` line and the empty `param()` immediately above it are both required, in that order. `$METCheckInfo` is assigned and then never read anywhere in the script body - `Get-METCheck` (via `Private/Get-METCheckMetadata.ps1`) reads it statically off the AST, and the check itself never executes that code path. Without the suppression, PSScriptAnalyzer's `PSUseDeclaredVarsMoreThanAssignments` rule flags that assignment as unused on every one of the 51 check files, and 51 identical warnings would bury any real lint finding in the same run. `Tests/Unit/CheckMetadata.Tests.ps1` re-derives `Severity`, `Name`, and `RequiresModule` from the rest of the script's own code (the `-Severity`/`-Name` arguments actually passed to `New-METCheckResult`, and the `Get-Cs*`/`Get-Mg*`/other cmdlets actually reached) and fails if the declared header disagrees - a wrong or stale header fails CI, it does not ship.
+
+---
+
+## Get-METCheck - Behaviour
+
+```powershell
+# List every check MET can run - no connection or module needed
+Get-METCheck
+
+# Scope to a category
+Get-METCheck -Category EXO
+
+# Scope to specific IDs
+Get-METCheck -CheckId MET-EXO001, MET-MDO009
+
+# Scope by worst-case severity
+Get-METCheck -Severity Critical, High
+```
+
+Discovers check scripts the same way `Invoke-METAssessment` does (`Checks/<Category>/*.ps1`) and reads each one's `$METCheckInfo` header via static AST parsing rather than executing the check - it needs no Exchange Online/Graph/Teams module loaded and no live session, which is the point: it is what a user runs to decide whether to connect and what to run, not a query against a live tenant. Returns one `MET.CheckInfo` object per matching check (`CheckId`, `Category`, `Name`, `Severity`, `Description`, `RequiresModule`, `Script`, `Path`). `Invoke-METAssessment -ListChecks` delegates to this function, so the dry-run listing and the real run can never disagree about what exists.
+
+---
+
+## Import-METReport - Behaviour
+
+```powershell
+# Rehydrate a saved report into check-result objects
+Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json
+
+# Re-render an HTML report from a saved JSON file, without a live tenant connection
+Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json |
+    Get-METReport -Format HTML -OutputPath ./assessments/contoso-2026-06-01/
+```
+
+Reads a report written by `Get-METReport -Format JSON`/`-Format All` and rebuilds one `MET.CheckResult` per saved check, restoring PascalCase property names rather than the camelCase `ConvertFrom-Json` would otherwise produce. Tenant and authentication provenance from the report are folded into each result's `Metadata` (as `METRunTenant`/`METRunAuthentication`) rather than kept at the collection level, so the provenance survives being filtered or concatenated - a collection-level stamp would be lost the moment someone ran `Where-Object` or piped two imports together. A path that is missing, not valid JSON, or valid JSON with no `checks` array throws a descriptive error rather than returning an empty or partial set.
 
 ---
 
@@ -451,7 +517,7 @@ When adding a new check: default to Exchange Online or native Teams cmdlets. Onl
 | MET-MDO007 | Anti-Spam Outbound | Forwarding rules, sending limits, auto-forward disabled per policy |
 | MET-MDO008 | Preset Policy Coverage | Which users/groups are covered by Standard or Strict preset; uncovered recipient gap |
 | MET-MDO009 | ZAP | ZAP enabled for spam and phish in all active policies |
-| MET-MDO010 | Priority Accounts | Priority account tag applied; differentiated protection policy active |
+| MET-MDO010 | Priority Account Protection Toggle | Tenant-wide priority account protection toggle (`Get-EmailTenantSettings`); priority account tag applied and a differentiated protection policy active (emitted as a separate `Priority Account Tagging` result) |
 | MET-MDO011 | User Tags | Tags in use; alert policies referencing tags exist |
 | MET-MDO012 | Safe Documents | `EnableSafeDocs` enabled; `AllowSafeDocsOpen` disabled (via `Get-AtpPolicyForO365`) |
 | MET-MDO013 | Policy Precedence Conflicts | Finds custom anti-spam, anti-malware, Anti-Phish, Safe Links, and Safe Attachments rules whose targeted recipients are also covered by a Standard/Strict preset; incomplete source data produces a failed check instead of a clean result |
