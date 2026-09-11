@@ -52,7 +52,10 @@ function Get-METReport {
         (JSON or HTML), pass a file path to name the output file directly, or a directory to
         accept the default filename (MET-report.json / MET-report.html) inside it. For -Format
         All, pass a directory - both files are written into it. Ignored, with a warning, when
-        -Format is Console.
+        -Format is Console. Known current-behaviour caveat: the report is presently written into
+        a timestamped subfolder created under the location given here, rather than at the exact
+        path/filename passed - this is a known, separately tracked defect, not an intended part
+        of this parameter's contract, and is expected to be fixed in a future release.
 
     .PARAMETER TenantName
         Overrides the tenant label shown in the console header, JSON `tenant` field, and HTML
@@ -64,12 +67,17 @@ function Get-METReport {
         Has no effect for -Format Console or -Format JSON, which never auto-launch anything.
 
     .PARAMETER PassThru
-        Also returns the underlying report data object (the same structure written to JSON)
-        instead of (or in addition to, depending on -Format) only producing console/file output.
+        Returns a System.IO.FileInfo object for each report file actually written to disk - one
+        for JSON and/or one for HTML, whichever formats were written with -OutputPath. Returns
+        nothing for -Format Console, and nothing for -Format JSON when -OutputPath is not
+        supplied, because no file is written to disk in either case (JSON without -OutputPath
+        instead emits the report JSON text itself to the pipeline, independently of -PassThru).
 
     .OUTPUTS
-        None by default for Console/HTML/JSON file output. With -PassThru, the PSCustomObject
-        report data structure (the same shape written to JSON) is returned to the pipeline.
+        None by default. With -PassThru, System.IO.FileInfo[] - one object per report file
+        written to disk this call, in the order written (JSON before HTML for -Format All);
+        an empty array if -PassThru was passed but no format that writes a file actually did
+        (-Format Console, or -Format JSON without -OutputPath).
 
     .EXAMPLE
         $results | Get-METReport
@@ -94,6 +102,14 @@ function Get-METReport {
 
         Writes both the JSON and HTML reports into one directory in a single call - the pattern
         used for a per-customer, per-run assessment archive.
+
+    .EXAMPLE
+        $written = $results | Get-METReport -Format JSON -OutputPath ./assessments -PassThru
+        $written.FullName
+
+        Captures the FileInfo object(s) for whatever was actually written to disk, to chain into
+        further automation (e.g. uploading the file, or reading its path back for logging)
+        without re-deriving the output path yourself.
     #>
     [CmdletBinding(PositionalBinding = $false)]
     param(

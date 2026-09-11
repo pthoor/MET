@@ -133,6 +133,18 @@ function Connect-METSession {
         Disconnect-METSession before connecting to a different customer in the same PowerShell
         session - Exchange Online, Graph and Teams share one MSAL assembly context per process,
         so tenant residue between customers is a real risk.
+
+    .EXAMPLE
+        Connect-METSession -TenantId contoso.onmicrosoft.com -ManagedIdentity
+
+        Signs in using the host's system-assigned managed identity - the ManagedIdentity
+        parameter set's two required parameters, for MET running from an Azure host (Azure
+        Automation, an Azure VM, etc.) that has one assigned. This is the minimal invocation the
+        parameter set accepts; it has not been exercised against a live managed-identity host as
+        part of writing this help, so treat the exact sign-in prompts/errors it produces as
+        unverified until tried against a real one. For a user-assigned identity instead, add
+        -ManagedIdentityAccountId <clientId> - noting that the Teams leg does not honour it (see
+        -ManagedIdentityAccountId above).
     #>
     [CmdletBinding(DefaultParameterSetName = 'Interactive', PositionalBinding = $false)]
     param(

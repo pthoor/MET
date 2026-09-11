@@ -215,6 +215,26 @@ Describe 'Get-METReport output path reporting' {
         $written | Should -BeNullOrEmpty
     }
 
+    # Pins the -PassThru contract documented in the function's help: FileInfo objects for
+    # files actually written to disk, not the report data itself - a prior draft of the
+    # comment-based help claimed -PassThru returned "the report data object (the same
+    # structure written to JSON)", which was never what the code did.
+    It 'returns FileInfo objects whose paths exist with -Format JSON -PassThru' {
+        $output = Join-Path $TestDrive 'q5'
+        $written = $script:Sample | Get-METReport -Format JSON -OutputPath $output -NoLaunch -PassThru
+
+        @($written).Count | Should -Be 1
+        $written[0] | Should -BeOfType [System.IO.FileInfo]
+        $written[0].Name | Should -Be 'MET-report.json'
+        Test-Path -LiteralPath $written[0].FullName | Should -BeTrue
+    }
+
+    It 'returns nothing with -Format Console -PassThru, because Console writes no file' {
+        $written = $script:Sample | Get-METReport -Format Console -PassThru
+
+        @($written) | Should -BeNullOrEmpty
+    }
+
     It 'does not launch a browser with -NoLaunch' {
         Mock -ModuleName 'MET' -CommandName 'Start-Process' -MockWith { }
         $output = Join-Path $TestDrive 'q4'
