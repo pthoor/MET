@@ -24,7 +24,7 @@ The workflow requests the API key only in the protected publish job. GitHub's bu
    ```
 
 4. Approve the `production` deployment, if the environment requires approval.
-5. Confirm that the workflow validation, PowerShell Gallery publication, build-provenance attestation, and GitHub release creation all complete successfully.
+5. Confirm that the workflow validation (lint, unit tests, integration tests, and HTML report browser tests), PowerShell Gallery publication, build-provenance attestation, and GitHub release creation all complete successfully.
 
 If a tag-triggered run fails before PowerShell Gallery accepts the package, merge the workflow fix to `main` and use **Run workflow** with the existing tag. The manual run checks out and validates that tag; do not move the tag. Once PowerShell Gallery has accepted a version, it cannot be overwritten or published again.
 

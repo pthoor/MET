@@ -36,7 +36,7 @@ jobs:
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
-        run: Install-Module -Name PSScriptAnalyzer -MinimumVersion 1.21.0 -Force -AcceptLicense -Scope CurrentUser
+        run: Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Repository PSGallery -Force -AcceptLicense -Scope CurrentUser
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -49,26 +49,42 @@ jobs:
           if ($results) {
             $results | Sort-Object Severity, ScriptName, Line |
               Format-Table -AutoSize -Property Severity, RuleName, ScriptName, Line, Message
-            $errorFindings = $results | Where-Object Severity -eq 'Error'
-            Write-Host "PSScriptAnalyzer: $($results.Count) finding(s) - $($errorFindings.Count) error(s)"
-            if ($errorFindings) { exit 1 }
+            $blockingFindings = @($results | Where-Object Severity -in @('Error', 'Warning'))
+            Write-Host "PSScriptAnalyzer: $($results.Count) finding(s) - $($blockingFindings.Count) blocking finding(s)"
+            if ($blockingFindings.Count -gt 0) { exit 1 }
           } else {
             Write-Host 'PSScriptAnalyzer: no issues found.'
           }
 
   test:
-    name: Pester Tests + Coverage
-    runs-on: ubuntu-latest
+    name: Pester (${{ matrix.runner }}, PowerShell ${{ matrix.pwsh_version }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     needs: lint
     permissions:
       contents: read
       checks: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            pwsh_version: 7.4.20
+            egress_policy: block
+            enforce_coverage: false
+          - runner: ubuntu-latest
+            pwsh_version: 7.6.6
+            egress_policy: block
+            enforce_coverage: true
+          - runner: windows-latest
+            pwsh_version: 7.6.6
+            egress_policy: audit
+            enforce_coverage: false
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: block
+          egress-policy: ${{ matrix.egress_policy }}
           allowed-endpoints: >
             github.com:443
             api.github.com:443
@@ -77,15 +93,26 @@ jobs:
             www.powershellgallery.com:443
             cdn.powershellgallery.com:443
             psg-prod-eastus.azureedge.net:443
+            packages.microsoft.com:443
+            azure.archive.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install PowerShell ${{ matrix.pwsh_version }}
+        uses: PSModule/install-powershell@159c2929fac34e3c7fc55d75e8997fb27fc7f75a # v1.2.0
+        with:
+          Version: ${{ matrix.pwsh_version }}
+
       - name: Install Pester
         shell: pwsh
-        run: Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -AcceptLicense -Scope CurrentUser
+        run: Install-Module -Name Pester -RequiredVersion 6.1.0 -Repository PSGallery -Force -AcceptLicense -Scope CurrentUser
 
       - name: Run unit tests with coverage
         shell: pwsh
+        env:
+          MET_ENFORCE_COVERAGE: ${{ matrix.enforce_coverage }}
         run: |
           $config = New-PesterConfiguration
           $config.Run.Path = './Tests/Unit'
@@ -94,34 +121,32 @@ jobs:
           $config.TestResult.Enabled = $true
           $config.TestResult.OutputPath = 'TestResults-Unit.xml'
           $config.TestResult.OutputFormat = 'JUnitXml'
-          $config.CodeCoverage.Enabled = $true
-          $config.CodeCoverage.Path = @('./Public/*.ps1', './Private/*.ps1', './Checks/**/*.ps1')
-          $config.CodeCoverage.OutputPath = 'coverage.xml'
-          $config.CodeCoverage.OutputFormat = 'JaCoCo'
+          if ($env:MET_ENFORCE_COVERAGE -eq 'true') {
+            $config.CodeCoverage.Enabled = $true
+            $config.CodeCoverage.Path = @('./Public/*.ps1', './Private/*.ps1', './Checks/**/*.ps1')
+            $config.CodeCoverage.OutputPath = 'coverage.xml'
+            $config.CodeCoverage.OutputFormat = 'JaCoCo'
+          }
           $result = Invoke-Pester -Configuration $config
           if ($result.Result -ne 'Passed') { exit 1 }
 
-      - name: Enforce coverage threshold (30 %)
+      - name: Enforce line coverage threshold (75 %)
+        if: ${{ matrix.enforce_coverage }}
         shell: pwsh
         run: |
           [xml]$cov = Get-Content coverage.xml
-          $report        = $cov.report
-          $methodCounter = $report.counter | Where-Object { $_.type -eq 'METHOD' }
-          if ($methodCounter) {
-            $methodCounter = $methodCounter | Select-Object -First 1
-            $missed        = [int]$methodCounter.missed
-            $covered       = [int]$methodCounter.covered
+          $report = $cov.report
+          $lineCounter = $report.counter | Where-Object { $_.type -eq 'LINE' } | Select-Object -First 1
+          if (-not $lineCounter) {
+            throw 'JaCoCo report did not contain a LINE coverage counter.'
           }
-          else {
-            # Fall back to line coverage if method counters are absent.
-            $lineCounter = $report.counter | Where-Object { $_.type -eq 'LINE' } | Select-Object -First 1
-            $missed      = if ($lineCounter) { [int]$lineCounter.missed } else { 0 }
-            $covered     = if ($lineCounter) { [int]$lineCounter.covered } else { 0 }
-          }
+
+          $missed = [int]$lineCounter.missed
+          $covered = [int]$lineCounter.covered
           $pct = if (($covered + $missed) -gt 0) { [math]::Round(100 * $covered / ($covered + $missed), 1) } else { 0 }
-          Write-Host "Coverage: $pct %"
-          if ($pct -lt 30) {
-            Write-Error "Coverage $pct % is below the 30 % threshold."
+          Write-Host "Line coverage: $pct %"
+          if ($pct -lt 75) {
+            Write-Error "Line coverage $pct % is below the 75 % threshold."
             exit 1
           }
 
@@ -140,7 +165,8 @@ jobs:
 
       - name: Publish unit test results
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        if: always()
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
         with:
           name: Pester Unit Tests
           path: TestResults-Unit.xml
@@ -148,11 +174,79 @@ jobs:
 
       - name: Publish integration test results
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
-        if: always()
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
         with:
           name: Pester Integration Tests
           path: TestResults-Integration.xml
           reporter: java-junit
+
+      - name: Upload Pester artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pester-results-${{ runner.os }}-pwsh-${{ matrix.pwsh_version }}
+          path: |
+            TestResults-Unit.xml
+            TestResults-Integration.xml
+            coverage.xml
+          if-no-files-found: warn
+
+  html-report:
+    name: HTML report browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            registry.npmjs.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            packages.microsoft.com:443
+            dl.google.com:443
+            azure.archive.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Node.js 22.23.2
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: Tests/Html/package-lock.json
+
+      - name: Install HTML test dependencies
+        working-directory: ./Tests/Html
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./Tests/Html
+        run: npx playwright install --with-deps chromium
+
+      - name: Run HTML report browser tests
+        working-directory: ./Tests/Html
+        run: npm test
+
+      - name: Upload HTML report test artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: html-report-test-artifacts
+          path: |
+            Tests/Html/playwright-report
+            Tests/Html/test-results
+            Tests/Html/.tmp
+          if-no-files-found: ignore
 
   credential-scan:
     name: Credential Scan

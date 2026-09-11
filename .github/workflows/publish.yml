@@ -72,7 +72,7 @@ jobs:
       - name: Lint
         shell: pwsh
         run: |
-          Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
           $paths = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
           $results = $paths | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
@@ -87,7 +87,7 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          Install-Module -Name Pester -MinimumVersion 5.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+          Install-Module -Name Pester -RequiredVersion 6.1.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
 
           $unitConfig = New-PesterConfiguration
           $unitConfig.Run.Path = './Tests/Unit'
@@ -107,11 +107,71 @@ jobs:
             throw "Integration tests failed with $($integrationResult.FailedCount) failed test(s)."
           }
 
+  html-report:
+    name: Validate HTML report browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: validate
+
+    steps:
+      - name: Harden runner egress
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            codeload.github.com:443
+            objects.githubusercontent.com:443
+            registry.npmjs.org:443
+            cdn.playwright.dev:443
+            playwright.download.prss.microsoft.com:443
+            packages.microsoft.com:443
+            dl.google.com:443
+            azure.archive.ubuntu.com:80
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Node.js 22.23.2
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: Tests/Html/package-lock.json
+
+      - name: Install HTML test dependencies
+        working-directory: ./Tests/Html
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./Tests/Html
+        run: npx playwright install --with-deps chromium
+
+      - name: Run HTML report browser tests
+        working-directory: ./Tests/Html
+        run: npm test
+
+      - name: Upload HTML report test artifacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-html-report-test-artifacts
+          path: |
+            Tests/Html/playwright-report
+            Tests/Html/test-results
+            Tests/Html/.tmp
+          if-no-files-found: ignore
+
   publish:
     name: Publish signed-off release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: validate
+    needs: [validate, html-report]
     environment: production
     permissions:
       contents: write
@@ -149,7 +209,7 @@ jobs:
           $version = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
           $stage = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE') -Destination $stage
+          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE', 'README.md') -Destination $stage
           Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $stage -Recurse
           Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop
           Compress-Archive -Path "$stage/*" -DestinationPath "met-$version.zip"
@@ -169,9 +229,10 @@ jobs:
             throw 'PSGALLERY_API_KEY secret is not set.'
           }
 
-          Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.0.0 -ErrorAction Stop
+          Install-Module -Name Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+          Import-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -ErrorAction Stop
           $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
-          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
+          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
 
       - name: Create GitHub Release
         env:
