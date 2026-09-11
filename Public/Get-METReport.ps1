@@ -451,6 +451,17 @@ function Get-METReport {
             $tenantIdJson  = $tenantIdJson  -replace '<', '\u003C'
             $checksJson    = $checksJson    -replace '<', '\u003C'
 
+            # CONTROLS_META used to be 51 descriptions hand-maintained inside the client
+            # script below - a second copy of facts the check scripts already state, which
+            # had drifted for two checks. Generated here from each check's own
+            # $METCheckInfo header instead, via Get-METCheck. The block is emitted into a
+            # single-quoted JS object literal, so an apostrophe in a description must be
+            # escaped or it would terminate the string and blank the whole report.
+            $controlsMetaEntries = (Get-METCheck | ForEach-Object {
+                $description = $_.Description -replace "'", "\'"
+                "  '$($_.CheckId)': '$description',"
+            }) -join "`n"
+
             $html = @"
 <!DOCTYPE html>
 <html lang="en">
@@ -835,57 +846,7 @@ const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(-
 function sevOf(s){ return s || 'Informational'; }
 
 const CONTROLS_META = {
-  'MET-MDO001': 'Safe Links enabled for email and Office apps; verifies TrackClicks, EnableForInternalSenders, and real-time scanning are configured.',
-  'MET-MDO002': 'Safe Attachments enabled with Block or DynamicDelivery action - flags any policy set to Allow.',
-  'MET-MDO003': 'Impersonation protection, mailbox intelligence, first-contact safety tips, and action on impersonation detection.',
-  'MET-MDO004': 'AuthenticationFailAction setting, DMARC honor policy, and unauthenticated sender visual indicators.',
-  'MET-MDO005': 'ZAP enabled, file filter enabled, admin notifications configured, and common attachment filter active.',
-  'MET-MDO006': 'SCL thresholds, bulk complaint level, high-confidence spam action, and phishing action settings.',
-  'MET-MDO007': 'Auto-forward restrictions, outbound sending limits, and external forwarding rules.',
-  'MET-MDO008': 'Which users and groups are covered by Standard or Strict preset policies; flags uncovered recipient gaps.',
-  'MET-MDO009': 'Zero-Hour Auto Purge (ZAP) enabled for spam and phish in all active anti-spam/anti-phish policies.',
-  'MET-MDO010': 'Priority account tags applied and a differentiated protection policy is active for those accounts.',
-  'MET-MDO011': 'User tags are in use and alert policies referencing user tags exist.',
-  'MET-MDO012': 'Safe Documents (EnableSafeDocs) enabled and AllowSafeDocsOpen disabled via AtpPolicyForO365.',
-  'MET-MDO013': 'Custom anti-spam/anti-malware/Anti-Phish/Safe Links/Safe Attachments rules whose recipients are also covered by a Standard/Strict preset - flags precedence conflicts.',
-  'MET-MDO014': 'Every group referenced by an enabled EOP/MDO rule\'s SentToMemberOf; reports member count and flags 0-member groups as silently inert.',
-  'MET-EXO001': 'DMARC record present; policy is quarantine or reject (not none); rua reporting address configured.',
-  'MET-EXO002': 'DKIM signing enabled for all accepted domains; key length is at least 2048 bits.',
-  'MET-EXO003': 'SPF record present; no use of +all (pass-all); within the 10 DNS lookup limit.',
-  'MET-EXO004': 'Default quarantine policies reviewed; user notification enabled; no AdminOnlyAccessPolicy on high-confidence phish quarantine.',
-  'MET-EXO005': 'Stale allow entries older than 90 days; overly broad wildcard allows; ratio of allows to blocks.',
-  'MET-EXO006': 'User submission mailbox configured and reporting to Microsoft enabled.',
-  'MET-EXO007': 'Transport rules that bypass spam filtering (SCLJunk=-1) or disable Safe Links - informational audit.',
-  'MET-EXO008': 'QuarantineRetentionPeriod is at least 30 days in all anti-spam policies (default is 15; Standard/Strict recommend 30).',
-  'MET-EXO009': 'Cross-references filter policies with their assigned quarantine tag; verifies PermissionToRelease is false for Malware and High-Confidence Phish verdicts.',
-  'MET-EXO010': 'RejectDirectSend on the organization config - unauthenticated senders relaying mail through the tenant\'s own domain without SMTP auth.',
-  'MET-EXO011': 'Enabled inbound connectors with RequireTls off or no effective source-IP/TLS-certificate authentication binding.',
-  'MET-EXO012': 'Mailbox forwarding (ForwardingSmtpAddress/ForwardingAddress/DeliverToMailboxAndForward), flagging silent forwarding with no local copy as the higher-risk pattern.',
-  'MET-EXO013': 'Standing spoof-intelligence allow entries, distinguishing Internal vs. External spoof type.',
-  'MET-EXO014': 'Enforceable phishing-simulation and SecOps mailbox override rules - informational listing for periodic review.',
-  'MET-EXO015': 'The native Outlook "External" sender banner (Get-ExternalInOutlook) - a user-facing signal against lookalike-domain/BEC senders.',
-  'MET-EXO016': 'ARC trusted sealer domains (Get-ArcConfig) - informational listing of domains trusted to vouch for authentication results.',
-  'MET-EXO017': 'EndUserSpamNotificationFrequency on the tenant-wide global quarantine policy - informational cadence listing.',
-  'MET-EXO018': 'Remote domain AutoForwardEnabled - whether automatic forwarding to external domains is permitted, the control plane behind inbox-rule exfiltration.',
-  'MET-EXO019': 'Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides - legacy SMTP AUTH is a basic-auth endpoint exempt from most conditional access.',
-  'MET-EXO020': 'Connection filter IPAllowList and EnableSafeList - allow-listed sources skip spam filtering and spoof intelligence entirely.',
-  'MET-EXO021': 'Organization-wide AuditDisabled - whether mailbox audit records exist to reconstruct what a compromised account accessed.',
-  'MET-EXO022': 'Sharing policies exposing calendar detail or contacts to all domains or anonymously - reconnaissance surface for internal-impersonation phishing.',
-  'MET-EXO023': 'UnifiedAuditLogIngestionEnabled - the tenant-wide record investigations are reconstructed from; retention is not asserted by this check.',
-  'MET-Teams001': 'EnableSafeLinksForTeams enabled in Safe Links policies that cover Teams users.',
-  'MET-Teams002': 'Global EnableATPForSPOTeamsODB enabled; EnableSafeAttachmentsForTeams enabled in at least one policy.',
-  'MET-Teams003': 'External access settings, anonymous join policy, and lobby bypass settings reviewed for security posture.',
-  'MET-Teams004': 'TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy.',
-  'MET-Teams005': 'ReportTeamsMsgEnabled in submission policy and AllowSecurityEndUserReporting in Teams messaging policy.',
-  'MET-Teams006': 'Tenant federation config - open AllowAllKnownDomains federation, Teams consumer/personal-account access, and an empty BlockedDomains deny-list.',
-  'MET-Teams007': 'Guest messaging/calling configuration - AllowUserChat and AllowPrivateCalling for guest accounts.',
-  'MET-Teams008': 'App permission policies not restricted to an explicit AllowedAppList/BlockedAppList for global/private/store catalog apps.',
-  'MET-Teams009': 'ExternalAccessWithTrialTenants on the tenant federation config - exposure to disposable trial-tenant federation.',
-  'MET-Teams010': 'Per-user CsExternalAccessPolicy instances re-opening federation/public-cloud access for specific users under a restrictive tenant baseline.',
-  'MET-Teams011': 'SecurityTeamAllowBlockListDelegation and currently-blocked entities - whether SecOps can block malicious domains/users mid-incident.',
-  'MET-Teams012': 'ReportCall on Teams calling policies - closest native control to helpdesk-vishing attacks over a Teams call.',
-  'MET-Teams014': 'Cross-tenant access and authorization policy (Microsoft Graph) - guest invitation and external collaboration settings.',
-  'MET-Teams015': 'AllowEmailIntoChannel on the Teams client configuration - channel email addresses accept external mail that bypasses the mailbox delivery path.'
+$controlsMetaEntries
 };
 
 const CONTROLS_CATEGORIES = [
