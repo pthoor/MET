@@ -923,7 +923,7 @@ Describe 'Disconnect-METSession' {
 
     It 'Treats an ambiguous Get-CsTenant probe failure as an indeterminate disconnect (not "not connected"), keeping tracking in place' {
         $script:METConnection = @{ Mode = 'Interactive'; Org = 'customera.onmicrosoft.com' }
-        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive' }
+        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive'; ServicesConnected = @('Teams') }
 
         Mock Get-ConnectionInformation { $null }
         Mock Get-MgContext { $null }

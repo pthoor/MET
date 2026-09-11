@@ -28,23 +28,40 @@ function Disconnect-METSession {
 
     try {
         $teamsConnected = $false
-        try {
-            $null = Get-CsTenant -ErrorAction Stop
-            $teamsConnected = $true
+
+        # Connect-METSession records which legs it actually connected. If Teams was
+        # never one of them there is nothing to probe, and probing anyway was the whole
+        # source of the false disconnect failure below.
+        $teamsWasConnected = -not $script:METSessionInfo -or
+                             ($script:METSessionInfo.ServicesConnected -contains 'Teams')
+
+        if ($teamsWasConnected) {
+            try {
+                $null = Get-CsTenant -ErrorAction Stop
+                $teamsConnected = $true
+            }
+            catch [System.Management.Automation.CommandNotFoundException] {
+                # MicrosoftTeams was never imported in this session - definitely never connected.
+                $teamsConnected = $false
+            }
+            catch {
+                # The module's own not-connected error. Treating this as a disconnect
+                # failure left $script:METConnection populated, and the next
+                # Connect-METSession for a different -DelegatedOrganization then threw
+                # "Run Disconnect-METSession first" - advice that could never succeed.
+                if ($_.Exception.Message -match 'Session is not established') {
+                    $teamsConnected = $false
+                }
+                else {
+                    # Any other probe failure is ambiguous: it could mean "not connected", or a
+                    # transient error while a session is genuinely live. Treating it as not
+                    # connected would let the caller clear session tracking with Teams still
+                    # authenticated. Fail closed by re-throwing into the outer catch.
+                    throw
+                }
+            }
         }
-        catch [System.Management.Automation.CommandNotFoundException] {
-            # MicrosoftTeams was never imported in this session - definitely never connected.
-            $teamsConnected = $false
-        }
-        catch {
-            # Any other probe failure is ambiguous: it could mean "not connected" (the expected
-            # case), or a transient/auth error while a session is still genuinely live. Treating
-            # it as "not connected" would silently skip Disconnect-MicrosoftTeams below and let
-            # the caller clear session tracking even though Teams might still be authenticated -
-            # undermining the very invariant this tracking exists to enforce. Fail closed by
-            # re-throwing into the outer catch, which records it as a disconnect failure.
-            throw
-        }
+
         if ($teamsConnected) {
             Write-Verbose 'Disconnecting Microsoft Teams...'
             Disconnect-MicrosoftTeams -ErrorAction Stop | Out-Null
