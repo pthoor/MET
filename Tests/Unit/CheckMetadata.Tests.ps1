@@ -145,6 +145,30 @@ BeforeAll {
                 }
             } | Where-Object { $_ } | Sort-Object -Unique)
     }
+
+    # Get-METCheckMetadata derives CheckId purely from the filename (Get-METCheckMetadata.ps1:67)
+    # and never from what the check actually emits at runtime, so a filename/emitted-CheckId
+    # mismatch is not structurally impossible - it would produce a correctly-keyed
+    # CONTROLS_META entry that the live result (whose checkId comes from this -CheckId
+    # argument) can never look up, silently falling back to the result's Name with nothing
+    # anywhere failing. This is the same AST-walk shape as Get-METDeclaredNameArgument /
+    # Get-METDeclaredSeverityArgument above, applied to -CheckId instead.
+    function Get-METDeclaredCheckIdArgument {
+        param([string] $Path)
+        $tokens = $null; $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref] $tokens, [ref] $errors)
+        @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true) |
+            ForEach-Object {
+                $elements = $_.CommandElements
+                for ($i = 0; $i -lt $elements.Count - 1; $i++) {
+                    if ($elements[$i] -is [System.Management.Automation.Language.CommandParameterAst] -and
+                        $elements[$i].ParameterName -eq 'CheckId' -and
+                        $elements[$i + 1] -is [System.Management.Automation.Language.StringConstantExpressionAst]) {
+                        $elements[$i + 1].Value
+                    }
+                }
+            } | Where-Object { $_ } | Sort-Object -Unique)
+    }
 }
 
 Describe 'Check metadata header' {
@@ -193,6 +217,30 @@ Describe 'Check metadata header' {
             # checks in the README precisely because nothing derived it from the code.
             $derived = Get-METDerivedRequiresModule -Path $Path
             @($info.RequiresModule | Sort-Object) | Should -Be $derived -Because "$Script reaches $($derived -join ', ')"
+
+            # CheckId is the report's join key: Get-METReport's CONTROLS_META is keyed on the
+            # filename-derived CheckId (this $info.CheckId), while a live check result's
+            # checkId is whatever literal the check itself passed to -CheckId. If those two
+            # disagree, CONTROLS_META still gets a correctly-keyed entry for the filename's
+            # ID, but the report can never look it up for the ID the check actually emits -
+            # it silently falls back to the result's Name, and nothing fails anywhere else.
+            # @()-wrapped again at the call site: a single-element array written to the
+            # output stream collapses to its bare scalar element when captured by
+            # assignment (PowerShell's normal pipeline-unrolling behavior), which would
+            # otherwise make $emittedIds[0] index into the ID string's characters instead
+            # of the array.
+            $emittedIds = @(Get-METDeclaredCheckIdArgument -Path $Path)
+            $emittedIds | Should -Not -BeNullOrEmpty -Because "$Script must emit at least one literal -CheckId"
+            $emittedIds.Count | Should -Be 1 -Because "$Script emits $($emittedIds -join ', '); a check must emit exactly one distinct CheckId"
+            $emittedIds[0] | Should -Be $info.CheckId -Because "$Script is named for $($info.CheckId) but emits -CheckId '$($emittedIds[0])'"
+
+            # Category is read straight off the containing directory (Get-METCheckMetadata.ps1:68),
+            # independent of the filename CheckId checked above - a check filed under the wrong
+            # Checks/<Category> directory would still parse and run, silently rendered under
+            # the wrong tab of the report's control-reference table.
+            if ($info.CheckId -match '^MET-(MDO|EXO|Teams)\d{3}$') {
+                $Matches[1] | Should -Be $info.Category -Because "$Script's CheckId implies $($Matches[1]) but the file lives under Checks/$($info.Category)"
+            }
         }
     }
 }

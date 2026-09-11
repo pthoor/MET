@@ -64,7 +64,34 @@ Describe 'CONTROLS_META generation' {
         # which is exactly the blank-page failure mode the HTML tests were added for.
         # The escape happens in PowerShell where the entries are built, which is earlier in
         # the file than the CONTROLS_META literal itself - so assert against the whole
-        # source, not a window around the literal.
+        # source, not a window around the literal. This only proves the code PATTERN
+        # exists - it is deliberately paired with the rendered-output assertion below,
+        # which is the one that actually exercises the escape.
         $script:ReportSource | Should -Match "Description\s+-replace"
+    }
+
+    It 'Backslash-escapes the apostrophe in the two descriptions that actually contain one, in the rendered output' {
+        # 'Description -replace' existing in the source (above) only proves a pattern is
+        # present - it says nothing about what the rendered HTML actually contains, and
+        # 'Carries each check description verbatim' above samples MET-Teams002, which has
+        # no apostrophe, so neither test exercises the escape path. MET-EXO010 ("tenant's")
+        # and MET-MDO014 ("rule's") are the only two of the 51 descriptions that contain an
+        # apostrophe, so they are the only ones that can prove this. A fresh subfolder is
+        # used so this test cannot pick up a stale report from an earlier run/test.
+        $folder = Join-Path $TestDrive 'report3'
+        @() | Get-METReport -Format HTML -OutputPath $folder -NoLaunch | Out-Null
+        $generated = Get-ChildItem -Path $folder -Recurse -Filter '*.html' | Select-Object -First 1
+        $generated | Should -Not -BeNullOrEmpty
+        $html = Get-Content -LiteralPath $generated.FullName -Raw
+
+        foreach ($id in 'MET-EXO010', 'MET-MDO014') {
+            $check = Get-METCheck -CheckId $id
+            $check.Description | Should -Match "'" -Because "$id is asserted here specifically because its header description contains an apostrophe"
+
+            $escapedDescription = $check.Description -replace "'", "\'"
+            $html | Should -BeLike "*'$($id)': '$escapedDescription',*" -Because (
+                "$id's apostrophe must render as \' inside its CONTROLS_META entry - an " +
+                "unescaped apostrophe here would terminate the JS string and blank the report")
+        }
     }
 }
