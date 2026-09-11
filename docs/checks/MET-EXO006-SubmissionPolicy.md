@@ -43,7 +43,7 @@ This family is emitted only when reporting is not completely disabled.
 |---|---|---|
 | Warning | Medium | No custom mailbox is configured: either no Junk, Not Junk, or Phishing flow is enabled for a custom address, or no rule `SentTo` mailbox could be resolved. |
 | Warning | Low | A custom mailbox is resolved, but one or more of the Junk, Not Junk, and Phishing flows is not routed to it. The finding identifies the missing flow or flows. |
-| Pass | Medium | All three custom-mailbox flows—Junk, Not Junk, and Phishing—are routed to the resolved SecOps mailbox. |
+| Pass | Medium | All three custom-mailbox flows—Junk, Not Junk, and Phishing—are enabled, and a submission-rule mailbox is resolved. Address agreement is evaluated separately by the Mailbox Address Consistency family. |
 
 If the rule contains multiple recipients, MET uses the first `SentTo` address for these comparisons and reports the additional recipients as a note.
 
