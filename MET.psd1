@@ -20,6 +20,7 @@
         'Connect-METSession'
         'Disconnect-METSession'
         'Invoke-METAssessment'
+        'Get-METCheck'
         'Get-METReport'
         'Test-METPrerequisites'
     )
