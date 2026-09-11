@@ -5,7 +5,7 @@ param()
 $METCheckInfo = @{
     Name           = 'User Tags'
     Severity       = 'Low'
-    Description    = 'Checks whether user tags are in use and whether alert policies referencing user tags exist.'
+    Description    = 'Reports that user tag and tag-aware alert policy configuration cannot be assessed via Exchange Online PowerShell, and must be reviewed manually in the Defender portal.'
     RequiresModule = @('ExchangeOnlineManagement')
 }
 

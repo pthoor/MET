@@ -148,7 +148,9 @@ Create `docs/checks/MET-<ID>-<ShortName>.md` using the structure:
 
 ### 6. Update the README
 
-Add the new check to the check inventory table in `README.md`. You do **not** need to add an entry anywhere for the HTML report's control descriptions - `CONTROLS_META` is generated at report-render time from every check's own `$METCheckInfo.Description` via `Get-METCheck`, so the `Description` field you wrote in step 2 is the report description; there is no second copy to keep in sync.
+Add the new check to the check inventory table in `README.md`, with the same `Severity` you declared in the check's `$METCheckInfo` header. You do **not** need to add an entry anywhere for the HTML report's control descriptions - `CONTROLS_META` is generated at report-render time from every check's own `$METCheckInfo.Description` via `Get-METCheck`, so the `Description` field you wrote in step 2 is the report description; there is no second copy to keep in sync.
+
+The `Severity` you write in the README table and in the new check's `docs/checks/*.md` `**Severity:**` line are not auto-generated the way `Description` is - `Tests/Unit/DocsSeverityParity.Tests.ps1` enforces them instead. It re-derives every check's Severity from its `$METCheckInfo` header (the same header `Tests/Unit/CheckMetadata.Tests.ps1` proves is correct against the check's own code) and fails, naming the specific `CheckId`, if either the README row or the doc front-matter line disagrees with it. Get both right the first time and the test passes silently; get either wrong and `Invoke-Pester -Path ./Tests/Unit` will tell you exactly which one.
 
 ---
 

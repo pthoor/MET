@@ -1,6 +1,6 @@
 ﻿# MET-MDO010 - Priority Accounts
 
-**Category:** MDO | **Severity:** Medium
+**Category:** MDO | **Severity:** High
 
 ## What it checks
 

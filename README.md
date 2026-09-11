@@ -546,9 +546,9 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-MDO005 | Anti-Malware | High | ZAP, common attachment filter, admin notifications |
 | MET-MDO006 | Anti-Spam Inbound | Medium | Spam/phish actions, high-confidence thresholds, BCL |
 | MET-MDO007 | Anti-Spam Outbound | High | Auto-forward disabled, send limit action, admin alerts |
-| MET-MDO008 | Preset Policy Coverage | Medium | % of mailboxes covered by Standard or Strict preset |
+| MET-MDO008 | Preset Policy Coverage | High | % of mailboxes covered by Standard or Strict preset |
 | MET-MDO009 | Zero-Hour Auto Purge | High | ZAP enabled for spam and phishing in all policies |
-| MET-MDO010 | Priority Accounts | Medium | Priority Account tag usage + differentiated protection policy |
+| MET-MDO010 | Priority Accounts | High | Priority Account tag usage + differentiated protection policy |
 | MET-MDO011 | User Tags | Low | Custom tags defined + alert policies referencing them |
 | MET-MDO012 | Safe Documents | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
 | MET-MDO013 | Policy Precedence Conflicts | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
@@ -563,10 +563,10 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO003 | SPF | High | Record present, -all enforcement, ≤ 10 DNS lookups |
 | MET-EXO004 | Quarantine Policies | Medium | Custom (non-built-in) quarantine policies with notifications off but end-user permissions granted |
 | MET-EXO005 | Tenant Allow/Block List | Low | Stale allows (>90 days), wildcard allows, allow/block ratio |
-| MET-EXO006 | Submission Policy | Medium | Report-to-Microsoft on, custom submission mailbox configured |
+| MET-EXO006 | Submission Policy | High | Report-to-Microsoft on, custom submission mailbox configured |
 | MET-EXO007 | Transport Rule Audit | Medium | Rules bypassing spam filter (SCL=-1) or disabling Safe Links |
-| MET-EXO008 | Quarantine Retention | Medium | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
-| MET-EXO009 | Quarantine Policy Verdict Alignment | Medium | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
+| MET-EXO008 | Quarantine Retention | Low | QuarantineRetentionPeriod ≥ 30 days in default/custom anti-spam policies (presets reported as fixed, not actionable) |
+| MET-EXO009 | Quarantine Policy Verdict Alignment | High | Quarantine tags not too permissive for Malware/High-Confidence Phish (the only verdicts Microsoft itself restricts); preset policies skipped |
 | MET-EXO010 | Direct Send | Critical | RejectDirectSend enabled so unauthenticated senders cannot relay as an internal domain |
 | MET-EXO011 | Mail Flow Connector Hygiene | High | Inbound connectors with RequireTls off or no source IP / certificate authentication binding |
 | MET-EXO012 | Mailbox Forwarding | High | Mailboxes with SMTP forwarding configured - Pass when none forward, Info when every forward retains a local copy, Warning on silent (no local copy) forwarding or an unreturned `DeliverToMailboxAndForward` |
@@ -574,7 +574,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-EXO014 | Advanced Delivery Policy | Medium | Phishing-simulation and SecOps mailbox override rules listed for periodic review |
 | MET-EXO015 | External Sender Warning Tag | Medium | Native Outlook "External" sender banner enabled (Get-ExternalInOutlook) |
 | MET-EXO016 | ARC Trusted Sealers | Low | Domains trusted to vouch for authentication results via Authenticated Received Chain |
-| MET-EXO017 | Quarantine Notification Cadence | Informational | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
+| MET-EXO017 | Quarantine Notification Cadence | Low | EndUserSpamNotificationFrequency on the global quarantine policy (4 hours / 1 day / 7 days) |
 | MET-EXO018 | Remote Domain Automatic Forwarding | High | AutoForwardEnabled per remote domain - the tenant-wide `*` domain permitting auto-forward to every external domain is the BEC exfiltration path |
 | MET-EXO019 | SMTP Client Authentication | High | Tenant-wide SmtpClientAuthenticationDisabled plus per-mailbox overrides that re-enable SMTP AUTH |
 | MET-EXO020 | Connection Filter Policy Hygiene | High | IPAllowList entries (which skip spam filtering and spoof intelligence) and EnableSafeList |
@@ -590,7 +590,7 @@ Microsoft 365 learns from user behaviour in the Promotions folder (moving messag
 | MET-Teams002 | Safe Attachments for Teams | High | EnableATPForSPOTeamsODB (the single documented toggle for SPO/OneDrive/Teams) |
 | MET-Teams003 | Meeting Protection | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
 | MET-Teams004 | ZAP for Teams | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
-| MET-Teams005 | Teams User Reporting | Low | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
+| MET-Teams005 | Teams User Reporting | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
 | MET-Teams006 | External Access / Federation | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
 | MET-Teams007 | Guest Messaging/Calling | Medium | Guest-initiated 1:1 chat and private calling configuration |
 | MET-Teams008 | App Permission Policy Exposure | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |

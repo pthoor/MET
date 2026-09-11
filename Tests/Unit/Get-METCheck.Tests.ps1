@@ -42,6 +42,7 @@ Describe 'Get-METCheck' {
 
     It 'Combines filters with AND' {
         $combined = @(Get-METCheck -Category EXO -Severity High)
+        $combined.Count | Should -BeGreaterThan 0
         @($combined | Where-Object { $_.Category -ne 'EXO' -or $_.Severity -ne 'High' }) | Should -BeNullOrEmpty
     }
 
@@ -55,6 +56,26 @@ Describe 'Get-METCheck' {
 
     It 'Rejects a category outside the three that exist' {
         { Get-METCheck -Category 'Purview' } | Should -Throw
+    }
+
+    It 'Skips a check file that fails to parse, warns naming it, and still returns the rest' {
+        # Reproduces the failure a real unparseable file under Checks/ used to cause: Get-METCheckMetadata
+        # throws on a parse error, and an uncaught throw here previously killed Get-METReport's whole
+        # HTML generation (via its unguarded CONTROLS_META call to Get-METCheck), not just the listing.
+        $badPath = Join-Path $script:Root 'Checks' 'MDO' 'MET-MDO999-Bad.ps1'
+        Set-Content -LiteralPath $badPath -Value 'function {' -Encoding utf8
+        try {
+            $expectedCount = @(Get-ChildItem -Path (Join-Path $script:Root 'Checks') -Recurse -Filter 'MET-*.ps1').Count - 1
+
+            $warnings = $null
+            $result = @(Get-METCheck -WarningVariable warnings -WarningAction SilentlyContinue)
+
+            $result.Count      | Should -Be $expectedCount
+            $result.CheckId    | Should -Not -Contain 'MET-MDO999'
+            ($warnings.Message -join ' ') | Should -Match ([regex]::Escape($badPath))
+        } finally {
+            Remove-Item -LiteralPath $badPath -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

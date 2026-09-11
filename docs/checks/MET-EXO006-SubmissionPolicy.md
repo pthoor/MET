@@ -1,6 +1,6 @@
 ﻿# MET-EXO006 - Submission Policy
 
-**Category:** EXO | **Severity:** Medium
+**Category:** EXO | **Severity:** High
 
 ## What it checks
 

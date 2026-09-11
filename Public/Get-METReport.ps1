@@ -607,7 +607,7 @@ function Get-METReport {
             # single-quoted JS object literal, so an apostrophe in a description must be
             # escaped or it would terminate the string and blank the whole report.
             $controlsMetaEntries = (Get-METCheck | ForEach-Object {
-                $description = $_.Description -replace "'", "\'"
+                $description = $_.Description -replace "'", "\'" -replace '<', '\u003C'
                 "  '$($_.CheckId)': '$description',"
             }) -join "`n"
 

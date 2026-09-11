@@ -1,6 +1,6 @@
 # MET-EXO017 - Quarantine Notification Cadence
 
-**Category:** EXO | **Severity:** Informational
+**Category:** EXO | **Severity:** Low
 
 ## What it checks
 

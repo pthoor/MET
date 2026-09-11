@@ -77,7 +77,14 @@ function Get-METCheck {
     # it runs in.
     $checks = Get-ChildItem -LiteralPath $checksRoot -Recurse -Filter 'MET-*.ps1' |
         Sort-Object Name |
-        ForEach-Object { Get-METCheckMetadata -Path $_.FullName }
+        ForEach-Object {
+            $checkFile = $_
+            try {
+                Get-METCheckMetadata -Path $checkFile.FullName
+            } catch {
+                Write-Warning "Skipping check file '$($checkFile.FullName)' - failed to read its metadata: $($_.Exception.Message)"
+            }
+        }
 
     if ($Category) { $checks = $checks | Where-Object { $Category -contains $_.Category } }
     if ($CheckId)  { $checks = $checks | Where-Object { $CheckId  -contains $_.CheckId  } }
