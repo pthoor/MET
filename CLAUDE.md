@@ -429,7 +429,7 @@ Tab counts update in real-time as filters are applied.
 Each check result renders as a card:
 
 ```
-┌─ [HIGH] MET-MDO001 · Safe Links ──────────────── [FAIL] ─┐
+┌─ [HIGH] MET-MDO001 · Safe Links Effective Coverage ───── [FAIL] ─┐
 │  Affected: Default Safe Links Policy                        │
 │  Finding:  Safe Links is disabled for email                 │
 │  ▼ How to fix                                               │
