@@ -135,8 +135,8 @@ New-ManagementRoleAssignment -Role 'View-Only Recipients' -App $appId
 
 | Option | Current behavior |
 |---|---|
-| `Connect-METSession -ManagedIdentity` | Authenticates from an Azure host using its system-assigned managed identity by default, or the identity named by `-ManagedIdentityAccountId`. |
-| `Connect-METSession -SkipExchangeOnline` | Skips Exchange Online; all MDO and EXO checks plus Teams001, Teams002, and Teams004 need it and fail without it. |
+| `Connect-METSession -ManagedIdentity` | Authenticates from an Azure host using its system-assigned managed identity by default. When `-ManagedIdentityAccountId` names a user-assigned identity, Exchange Online and Graph use it, but Teams continues to use the host default identity and may authenticate as a different principal or fail; use `-SkipTeams` when only the named identity has Teams permissions. |
+| `Connect-METSession -SkipExchangeOnline` | Skips establishing the Exchange Online connection. Every non-`-ListChecks` `Invoke-METAssessment` run still requires an existing connected Exchange session and throws `METNotConnected` before filtering or running checks when none exists. |
 | `Invoke-METAssessment -ListChecks` | Lists the checks selected by the scope parameters without connecting or running checks. |
 | `Invoke-METAssessment -Detailed` | Returns full, unaggregated per-object results instead of the default one-summary-result-per-check view. |
 | `Get-METReport -PassThru` | Returns a `System.IO.FileInfo` for each report file actually written to disk. |

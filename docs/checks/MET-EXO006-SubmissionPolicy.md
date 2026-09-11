@@ -58,12 +58,12 @@ This family is emitted only when reporting is not completely disabled and report
 
 ### User Reported Message Settings - Mailbox Address Consistency
 
-This family is emitted only when reporting is not completely disabled and a submission-rule mailbox is resolved. MET compares that mailbox with the first configured policy address for every custom flow in use: Junk, Not Junk, Phishing, and—when a non-Microsoft add-in is configured—the third-party address.
+This family is emitted only when reporting is not completely disabled and a submission-rule mailbox is resolved. For each custom flow in use—Junk, Not Junk, Phishing, and, when a non-Microsoft add-in is configured, the third-party address—MET compares the rule mailbox with the first policy address only when the corresponding address property is populated. Missing or empty address properties are skipped rather than treated as mismatches.
 
 | Result | Severity | Condition |
 |---|---|---|
 | Warning | Low | At least one applicable policy address differs from the submission rule's `SentTo` mailbox. |
-| Pass | Low | The rule and policy agree on the reporting mailbox for every report type in use. |
+| Pass | Low | No mismatch was found among the populated policy address properties. Because missing or empty address properties are skipped, Pass does not establish that every active report type was compared. |
 
 ## Recommendation
 
