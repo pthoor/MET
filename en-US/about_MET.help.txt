@@ -1,0 +1,274 @@
+TOPIC
+    about_MET
+
+SHORT DESCRIPTION
+    Assesses the security posture of a Microsoft 365 tenant across Microsoft
+    Defender for Office 365, Exchange Online Protection and Microsoft Teams.
+
+LONG DESCRIPTION
+    MET assesses the security posture of a Microsoft 365 tenant across
+    Microsoft Defender for Office 365 (MDO), Exchange Online Protection
+    (EOP), and Microsoft Teams threat protection. It produces structured,
+    machine-readable output (PSCustomObject / JSON) suitable for human
+    review, CI/CD gates, SIEM ingestion, and dashboards.
+
+    51 checks ship across three categories: 14 MDO checks (Safe Links, Safe
+    Attachments, anti-phish, anti-spoofing, anti-malware, inbound/outbound
+    anti-spam, preset policy coverage, ZAP, priority accounts, user tags,
+    Safe Documents, and policy precedence conflicts), 23 EXO checks
+    (DMARC/DKIM/SPF, quarantine policy and retention hygiene, the Tenant
+    Allow/Block List, transport rule audits, Direct Send, connector
+    hygiene, mailbox forwarding, SMTP client authentication, mailbox and
+    unified audit logging, calendar/contact sharing, and more), and 14
+    Teams checks (Safe Links and Safe Attachments for Teams, meeting
+    protection, ZAP for Teams, user reporting, external access and
+    federation, guest configuration, app permission policy, cross-tenant
+    access, and channel email integration). Run Get-METCheck to list every
+    check with its category, severity and description - it reads static
+    metadata from each check script and needs no connection at all, so it
+    is the right first step before deciding whether, or how, to connect.
+
+    MET is read-only and assessment-only by design: it never modifies
+    tenant configuration, and it does not offer remediation or auto-fix.
+    It is also not a scheduled runner or agent - wrap it in Azure
+    Automation or GitHub Actions if a recurring run is needed. A check
+    that fails to run is surfaced as an Error on its result object, never
+    silently dropped or scored as a pass.
+
+AUTHENTICATION MODES
+    Connect-METSession wraps Connect-ExchangeOnline, Connect-MicrosoftTeams
+    and Connect-MgGraph in one call. Exchange Online is a hard requirement
+    - every MDO and EXO check needs it, and Connect-METSession throws if
+    that leg cannot connect. Graph and Teams are optional: either can fail
+    without aborting the run (see MODULE CONFLICTS below).
+
+    Interactive (default parameter set)
+        Connect-METSession
+        Browser sign-in. -UserPrincipalName pre-selects the account so the
+        browser prompt does not ask which one to use. -DisableWAM bypasses
+        the Web Account Manager broker; Connect-METSession already passes
+        it automatically on Linux and macOS, where WAM does not apply.
+        -UseDeviceAuthentication signs in by device code instead of a
+        browser. Device-code flow is a documented phishing vector
+        (Storm-2372 and follow-on campaigns) - Microsoft's own current
+        guidance is "block wherever possible, allow only where necessary".
+        It is scoped to genuinely headless hosts with no browser reachable
+        at all, Connect-METSession emits a warning on every use, and it
+        should be the last option tried, never the default retry.
+
+    Service principal with certificate (ServicePrincipal parameter set)
+        Connect-METSession -AppId <id> -TenantId <tenant> `
+            -CertificateThumbprint <thumbprint>
+        Connect-METSession -AppId <id> -TenantId <tenant> `
+            -CertificatePath <pfx> -CertificatePassword <securestring>
+        -CertificateThumbprint reads a certificate from the Windows
+        certificate store and is Windows-only, per Microsoft's own
+        documentation. -CertificatePath plus -CertificatePassword loads a
+        PFX file instead and works on any platform, including Linux,
+        macOS and Codespaces - the route to use for unattended or CI runs
+        off Windows. The two are mutually exclusive. -TenantId must be
+        the tenant's primary .onmicrosoft.com domain name, not the tenant
+        GUID, whenever Exchange Online is being connected -
+        Connect-ExchangeOnline's app-only -Organization parameter rejects
+        GUIDs outright; a GUID is only accepted alongside
+        -SkipExchangeOnline.
+
+    Managed Identity (ManagedIdentity parameter set)
+        Connect-METSession -TenantId <tenant> -ManagedIdentity
+        Authenticates with the host's system-assigned managed identity,
+        for MET running inside Azure Automation, an Azure VM, or another
+        host with managed identity support. Add -ManagedIdentityAccountId
+        <clientId> to use a user-assigned identity instead - honoured by
+        the Exchange Online and Graph legs, but Connect-MicrosoftTeams
+        accepts only -Identity for managed-identity sign-in, so the Teams
+        leg always authenticates with the host's default identity
+        regardless of this parameter. Pass -SkipTeams if only the
+        user-assigned identity carries Teams permissions.
+
+    Delegated organization (MSSP / CSP / GDAP)
+        Add -DelegatedOrganization <customer>.onmicrosoft.com to any of
+        the parameter sets above. See RUNNING AGAINST A CUSTOMER TENANT.
+
+    -SkipExchangeOnline, -SkipGraph and -SkipTeams opt a leg out entirely
+    - for example -SkipGraph when only EXO checks are needed that do not
+    use Graph, or -SkipTeams when the MicrosoftTeams module is not
+    installed. Disconnect-METSession tears down all three legs, each in
+    its own try/catch, and clears the tenant-identity tracking
+    Connect-METSession uses to detect a mismatched reconnect.
+
+MODULE CONFLICTS
+    Microsoft Graph and ExchangeOnlineManagement each bundle their own
+    build of Microsoft.Identity.Client (MSAL), and only one can occupy a
+    PowerShell process's default AssemblyLoadContext. Whichever module
+    loads first "wins" for the whole process; the other then calls a
+    method signature that does not exist in the version actually loaded.
+    This was checked exhaustively, not just observed once: every
+    published ExchangeOnlineManagement version from 3.7.0 through 3.10.1
+    was inspected for its bundled Microsoft.Identity.Client version, and
+    the value jumps directly from 4.74.1.0 (3.9.0-3.9.2) to 4.83.1.0
+    (3.10.0-3.10.1) - skipping the 4.82.x range entirely, which is
+    exactly what Microsoft.Graph.Authentication 2.39.0 (4.82.1.0) and
+    MicrosoftTeams 7.9.0 (4.82.0.0) both need. There is currently no
+    version triple of ExchangeOnlineManagement, Microsoft.Graph and
+    MicrosoftTeams that coexists cleanly in one process.
+
+    This is release-cadence drift between Microsoft's own modules, not a
+    MET defect, and no currently published version combination reliably
+    avoids it. Connect-METSession treats a failed Graph connection as
+    non-fatal: it warns and continues without Graph, exactly as it
+    already does for a failed Teams connection. Expand-METGroupMembership
+    - the only Graph call site in MET - degrades gracefully to Exchange
+    Online cmdlets (Get-DistributionGroupMember for distribution and
+    mail-enabled security groups, Get-UnifiedGroupLinks for Microsoft 365
+    Groups) when Graph is unavailable, which covers every group type an
+    EOP/MDO policy can actually target. The visible effect is limited to
+    slightly reduced accuracy resolving nested or dynamic group
+    membership, and MET-Teams014 (the one check with a direct Graph
+    dependency) reporting NotApplicable instead of running. If Graph
+    checks must run, connect Graph in its own PowerShell process rather
+    than alongside Exchange Online.
+
+THE POSTURE SCORE
+    Every check carries a Severity, weighted: Critical = 40, High = 20,
+    Medium = 10, Low = 5, Informational = 0. Every result then contributes
+    a per-check score: Pass = 100, Fail = 0, Warning = 50. The overall
+    posture score is the weighted average of per-check scores across
+    every scorable result - one whose Result is Pass, Fail or Warning and
+    whose Score is not null; NotApplicable, Info and Error results do not
+    enter the average - scaled to a 0-100 index.
+
+    Band labels:
+        0-39     Critical
+        40-59    Poor
+        60-79    Fair
+        80-94    Good
+        95-100   Excellent
+        (n/a)    None - no scorable result exists for the run, for
+                 example an empty result set or one where every result is
+                 NotApplicable, Info or Error.
+
+    Category sub-scores (MDO, EXO, Teams) are computed the same way,
+    scoped to each category's own results, and shown alongside the
+    overall posture score in the console summary, the JSON
+    categoryScores object, and the HTML report's header badges.
+
+OUTPUT SHAPE
+    By default, Invoke-METAssessment aggregates its results: multiple
+    result objects sharing the same CheckId (for example one per domain
+    for MET-EXO001/DMARC, or one per policy) collapse into a single
+    summary object, inheriting the worst Result/Severity among them and
+    listing each item's AffectedObject and Finding inside the aggregate's
+    own Finding text.
+
+    -Detailed returns the full, un-aggregated per-object results instead
+    of that one-summary-object-per-CheckId view - one object per domain
+    or per policy, so a single item's finding (which accepted domain
+    failed DMARC, say) can be inspected on its own rather than folded
+    into a rolled-up summary.
+
+    -PassThru streams each result object as its check completes, instead
+    of buffering the whole run and returning one collection at the end.
+    It implies no aggregation, the same as -Detailed.
+
+    Get-METReport accepts any of these result collections - live from
+    Invoke-METAssessment, or re-hydrated by Import-METReport - and
+    renders a console summary, a JSON export, or a self-contained HTML
+    report from them.
+
+RUNNING AGAINST A CUSTOMER TENANT
+    For an MSSP or CSP assessing more than one customer, decide how
+    access is granted, then follow one rule: one tenant per PowerShell
+    process.
+
+    GDAP / delegated admin
+        Connect-METSession -DelegatedOrganization <customer>.onmicrosoft.com
+        Threaded through to all three legs - Exchange Online natively,
+        and Graph and Teams via their own -TenantId parameter, both of
+        which accept a domain string for exactly this scenario.
+
+    App-only + certificate, per customer
+        Connect-METSession -AppId <id> `
+            -TenantId <customer>.onmicrosoft.com `
+            -CertificatePath <pfx> -CertificatePassword <securestring>
+
+    Guest / dedicated account per tenant
+        Interactive sign-in with an account the customer issued.
+
+    Connect-METSession reuses a live Exchange Online, Graph or Teams
+    connection rather than reconnecting on every call, but only after
+    verifying that connection's tenant, organization and auth mode match
+    what was just requested - a mismatch throws, naming the organization
+    actually connected, rather than silently assessing the wrong
+    customer. Disconnect-METSession is required before switching
+    -DelegatedOrganization in the same PowerShell session: it tears down
+    all three legs and clears the tenant-identity tracking that mismatch
+    guard depends on, so skipping it risks a report labelled for customer
+    B that actually reads customer A's configuration.
+
+        Connect-METSession -DelegatedOrganization customerA.onmicrosoft.com
+        Invoke-METAssessment |
+            Get-METReport -Format All -OutputPath ./assessments/customerA/
+
+        Disconnect-METSession
+        Connect-METSession -DelegatedOrganization customerB.onmicrosoft.com
+        Invoke-METAssessment |
+            Get-METReport -Format All -OutputPath ./assessments/customerB/
+
+    Invoke-METAssessment also declares a -DelegatedOrganization parameter,
+    but it is a placeholder for future MSSP support and does not scope
+    anything today - the delegation happens entirely at Connect-METSession
+    time, and Invoke-METAssessment simply runs against whichever session
+    is already live.
+
+EXAMPLES
+    Interactive assessment to the console
+        Connect-METSession
+        $results = Invoke-METAssessment
+        $results | Get-METReport
+
+        The quickest path for an analyst reviewing their own tenant:
+        browser sign-in, run every check, print the posture score and a
+        Fail/Warning table.
+
+    Service-principal assessment to an HTML report
+        $pw = ConvertTo-SecureString $env:MET_CERT_PASSWORD `
+            -AsPlainText -Force
+        Connect-METSession -AppId $appId -TenantId $tenantId `
+            -CertificatePath './met-ci.pfx' -CertificatePassword $pw
+        Invoke-METAssessment |
+            Get-METReport -Format HTML -OutputPath ./assessments -PassThru
+
+        Unattended, certificate-based sign-in suitable for a scheduled or
+        CI-driven run on any platform. -PassThru returns the FileInfo
+        object for the HTML file actually written, which is the reliable
+        way to learn its path: -OutputPath currently writes the report
+        into a timestamped subfolder generated under the location given,
+        rather than at that exact path - a known, separately tracked
+        defect, not this parameter's intended contract.
+
+    Re-rendering a saved report
+        Import-METReport -Path ./assessments/2026-09-09/MET-report.json |
+            Get-METReport -Format Console
+
+        Import-METReport reads a report file Get-METReport previously
+        wrote and rebuilds one check-result object per saved check,
+        restoring the original tenant and authentication provenance
+        (which auth mode and services were used, and against which
+        tenant) rather than whatever the current live session happens to
+        be connected to. This re-renders a past run - to a different
+        format, or after an HTML rendering fix ships - without a live
+        tenant connection or re-running the assessment itself.
+
+KEYWORDS
+    MET, Defender for Office 365, Exchange Online, Microsoft Teams,
+    posture, security, assessment, MDO, EOP
+
+SEE ALSO
+    Get-METCheck
+    Invoke-METAssessment
+    Connect-METSession
+    Disconnect-METSession
+    Get-METReport
+    Import-METReport
+    Test-METPrerequisites
+    https://github.com/pthoor/MET
