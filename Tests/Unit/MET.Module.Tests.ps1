@@ -101,10 +101,11 @@ Describe 'MET module manifest' {
         $script:ManifestData.RequiredModules | Should -BeNullOrEmpty
     }
 
-    It 'exports no cmdlets, variables or aliases' {
+    It 'exports no cmdlets or variables' {
+        # Aliases are deliberately non-empty - see the 'Exported aliases' Describe block,
+        # which asserts the manifest and the loader agree on exactly what is declared.
         $script:ManifestData.CmdletsToExport | Should -BeNullOrEmpty
         $script:ManifestData.VariablesToExport | Should -BeNullOrEmpty
-        $script:ManifestData.AliasesToExport | Should -BeNullOrEmpty
     }
 
     It 'requires the PowerShell version the module is written against' {
@@ -130,7 +131,12 @@ Describe 'MET exported surface' {
 
         $exported | Should -Be $declared
         (Get-Module -Name 'MET').ExportedCmdlets.Keys | Should -BeNullOrEmpty
-        (Get-Module -Name 'MET').ExportedAliases.Keys | Should -BeNullOrEmpty
+
+        # Aliases are asserted against the manifest, not required to be empty - see the
+        # 'Exported aliases' Describe block.
+        $exportedAliases = @((Get-Module -Name 'MET').ExportedAliases.Keys) | Sort-Object
+        $declaredAliases = @($script:ManifestData.AliasesToExport) | Sort-Object
+        $exportedAliases | Should -Be $declaredAliases
     }
 
     It 'declares every command file under Public/ as exported' {
@@ -138,7 +144,7 @@ Describe 'MET exported surface' {
         # consumer who installed the module from the gallery, however well it is tested.
         # Keyed on the file name, not on every function the file declares: a Public file
         # may also carry a file-private helper (Get-METReport.ps1 defines Get-METModuleVersion,
-        # Invoke-METTriage.ps1 defines Get-METAggregationNoun) which is deliberately unexported.
+        # Invoke-METAssessment.ps1 defines Get-METAggregationNoun) which is deliberately unexported.
         $publicFiles = Get-ChildItem -Path (Join-Path $script:ModuleRoot 'Public') -Filter '*.ps1'
 
         $publicFiles | Should -Not -BeNullOrEmpty
@@ -206,5 +212,81 @@ Describe 'MET.psm1 loader coverage' {
                 $declared | Should -Contain $file.BaseName -Because "$folder/$($file.Name) should define $($file.BaseName)"
             }
         }
+    }
+}
+
+Describe 'Exported aliases' {
+    It 'exports Invoke-METAssessment as a function' {
+        $script:Module.ExportedFunctions.Keys | Should -Contain 'Invoke-METAssessment'
+    }
+
+    It 'keeps Invoke-METTriage working as an exported alias' {
+        $script:Module.ExportedAliases.Keys | Should -Contain 'Invoke-METTriage'
+        (Get-Alias -Name 'Invoke-METTriage').ResolvedCommandName |
+            Should -Be 'Invoke-METAssessment'
+    }
+
+    It 'declares every exported alias in the manifest' {
+        foreach ($alias in $script:Module.ExportedAliases.Keys) {
+            $script:ManifestData.AliasesToExport | Should -Contain $alias
+        }
+    }
+
+    It 'exports every alias the manifest declares' {
+        foreach ($alias in @($script:ManifestData.AliasesToExport)) {
+            $script:Module.ExportedAliases.Keys | Should -Contain $alias
+        }
+    }
+}
+
+Describe 'Parameter binding conventions' {
+    # CLAUDE.md: "No positional parameters on public functions". Invoke-METTriage
+    # MET-MDO001 previously bound to -Category and threw a ValidateSet error naming
+    # a parameter the caller never mentioned, which is worse than not binding at all.
+    It 'declares no positional parameters on <_>' -ForEach @(
+        'Connect-METSession'
+        'Disconnect-METSession'
+        'Invoke-METAssessment'
+        'Get-METReport'
+        'Test-METPrerequisites'
+    ) {
+        $command = Get-Command -Name $_ -Module 'MET'
+        $positional = $command.Parameters.Values |
+            Where-Object {
+                $_.Attributes |
+                    Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Position -ge 0 }
+            } |
+            ForEach-Object { $_.Name }
+
+        $positional | Should -BeNullOrEmpty -Because "$_ must be called with named parameters only"
+    }
+
+    It 'keeps Get-METReport -InputObject bound from the pipeline' {
+        $inputObject = (Get-Command -Name 'Get-METReport' -Module 'MET').Parameters['InputObject']
+        $attribute = $inputObject.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            Select-Object -First 1
+
+        $attribute.ValueFromPipeline | Should -BeTrue
+    }
+}
+
+Describe 'Loader failure handling' {
+    # A dot-source failure in Public/ only warned, yet Export-ModuleMember still
+    # published the failed file's BaseName - so Import-Module "succeeded" and the
+    # command was missing at call time, far from the cause.
+    It 'throws when a Public/ script fails to dot-source' {
+        $sandbox = Join-Path $TestDrive 'brokenmodule'
+        Copy-Item -LiteralPath $script:ModuleRoot -Destination $sandbox -Recurse -Force
+
+        $brokenPath = Join-Path $sandbox 'Public' 'Get-METBroken.ps1'
+        Set-Content -LiteralPath $brokenPath -Value 'throw "deliberate load failure"'
+
+        { Import-Module (Join-Path $sandbox 'MET.psd1') -Force -ErrorAction Stop } |
+            Should -Throw -ExpectedMessage '*Get-METBroken.ps1*'
+
+        Remove-Module 'MET' -Force -ErrorAction SilentlyContinue
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+        $script:Module = Get-Module -Name 'MET'
     }
 }

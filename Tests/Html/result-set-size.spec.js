@@ -29,4 +29,13 @@ test.describe('empty report', () => {
     await expect(page.locator('#cards-container .card')).toHaveCount(0);
     await expect(page.locator('#no-results')).toBeVisible();
   });
+
+  // An empty set is an absent measurement, not a catastrophic tenant - see
+  // Tests/Html/band-none.spec.js for the same assertion on a non-empty all-Info set,
+  // and after a client-side rescore.
+  test('reports band None, not a false Critical', async ({ page }) => {
+    await page.goto('/report-empty.html');
+    await expect(page.locator('#score-band')).toHaveText('None');
+    await expect(page.locator('#score-band')).toHaveClass(/band-none/);
+  });
 });

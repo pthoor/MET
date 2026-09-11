@@ -21,6 +21,7 @@
     $scoreMap = @{ Pass = 100; Fail = 0; Warning = 50; Info = $null; NotApplicable = $null }
 
     [PSCustomObject]@{
+        PSTypeName     = 'MET.CheckResult'
         CheckId        = $CheckId
         Category       = $Category
         Name           = $Name

@@ -31,7 +31,7 @@ Describe 'Get-METReport writes reports owner-only' {
     }
 
     It 'Creates the HTML report with no group or world access' -Skip:$IsWindows {
-        $script:sample | Get-METReport -Format HTML -OutputPath $script:outDir -TenantName 'contoso.com' | Out-Null
+        $script:sample | Get-METReport -Format HTML -OutputPath $script:outDir -TenantName 'contoso.com' -NoLaunch | Out-Null
         $file = Get-ChildItem -Path $script:outDir -Recurse -Filter '*.html' | Select-Object -First 1
         $file | Should -Not -BeNullOrEmpty
         (& stat -c '%a' $file.FullName) | Should -Be '600'

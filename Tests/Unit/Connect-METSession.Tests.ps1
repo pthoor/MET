@@ -7,6 +7,7 @@ BeforeAll {
     . "$root/Private/Get-METAssemblyFileVersion.ps1"
     . "$root/Private/Test-METAssemblyLoadConflict.ps1"
     . "$root/Private/Resolve-METTenantGuid.ps1"
+    . "$root/Private/New-METErrorRecord.ps1"
 
     # Stubs mirror the real cmdlets' parameter names so that splatting a
     # non-existent parameter fails binding instead of silently passing.
@@ -127,7 +128,7 @@ Describe 'Connect-METSession Teams leg' {
     }
 
     Context 'Service principal with certificate' {
-        It 'Resolves the thumbprint to an X509Certificate2 and passes -Certificate' {
+        It 'Resolves the thumbprint to an X509Certificate2 and passes -Certificate' -Skip:(-not $IsWindows) {
             $fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
             Mock Get-METCertificateByThumbprint { $fakeCert }
 
@@ -145,11 +146,50 @@ Describe 'Connect-METSession Teams leg' {
 
     Context 'Managed identity' {
         It 'Passes -Identity rather than -ManagedIdentity' {
-            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity
+            # -TenantId became mandatory in the ManagedIdentity set (Task 18, C-7) so
+            # Connect-ExchangeOnline -ManagedIdentity -Organization can actually connect;
+            # supplying it here does not change what this test asserts about Teams.
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity -TenantId 'contoso.onmicrosoft.com'
 
             Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
                 $Identity -eq $true
             }
+        }
+
+        # Connect-MicrosoftTeams's ManagedServiceLogin set is -Identity plus
+        # -ManagedServiceHostName/Port/Secret; -AccountId belongs to UserCredential, so there is
+        # no supported way to target a user-assigned identity for Teams. Passing it anyway would
+        # be a parameter-set binding failure, so MET warns instead of silently letting Teams
+        # authenticate as a different identity than Exchange Online and Graph used.
+        It 'warns that a user-assigned identity cannot be targeted for Teams' {
+            $warnings = @()
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -ManagedIdentityAccountId 'bf6dcc76-4331-4942-8d50-87ea41d6e8a1' `
+                -WarningVariable warnings -WarningAction SilentlyContinue
+
+            ($warnings -join ' ') | Should -Match 'user-assigned managed identity'
+            ($warnings -join ' ') | Should -Match 'SkipTeams'
+        }
+
+        It 'never passes -AccountId on the managed-identity Teams call' {
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -ManagedIdentityAccountId 'bf6dcc76-4331-4942-8d50-87ea41d6e8a1' `
+                -WarningAction SilentlyContinue
+
+            Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
+                $Identity -eq $true -and -not $AccountId
+            }
+        }
+
+        It 'does not warn when no user-assigned identity was requested' {
+            $warnings = @()
+            Connect-METSession -SkipGraph -SkipExchangeOnline -ManagedIdentity `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -WarningVariable warnings -WarningAction SilentlyContinue
+
+            ($warnings -join ' ') | Should -Not -Match 'user-assigned managed identity'
         }
     }
 
@@ -390,12 +430,17 @@ Describe 'Connect-METSession tenant-scoped session reuse - EXO' {
                 [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = 'admin@contoso.com' }
             }
             $fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
-            Mock Get-METCertificateByThumbprint { $fakeCert }
+            Mock Get-METCertificateFromFile { $fakeCert }
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
 
             { Connect-METSession -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $certFile `
+                    -CertificatePassword $securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*interactively*'
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
@@ -415,12 +460,65 @@ Describe 'Connect-METSession tenant-scoped session reuse - EXO' {
 
     Context 'Existing connection is Managed Identity and Managed Identity was requested again' {
         It 'Reuses the connection without throwing (Managed Identity is app-only but never certificate-based)' {
+            # Connect-ExchangeOnline -ManagedIdentity requires -Organization (Task 18, C-7),
+            # so a live managed-identity session always reports that organization back. The
+            # mock reflects that rather than leaving Organization null, which no real
+            # managed-identity session does.
             Mock Get-ConnectionInformation {
-                [PSCustomObject]@{ State = 'Connected'; Organization = $null; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
             }
 
-            { Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity -ErrorAction Stop } | Should -Not -Throw
+            { Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -ErrorAction Stop } | Should -Not -Throw
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    # -TenantId is mandatory in the ManagedIdentity set and is passed straight to
+    # Connect-ExchangeOnline -Organization, but $requestedOrg only covered the
+    # ServicePrincipal set and -DelegatedOrganization. ManagedIdentity fell through to
+    # $null, which left every tenant guard keyed on $requestedOrg inert: a managed-identity
+    # run for customer B silently reused customer A's live session and reported A's
+    # configuration under B's name.
+    Context 'Existing connection is for a different org and Managed Identity names another tenant' {
+        It 'Throws the organization mismatch instead of reusing customer A session' {
+            Mock Get-ConnectionInformation {
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'customera.onmicrosoft.com'; DelegatedOrganization = $null; CertificateAuthentication = $false; UserPrincipalName = $null }
+            }
+
+            $caught = $null
+            try {
+                Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity `
+                    -TenantId 'customerb.onmicrosoft.com' -ErrorAction Stop
+            }
+            catch { $caught = $_ }
+
+            $caught | Should -Not -BeNullOrEmpty
+            $caught.FullyQualifiedErrorId | Should -Match 'METOrganizationMismatch'
+            $caught.Exception.Message | Should -Match 'customera\.onmicrosoft\.com'
+            Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
+        }
+    }
+
+    # Same gap seen from the cross-call guard. That guard still fired, because an absent
+    # $requestedOrg against a tracked one is itself treated as a mismatch - but it could
+    # only describe the requested identity as 'ManagedIdentity (no organization
+    # specified)', so the operator was never told which tenant the run had asked for.
+    Context 'A prior call in this process tracked a different org and Managed Identity names another' {
+        It 'Throws the cross-call identity mismatch naming both organizations' {
+            Mock Get-ConnectionInformation { $null }
+            $script:METConnection = @{ Mode = 'ManagedIdentity'; Org = 'customera.onmicrosoft.com' }
+
+            $caught = $null
+            try {
+                Connect-METSession -SkipGraph -SkipTeams -ManagedIdentity `
+                    -TenantId 'customerb.onmicrosoft.com' -ErrorAction Stop
+            }
+            catch { $caught = $_ }
+
+            $caught | Should -Not -BeNullOrEmpty
+            $caught.FullyQualifiedErrorId | Should -Match 'METSessionIdentityMismatch'
+            $caught.Exception.Message | Should -Match 'customera\.onmicrosoft\.com'
+            $caught.Exception.Message | Should -Match 'customerb\.onmicrosoft\.com'
         }
     }
 }
@@ -439,7 +537,11 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
         Mock Connect-MgGraph {}
         Mock Connect-MicrosoftTeams {}
         $script:fakeCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new()
-        Mock Get-METCertificateByThumbprint { $script:fakeCert }
+        Mock Get-METCertificateFromFile { $script:fakeCert }
+        $script:securePassword = New-Object System.Security.SecureString
+        'p@ssw0rd'.ToCharArray() | ForEach-Object { $script:securePassword.AppendChar($_) }
+        $script:certFile = Join-Path $TestDrive 'met-ci.pfx'
+        New-Item -Path $script:certFile -ItemType File -Force | Out-Null
     }
 
     Context 'Graph already connected to a different tenant' {
@@ -449,7 +551,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa*'
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -463,7 +566,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipGraph `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa*'
 
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
@@ -478,7 +582,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Not -Throw
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -493,7 +598,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
 
             Should -Invoke Connect-MgGraph -Times 0 -Exactly
@@ -508,7 +614,8 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
             { Connect-METSession -SkipExchangeOnline -SkipGraph `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'contoso.onmicrosoft.com' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' `
+                    -CertificatePath $script:certFile `
+                    -CertificatePassword $script:securePassword `
                     -ErrorAction Stop } | Should -Throw -ExpectedMessage '*could not be resolved*'
 
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
@@ -599,6 +706,11 @@ Describe 'Connect-METSession cross-call identity guard' {
         Mock Get-Module {
             [PSCustomObject]@{ Name = 'ExchangeOnlineManagement'; Version = [version]'3.10.1'; ModuleBase = '/fake/ExchangeOnlineManagement/3.10.1' }
         } -ParameterFilter { $ListAvailable -and $Name -eq 'ExchangeOnlineManagement' }
+        # Disconnect-METSession asks whether MicrosoftTeams is loaded before probing for a
+        # live Teams session. Pester has no default mock to fall back to once Get-Module is
+        # mocked with a filter, so this models the real state of this test session (the
+        # module is not loaded) rather than letting the unmatched call throw.
+        Mock Get-Module { } -ParameterFilter { $Name -eq 'MicrosoftTeams' }
         Mock Get-METAssemblyFileVersion { [version]'4.83.1.0' }
         Mock Test-METAssemblyLoadConflict { $null }
         Mock Get-ConnectionInformation { $null }
@@ -724,10 +836,15 @@ Describe 'Connect-METSession certificate file authentication' {
 
     Context '-TenantId is a GUID while Exchange Online is being connected' {
         It 'Throws before attempting any connection, naming the primary domain requirement' {
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
+
             { Connect-METSession -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' -ErrorAction Stop } |
+                    -CertificatePath $certFile -CertificatePassword $securePassword -ErrorAction Stop } |
                 Should -Throw -ExpectedMessage '*.onmicrosoft.com*'
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
@@ -736,10 +853,15 @@ Describe 'Connect-METSession certificate file authentication' {
 
     Context '-TenantId is a GUID but -SkipExchangeOnline is set' {
         It 'Does not throw, since Graph/Teams accept a GUID tenant ID' {
+            $securePassword = New-Object System.Security.SecureString
+            'p@ssw0rd'.ToCharArray() | ForEach-Object { $securePassword.AppendChar($_) }
+            $certFile = Join-Path $TestDrive 'met-ci.pfx'
+            New-Item -Path $certFile -ItemType File -Force | Out-Null
+
             { Connect-METSession -SkipExchangeOnline -SkipGraph -SkipTeams `
                     -AppId '11111111-1111-1111-1111-111111111111' `
                     -TenantId 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' `
-                    -CertificateThumbprint 'ABCDEF0123456789ABCDEF0123456789ABCDEF01' -ErrorAction Stop } | Should -Not -Throw
+                    -CertificatePath $certFile -CertificatePassword $securePassword -ErrorAction Stop } | Should -Not -Throw
         }
     }
 }
@@ -893,7 +1015,7 @@ Describe 'Disconnect-METSession' {
 
     It 'Treats an ambiguous Get-CsTenant probe failure as an indeterminate disconnect (not "not connected"), keeping tracking in place' {
         $script:METConnection = @{ Mode = 'Interactive'; Org = 'customera.onmicrosoft.com' }
-        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive' }
+        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive'; ServicesConnected = @('Teams') }
 
         Mock Get-ConnectionInformation { $null }
         Mock Get-MgContext { $null }
@@ -965,5 +1087,205 @@ Describe 'Connect-METSession concurrent session verification' {
 
             Should -Invoke Connect-ExchangeOnline -Times 0 -Exactly
         }
+    }
+}
+
+Describe 'Connect-METSession certificate thumbprint platform guard' {
+    # Produced 'A parameter cannot be found that matches parameter name
+    # CertificateThumbprint' deep inside Connect-ExchangeOnline, then suggested
+    # -UseDeviceAuthentication and -DisableWAM - both irrelevant to a service
+    # principal certificate problem, and one is the phishing vector the module works
+    # elsewhere to de-emphasise.
+    It 'throws before connecting when -CertificateThumbprint is used off Windows' -Skip:($IsWindows) {
+        { Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+              -TenantId 'contoso.onmicrosoft.com' -CertificateThumbprint 'ABCD1234' } |
+            Should -Throw -ExpectedMessage '*Windows-only*'
+    }
+
+    It 'points at -CertificatePath in the message' -Skip:($IsWindows) {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com' -CertificateThumbprint 'ABCD1234'
+        } catch { $caught = $_ }
+
+        $caught.Exception.Message | Should -Match '-CertificatePath'
+        $caught.Exception.Message | Should -Not -Match 'UseDeviceAuthentication'
+    }
+}
+
+Describe 'Connect-METSession -DisableWAM parameter sets' {
+    # The rest of this file dot-sources Public/Private scripts directly rather than
+    # importing the packaged module (see MET.Module.Tests.ps1's header comment), so the
+    # real MET module is not otherwise loaded in this session. These two Describe blocks
+    # need it for -Module/-InModuleScope introspection, so import it here.
+    BeforeAll {
+        # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+        # which defines a same-named function ahead of the module import below. Left in
+        # place, that shadow breaks Get-Command/-Module resolution for the module's own
+        # copy, so it has to go before the real module is loaded.
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # README presents -DisableWAM as a general remedy, but it was declared only in the
+    # Interactive set, so combining it with -AppId failed with 'Parameter set cannot be
+    # resolved' - naming no parameter at all.
+    It 'is valid in every parameter set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['DisableWAM']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain '__AllParameterSets'
+    }
+
+    It 'keeps -UseDeviceAuthentication scoped to Interactive' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['UseDeviceAuthentication']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain 'Interactive'
+        $sets | Should -Not -Contain '__AllParameterSets'
+    }
+}
+
+Describe 'Connect-METSession -DisableWAM capability probe (C-22)' {
+    BeforeAll {
+        # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+        # which defines a same-named function ahead of the module import below. Left in
+        # place, that shadow breaks Get-Command/-Module resolution for the module's own
+        # copy, so it has to go before the real module is loaded.
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # WAM became the EXO default broker in 3.7.0, but -DisableWAM shipped in 3.7.2, so on
+    # 3.0-3.6 passing it produces a raw parameter binding error. The Teams leg already
+    # probes for exactly this at :462-465; the EXO leg did not.
+    It 'reports false when the parameter is not declared' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith {
+                [PSCustomObject]@{ Parameters = @{} }
+            } -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeFalse
+        }
+    }
+
+    It 'reports true when the parameter is declared' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith {
+                [PSCustomObject]@{ Parameters = @{ 'DisableWAM' = $true } }
+            } -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeTrue
+        }
+    }
+
+    It 'reports false when Connect-ExchangeOnline is not present at all' {
+        InModuleScope 'MET' {
+            Mock -CommandName 'Get-Command' -MockWith { $null } `
+                -ParameterFilter { $Name -eq 'Connect-ExchangeOnline' }
+
+            Test-METExoSupportsDisableWam | Should -BeFalse
+        }
+    }
+}
+
+Describe 'Connect-METSession managed identity parameters' {
+    # This file dot-sources Connect-METSession.ps1 directly (see the top BeforeAll),
+    # which defines a same-named function ahead of the module import below. Left in
+    # place, that shadow breaks Get-Command/-Module resolution for the module's own
+    # copy, so it has to go before the real module is loaded - same as the two
+    # -DisableWAM Describe blocks above.
+    BeforeAll {
+        Remove-Item -Path 'Function:\Connect-METSession' -ErrorAction SilentlyContinue
+        $script:ManifestPath = Join-Path $PSScriptRoot '..' '..' 'MET.psd1'
+        Import-Module $script:ManifestPath -Force -ErrorAction Stop
+    }
+
+    # Microsoft documents Connect-ExchangeOnline -ManagedIdentity -Organization
+    # <domain>.onmicrosoft.com as required. -Organization was only ever set in the
+    # ServicePrincipal branch, and the MI set had no -TenantId, so with EXO failure
+    # fatal the whole parameter set aborted.
+    It 'accepts -TenantId in the ManagedIdentity set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['TenantId']
+        $sets = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } |
+            ForEach-Object { $_.ParameterSetName }
+
+        $sets | Should -Contain 'ManagedIdentity'
+    }
+
+    It 'requires -TenantId in the ManagedIdentity set' {
+        $parameter = (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters['TenantId']
+        $mandatory = $parameter.Attributes |
+            Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and
+                           $_.ParameterSetName -eq 'ManagedIdentity' } |
+            ForEach-Object { $_.Mandatory }
+
+        $mandatory | Should -Contain $true
+    }
+
+    It 'exposes -ManagedIdentityAccountId for user-assigned identities' {
+        (Get-Command -Name 'Connect-METSession' -Module 'MET').Parameters.Keys |
+            Should -Contain 'ManagedIdentityAccountId'
+    }
+
+    It 'rejects a GUID -TenantId for managed identity, as it does for app-only' {
+        { Connect-METSession -ManagedIdentity `
+              -TenantId '00000000-0000-0000-0000-000000000001' } |
+            Should -Throw -ExpectedMessage '*onmicrosoft.com*'
+    }
+}
+
+Describe 'Connect-METSession error records' {
+    # throw '<string>' makes the FullyQualifiedErrorId the message text itself, so
+    # nothing can catch by id and any wording change breaks a caller's handler.
+    BeforeAll {
+        $script:ModuleRoot = Join-Path $PSScriptRoot '..' '..'
+    }
+
+    It 'names a stable error id for the certificate-selection failure' {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com'
+        } catch { $caught = $_ }
+
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METCertificateRequired*'
+    }
+
+    It 'names a stable error id for the both-certificates failure' {
+        $caught = $null
+        try {
+            Connect-METSession -AppId '00000000-0000-0000-0000-000000000001' `
+                -TenantId 'contoso.onmicrosoft.com' `
+                -CertificateThumbprint 'ABCD' -CertificatePath './x.pfx'
+        } catch { $caught = $_ }
+
+        $caught.FullyQualifiedErrorId | Should -BeLike 'METCertificateAmbiguous*'
+    }
+
+    # Every throw that represents one of MET's own guard decisions is converted. The
+    # three re-throws of an already-caught connection failure are deliberately left
+    # alone - wrapping them would bury the inner exception, which is the real error.
+    It 'leaves no guard decision throwing a bare string' {
+        $source = Get-Content -LiteralPath (Join-Path $script:ModuleRoot 'Public' 'Connect-METSession.ps1')
+
+        $bareThrows = $source |
+            Where-Object { $_ -match '^\s*throw\s+[''"]' } |
+            Where-Object { $_ -notmatch 'throw "Failed to connect' }
+
+        $bareThrows | Should -BeNullOrEmpty
+    }
+
+    It 'names a stable error id for the Graph tenant mismatch' {
+        $source = Get-Content -LiteralPath (Join-Path $script:ModuleRoot 'Public' 'Connect-METSession.ps1') -Raw
+        $source | Should -Match 'METGraphTenantMismatch'
     }
 }

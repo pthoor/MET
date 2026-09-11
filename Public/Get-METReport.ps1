@@ -18,10 +18,13 @@ function Get-METModuleVersion {
 }
 
 function Get-METReport {
-    [CmdletBinding()]
+    [CmdletBinding(PositionalBinding = $false)]
     param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [PSCustomObject[]] $InputObject,
+        # Not Mandatory: a mandatory pipeline parameter prompts interactively when the
+        # pipeline is empty, which hangs a CI process rather than failing it.
+        [Parameter(ValueFromPipeline)]
+        [AllowEmptyCollection()]
+        [PSCustomObject[]] $InputObject = @(),
 
         [Parameter()]
         [ValidateSet('Console','JSON','HTML','All')]
@@ -31,7 +34,13 @@ function Get-METReport {
         [string] $OutputPath,
 
         [Parameter()]
-        [string] $TenantName = ''
+        [string] $TenantName = '',
+
+        [Parameter()]
+        [switch] $NoLaunch,
+
+        [Parameter()]
+        [switch] $PassThru
     )
 
     begin {
@@ -123,7 +132,10 @@ function Get-METReport {
             if ($weightTotal -gt 0) { [int][math]::Round(($weightedSum / $weightTotal) * 100) } else { 0 }
         } else { 0 }
 
-        $band = if ($overallScore -ge 95) {
+        $band = if (-not $scorable) {
+          'None'
+        }
+        elseif ($overallScore -ge 95) {
           'Excellent'
         }
         elseif ($overallScore -ge 80) {
@@ -139,7 +151,7 @@ function Get-METReport {
           'Critical'
         }
 
-        $categoryScores = @{}
+        $categoryScores = [ordered]@{}
         foreach ($cat in @('MDO','EXO','Teams')) {
             $catResults = $scorable | Where-Object { $_.Category -eq $cat }
             if ($catResults) {
@@ -170,24 +182,48 @@ function Get-METReport {
         $resolvedHtmlPath = $null
         $assessmentOutputFolder = $null
         $assessmentFolderAnnounced = $false
+        $writtenFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+
+        # $wantsHtml covers 'All' too, so this guard is the one that fires for both. The
+        # message names whichever format was actually requested - a user who asked for All
+        # was previously told '-Format HTML requires -OutputPath', naming a format they
+        # never passed, and the later 'All' guard was unreachable dead code.
+        if ($wantsHtml -and -not $OutputPath) {
+            $PSCmdlet.ThrowTerminatingError(
+                [System.Management.Automation.ErrorRecord]::new(
+                    [System.ArgumentException]::new(
+                        ('-Format {0} requires -OutputPath. The HTML report is a single self-contained file over a thousand lines long; writing it to the console is never what was wanted. Pass -OutputPath <folder>.' -f $Format)),
+                    'METOutputPathRequired',
+                    [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                    $Format))
+        }
+
+        if ($OutputPath -and -not ($wantsJson -or $wantsHtml)) {
+            Write-Warning '-OutputPath was given but -Format is Console, which writes to the host only. The path is ignored and no directory was created. Use -Format JSON, HTML or All to write files.'
+        }
 
         if ($OutputPath -and ($wantsJson -or $wantsHtml)) {
-          $outputIsDirectory = Test-Path $OutputPath -PathType Container
+          $outputIsDirectory = Test-Path -LiteralPath $OutputPath -PathType Container
           $hasExtension = [System.IO.Path]::HasExtension($OutputPath)
 
           if ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') {
             $baseFolder = $OutputPath
-            if (-not (Test-Path $baseFolder)) {
+            if (-not (Test-Path -LiteralPath $baseFolder)) {
               New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
             }
             $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
           }
           else {
-            $parentFolder = Split-Path -Path $OutputPath -Parent
+            # Split-Path has no parameter set pairing -LiteralPath with -Parent or -Leaf, so
+            # that combination throws 'Parameter set cannot be resolved' before anything is
+            # written. [System.IO.Path] is literal by nature, which keeps the -LiteralPath
+            # intent (a folder named 'Contoso [2026]' must not be glob-expanded) that
+            # reverting to Split-Path -Path would throw away.
+            $parentFolder = [System.IO.Path]::GetDirectoryName($OutputPath)
             if ([string]::IsNullOrWhiteSpace($parentFolder)) {
               $parentFolder = (Get-Location).Path
             }
-            if (-not (Test-Path $parentFolder)) {
+            if (-not (Test-Path -LiteralPath $parentFolder)) {
               New-Item -ItemType Directory -Path $parentFolder -Force | Out-Null
             }
             $assessmentOutputFolder = Join-Path $parentFolder $assessmentFolderName
@@ -197,7 +233,7 @@ function Get-METReport {
 
           if ($wantsJson) {
             $jsonLeaf = if ($Format -eq 'JSON' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -Path $OutputPath -Leaf
+              [System.IO.Path]::GetFileName($OutputPath)
             }
             else {
               'MET-report.json'
@@ -207,24 +243,13 @@ function Get-METReport {
 
           if ($wantsHtml) {
             $htmlLeaf = if ($Format -eq 'HTML' -and $hasExtension -and -not $outputIsDirectory) {
-              Split-Path -Path $OutputPath -Leaf
+              [System.IO.Path]::GetFileName($OutputPath)
             }
             else {
               'MET-report.html'
             }
             $resolvedHtmlPath = Join-Path $assessmentOutputFolder $htmlLeaf
           }
-        }
-
-        if ($Format -eq 'All' -and -not $OutputPath) {
-            $PSCmdlet.ThrowTerminatingError(
-                [System.Management.Automation.ErrorRecord]::new(
-                    [System.ArgumentException]::new("-OutputPath is required when -Format is 'All'. Provide a folder path to write both JSON and HTML reports."),
-                    'MissingOutputPath',
-                    [System.Management.Automation.ErrorCategory]::InvalidArgument,
-                    $Format
-                )
-            )
         }
 
         # Error is reported as its own bucket, mutually exclusive with the Result-based
@@ -272,28 +297,45 @@ function Get-METReport {
             if ($authInfoLine) { Write-Host "  Auth:   $authInfoLine" -ForegroundColor Gray }
             Write-Host '══════════════════════════════════════════════════════' -ForegroundColor Cyan
 
-            $scoreColor = switch ($band) {
-                'Excellent' { 'Green' }
-                'Good'      { 'Green' }
-                'Fair'      { 'Yellow' }
-                'Poor'      { 'DarkYellow' }
-                default     { 'Red' }
+            if ($band -eq 'None') {
+                Write-Host '  No scorable results. Nothing was assessed - every result was Info or NotApplicable, or the set was empty.' -ForegroundColor Yellow
             }
-            Write-Host "  Posture Score: $overallScore / 100  [$band]" -ForegroundColor $scoreColor
+            else {
+                $scoreColor = switch ($band) {
+                    'Excellent' { 'Green' }
+                    'Good'      { 'Green' }
+                    'Fair'      { 'Yellow' }
+                    'Poor'      { 'DarkYellow' }
+                    default     { 'Red' }
+                }
+                Write-Host "  Posture Score: $overallScore / 100  [$band]" -ForegroundColor $scoreColor
+            }
 
-            $catLine = ($categoryScores.GetEnumerator() |
-                Where-Object { $null -ne $_.Value } |
-                Sort-Object Name |
-                ForEach-Object { "$($_.Key): $($_.Value)" }) -join '   '
+            $catLine = (@('MDO','EXO','Teams') |
+                Where-Object { $null -ne $categoryScores[$_] } |
+                ForEach-Object { "$($_): $($categoryScores[$_])" }) -join '   '
             if ($catLine) { Write-Host "  $catLine" -ForegroundColor Gray }
 
             Write-Host "  Pass: $($summary.Pass)  Fail: $($summary.Fail)  Warning: $($summary.Warning)  N/A: $($summary.NotApplicable)  Info: $($summary.Info)  Error: $($summary.Error)"
             Write-Host ''
 
-            $actionable = $allResults | Where-Object { $_.Result -in 'Fail','Warning' } | Sort-Object Severity, CheckId
+            # Sort-Object Severity is a string sort, which ordered the table
+            # Critical, High, Low, Medium. Weight descending is the real order.
+            # The summary puts any result carrying an Error into its own Error bucket regardless
+            # of Result, so a check that failed to run with, say, NotApplicable was counted above
+            # but missing from this table - which then printed 'No Fail or Warning findings'
+            # underneath a non-zero Error count. Select on the same condition the summary uses.
+            $actionable = $allResults |
+                Where-Object { $_.Result -in 'Fail','Warning' -or $_.Error } |
+                Sort-Object -Property @{ Expression = { Get-METCheckWeight -Severity (Get-METSafeSeverity -Severity $_.Severity) }; Descending = $true },
+                                      @{ Expression = 'CheckId'; Descending = $false }
             if ($actionable) {
+                $actionableRows = $actionable | Select-Object CheckId, Severity, AffectedObject,
+                    @{ Name = 'Result'; Expression = { if ($_.Error) { 'Error' } else { $_.Result } } },
+                    Finding
+
                 Write-Host '  Issues requiring attention:' -ForegroundColor Yellow
-                $actionable | Format-Table -AutoSize -Property @(
+                $actionableRows | Format-Table -AutoSize -Property @(
                     @{l='CheckId';       e={ $_.CheckId }}
                     @{l='Severity';      e={ $_.Severity }}
                     @{l='Result';        e={ $_.Result }}
@@ -303,6 +345,11 @@ function Get-METReport {
                         if ($f.Length -gt 80) { $f.Substring(0,77) + '...' } else { $f }
                     }}
                 ) | Out-String | Write-Host
+
+                $erroredCount = @($allResults | Where-Object { $_.Error }).Count
+                if ($erroredCount -gt 0) {
+                    Write-Host "  ($erroredCount check(s) could not run - listed as Error in the Result column above; the exception text is in each result's Error field.)" -ForegroundColor DarkYellow
+                }
             } else {
                 Write-Host '  No Fail or Warning findings.' -ForegroundColor Green
             }
@@ -325,6 +372,7 @@ function Get-METReport {
                     }
                 } else { $null }
                 postureScore   = $overallScore
+                scoreBand      = $band
                 categoryScores = $categoryScores
                 summary        = $summary
                 checks         = @($allResults | ForEach-Object {
@@ -352,7 +400,9 @@ function Get-METReport {
                 $dest = $resolvedJsonPath
 
                 New-METRestrictedFile -Path $dest
-                $json | Set-Content -Path $dest -Encoding UTF8
+                $json | Set-Content -LiteralPath $dest -Encoding UTF8
+                Write-Host "  Report written: $dest" -ForegroundColor Cyan
+                $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "JSON report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
                   Write-Verbose "Assessment output folder: $assessmentOutputFolder"
@@ -487,6 +537,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .band-fair{background:var(--sev-medium)}
 .band-poor{background:var(--sev-high)}
 .band-critical{background:var(--result-fail)}
+.band-none{background:var(--text2)}
 .band-info-icon{font-size:13px;color:var(--text3);cursor:default;user-select:none;line-height:1;transition:color .15s}
 .score-band-wrap:hover .band-info-icon{color:var(--text2)}
 .band-tooltip{position:absolute;left:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px 12px;min-width:190px;display:none;z-index:200;pointer-events:none}
@@ -844,7 +895,7 @@ const CONTROLS_CATEGORIES = [
 ];
 
 // ── Result identity ──────────────────────────────────────────────
-// Invoke-METTriage -Detailed routinely emits several results sharing one CheckId (one per
+// Invoke-METAssessment -Detailed routinely emits several results sharing one CheckId (one per
 // domain/policy/mailbox). CheckId alone is not a unique identity for a result, so every
 // acceptance helper, cardMap, and click target below is keyed on resultKey(check) instead.
 // checkId + affectedObject alone is not enough either: MET-EXO006 emits ten independent
@@ -882,6 +933,7 @@ function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
 function bandOf(score) {
+  if (score === null || score === undefined) return 'None';
   return score >= 95 ? 'Excellent' : score >= 80 ? 'Good' : score >= 60 ? 'Fair' : score >= 40 ? 'Poor' : 'Critical';
 }
 function weightedScore(checks) {
@@ -897,8 +949,9 @@ function weightedScore(checks) {
   return wTotal > 0 ? Math.round((wSum / wTotal) * 100) : null;
 }
 function recalcScore() {
-  const score = weightedScore(CHECKS) ?? 0;
-  const band = bandOf(score);
+  const raw = weightedScore(CHECKS);
+  const score = raw ?? 0;
+  const band = bandOf(raw);
   document.getElementById('donut-score-text').textContent = score;
   const bandEl = document.getElementById('score-band');
   bandEl.textContent = band;
@@ -1146,7 +1199,7 @@ function createCard(check) {
   // A check can carry both a Result (e.g. NotApplicable) and a populated Error field when it
   // couldn't run - the badge must say ERROR so the card is findable, even though card.dataset.result
   // (used by the result-filter dropdown and tab scoping below) stays the real Result value. hasError
-  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METTriage's per-check catch)
+  // wins over accepted: a synthetic Fail from a crashed check (see Invoke-METAssessment's per-check catch)
   // can be risk-accepted like any other Fail, and an accepted check still carrying an Error is exactly
   // the "error with no findable card" bug this fix closes - just for accepted checks instead of all of them.
   const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : check.result);
@@ -1628,17 +1681,31 @@ document.getElementById('btn-collapse-all').textContent = 'Expand All';
                 $dest = $resolvedHtmlPath
 
                 New-METRestrictedFile -Path $dest
-                $html | Set-Content -Path $dest -Encoding UTF8
+                $html | Set-Content -LiteralPath $dest -Encoding UTF8
+                Write-Host "  Report written: $dest" -ForegroundColor Cyan
+                $writtenFiles.Add((Get-Item -LiteralPath $dest))
                 Write-Verbose "HTML report written to $dest"
                 if ($assessmentOutputFolder -and -not $assessmentFolderAnnounced) {
                   Write-Verbose "Assessment output folder: $assessmentOutputFolder"
                   $assessmentFolderAnnounced = $true
                 }
 
-                try { Start-Process $dest } catch { Write-Verbose "Could not auto-open browser: $_" }
+                if (-not $NoLaunch) {
+                    # Start-Process has no handler on a headless Linux host and throws.
+                    # Swallowing it into Write-Verbose left the user with no path and no
+                    # browser, which reads as the command having done nothing at all.
+                    try {
+                        Start-Process $dest
+                    }
+                    catch {
+                        Write-Warning "Could not open the report automatically. Open it manually: $dest"
+                    }
+                }
             } else {
                 $html
             }
         }
+
+        if ($PassThru) { return $writtenFiles.ToArray() }
     }
 }

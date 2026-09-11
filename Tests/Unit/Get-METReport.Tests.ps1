@@ -13,7 +13,7 @@ Describe 'Get-METReport structured metadata' {
             Metadata = @{ DetailType = 'EffectivePolicyCoverage'; ProtectionType = 'Safe Links'; TotalRecipients = 2; OrderingObservations = @(@{ Severity='Warning'; Message='Catch-all shadows a specialized policy' }); CoverageRecommendations=@('Add a compliant catch-all after specialized policies'); Policies = @(@{ PolicyName = 'Strict custom'; EffectiveRecipientCount = 2; OrderingObservations=@('Catch-all shadows a specialized policy') }) }
         }
 
-        $result | Get-METReport -Format All -OutputPath $output -TenantName 'contoso.com'
+        $result | Get-METReport -Format All -OutputPath $output -TenantName 'contoso.com' -NoLaunch
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $json = Get-Content (Join-Path $folder.FullName 'MET-report.json') -Raw | ConvertFrom-Json
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
@@ -71,6 +71,51 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Error | Should -Be 2
     }
 
+    # The summary buckets any result carrying an Error under Error regardless of its Result, so a
+    # check that failed to run as NotApplicable was counted there while the issues table - which
+    # selected only Fail/Warning - omitted it and printed 'No Fail or Warning findings' below a
+    # non-zero Error count.
+    It 'lists a check that failed to run in the console issues table' {
+        $results = @(
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams009'; Category = 'Teams'; Name = 'Pass check'
+                Result = 'Pass'; Severity = 'High'; Score = 100; AffectedObject = 'Tenant'
+                Finding = 'ok'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = $null
+            },
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams014'; Category = 'Teams'; Name = 'NotApplicable with error detail'
+                Result = 'NotApplicable'; Severity = 'Medium'; Score = $null; AffectedObject = 'Tenant'
+                Finding = 'Graph unavailable'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = 'Authentication needed. Please call Connect-MgGraph.'
+            }
+        )
+
+        $console = ($results | Get-METReport -Format Console 6>&1 | Out-String)
+
+        $console | Should -Match 'MET-Teams014'
+        $console | Should -Match 'Issues requiring attention'
+        $console | Should -Not -Match 'No Fail or Warning findings'
+    }
+
+    # The table has no Error column - it has a Result column whose value becomes Error - so the
+    # footnote pointed readers at something that does not exist.
+    It 'describes where the errored checks actually appear' {
+        $results = @(
+            [PSCustomObject]@{
+                CheckId = 'MET-Teams014'; Category = 'Teams'; Name = 'NotApplicable with error detail'
+                Result = 'NotApplicable'; Severity = 'Medium'; Score = $null; AffectedObject = 'Tenant'
+                Finding = 'Graph unavailable'; Recommendation = ''; ReferenceUrl = ''
+                Timestamp = [datetime]::UtcNow; Error = 'Authentication needed. Please call Connect-MgGraph.'
+            }
+        )
+
+        $console = ($results | Get-METReport -Format Console 6>&1 | Out-String)
+
+        $console | Should -Match 'Result column'
+        $console | Should -Not -Match 'see the Error column'
+    }
+
     It 'renders an HTML banner that counts an errored check once, under Error only' {
         $output = Join-Path $TestDrive 'reports-error-summary-html'
         $results = @(
@@ -82,7 +127,7 @@ Describe 'Get-METReport structured metadata' {
             }
         )
 
-        $results | Get-METReport -Format HTML -OutputPath $output -TenantName 'contoso.com'
+        $results | Get-METReport -Format HTML -OutputPath $output -TenantName 'contoso.com' -NoLaunch
         $folder = Get-ChildItem $output -Directory | Select-Object -First 1
         $html = Get-Content (Join-Path $folder.FullName 'MET-report.html') -Raw
 
@@ -132,5 +177,167 @@ Describe 'Get-METReport structured metadata' {
         $json.summary.Pass | Should -Be 1
         $total = $json.summary.Pass + $json.summary.Fail + $json.summary.Warning + $json.summary.NotApplicable + $json.summary.Info + $json.summary.Error
         $total | Should -Be 3
+    }
+}
+
+Describe 'Get-METReport output path reporting' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # The file lands in <OutputPath>/<timestamp>-<tenant>/MET-report.html - a subfolder
+    # the user never named and was never told about, because both announcements used
+    # Write-Verbose. This is README Quickstart step 5.
+    It 'announces the resolved path on the host stream' {
+        $output = Join-Path $TestDrive 'q1'
+        $hostOutput = @($script:Sample | Get-METReport -Format HTML -OutputPath $output -NoLaunch 6>&1) -join "`n"
+
+        $hostOutput | Should -Match 'MET-report\.html'
+        $hostOutput | Should -Match ([regex]::Escape($output))
+    }
+
+    It 'returns the written files with -PassThru' {
+        $output = Join-Path $TestDrive 'q2'
+        $written = $script:Sample | Get-METReport -Format All -OutputPath $output -NoLaunch -PassThru
+
+        @($written).Count | Should -Be 2
+        @($written | ForEach-Object { $_.Name }) | Should -Contain 'MET-report.json'
+        @($written | ForEach-Object { $_.Name }) | Should -Contain 'MET-report.html'
+        foreach ($file in $written) { Test-Path -LiteralPath $file.FullName | Should -BeTrue }
+    }
+
+    It 'returns nothing without -PassThru' {
+        $output = Join-Path $TestDrive 'q3'
+        $written = $script:Sample | Get-METReport -Format JSON -OutputPath $output -NoLaunch
+
+        $written | Should -BeNullOrEmpty
+    }
+
+    It 'does not launch a browser with -NoLaunch' {
+        Mock -ModuleName 'MET' -CommandName 'Start-Process' -MockWith { }
+        $output = Join-Path $TestDrive 'q4'
+
+        $script:Sample | Get-METReport -Format HTML -OutputPath $output -NoLaunch | Out-Null
+
+        Should -Invoke -ModuleName 'MET' -CommandName 'Start-Process' -Times 0
+    }
+}
+
+Describe 'Get-METReport format and path combinations' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # -Format All already errors correctly here. HTML dumped 1178 lines of markup to
+    # the console instead. JSON to stdout is left alone - piping it is genuinely useful.
+    It 'throws for -Format HTML with no -OutputPath' {
+        { $script:Sample | Get-METReport -Format HTML } |
+            Should -Throw -ExpectedMessage '*-OutputPath*'
+    }
+
+    It 'still allows -Format JSON with no -OutputPath' {
+        { $script:Sample | Get-METReport -Format JSON } | Should -Not -Throw
+    }
+
+    # -Format All also requires -OutputPath, but $wantsHtml includes 'All' so the HTML
+    # guard fired first and told a user who asked for All that '-Format HTML requires
+    # -OutputPath' - naming a format they never requested.
+    It 'names the format actually requested when -Format All has no -OutputPath' {
+        { $script:Sample | Get-METReport -Format All } |
+            Should -Throw -ExpectedMessage '*-Format All*'
+    }
+
+    It 'still names HTML when -Format HTML has no -OutputPath' {
+        { $script:Sample | Get-METReport -Format HTML } |
+            Should -Throw -ExpectedMessage '*-Format HTML*'
+    }
+
+    It 'warns that -OutputPath is ignored for -Format Console' {
+        $warnings = @()
+        $script:Sample | Get-METReport -Format Console -OutputPath (Join-Path $TestDrive 'ignored') `
+            -WarningVariable warnings -WarningAction SilentlyContinue 6>&1 | Out-Null
+
+        ($warnings -join ' ') | Should -Match 'Console'
+        ($warnings -join ' ') | Should -Match 'ignored'
+    }
+
+    It 'does not create the directory it was told to ignore' {
+        $ignored = Join-Path $TestDrive 'ignored2'
+        $script:Sample | Get-METReport -Format Console -OutputPath $ignored `
+            -WarningAction SilentlyContinue 6>&1 | Out-Null
+
+        Test-Path -LiteralPath $ignored | Should -BeFalse
+    }
+}
+
+Describe 'Get-METReport path and input handling' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..' '..' 'Private' 'New-METCheckResult.ps1')
+        $script:Sample = New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+            -Result Fail -Severity High -AffectedObject 'Default Policy' -Finding 'Disabled.'
+    }
+
+    # -Path interprets [ and ] as a wildcard character class, so a customer folder
+    # named 'Contoso [2026]' silently resolved to nothing.
+    It 'writes to a path containing square brackets' {
+        $bracketed = Join-Path $TestDrive 'Contoso [2026]'
+        $script:Sample | Get-METReport -Format JSON -OutputPath $bracketed -NoLaunch | Out-Null
+
+        $folder = Get-ChildItem -LiteralPath $bracketed -Directory | Select-Object -First 1
+        Test-Path -LiteralPath (Join-Path $folder.FullName 'MET-report.json') | Should -BeTrue
+    }
+
+    # Split-Path has no parameter set combining -LiteralPath with -Parent or -Leaf, so
+    # converting these two call sites to -LiteralPath made every -OutputPath that names a
+    # file throw 'Parameter set cannot be resolved' before writing anything - exactly the
+    # two invocations README/CLAUDE.md document. Every other test here passes a directory,
+    # which takes the other branch, so 1041 green tests never touched this.
+    It 'writes a JSON report when -OutputPath names a file' {
+        $target = Join-Path $TestDrive 'named-json' 'custom-name.json'
+
+        { $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-json') -Recurse -File -Filter 'custom-name.json')
+        $written.Count | Should -Be 1
+    }
+
+    It 'writes an HTML report when -OutputPath names a file' {
+        $target = Join-Path $TestDrive 'named-html' 'custom-name.html'
+
+        { $script:Sample | Get-METReport -Format HTML -OutputPath $target -NoLaunch | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-html') -Recurse -File -Filter 'custom-name.html')
+        $written.Count | Should -Be 1
+    }
+
+    # The named file still lands inside the per-run <timestamp>-<tenant> subfolder, which is
+    # the behavior that shipped before the -LiteralPath regression. Asserted so a future
+    # change to that layout is a deliberate one.
+    It 'keeps a named output file inside the per-run assessment folder' {
+        $target = Join-Path $TestDrive 'named-layout' 'custom-name.json'
+
+        $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null
+
+        $runFolder = Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-layout') -Directory | Select-Object -First 1
+        $runFolder | Should -Not -BeNullOrEmpty
+        Test-Path -LiteralPath (Join-Path $runFolder.FullName 'custom-name.json') | Should -BeTrue
+    }
+
+    # -OutputPath containing brackets must survive the file-naming branch too, which is
+    # why the fix uses [System.IO.Path] rather than reverting to Split-Path -Path.
+    It 'writes to a named output file under a bracketed folder' {
+        $target = Join-Path $TestDrive 'Contoso [2027]' 'custom-name.json'
+
+        { $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null } |
+            Should -Not -Throw
+
+        $written = @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'Contoso [2027]') -Recurse -File -Filter 'custom-name.json')
+        $written.Count | Should -Be 1
     }
 }

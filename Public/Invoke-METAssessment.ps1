@@ -1,5 +1,5 @@
-﻿function Invoke-METTriage {
-    [CmdletBinding()]
+﻿function Invoke-METAssessment {
+    [CmdletBinding(PositionalBinding = $false)]
     param(
         [Parameter()]
         [ValidateSet('MDO','EXO','Teams')]
@@ -24,10 +24,48 @@
         [switch] $Detailed
     )
 
+    # Every MDO and EXO check needs Exchange Online, and Teams001/002/004 call
+    # Exchange-hosted cmdlets too. Without a session the run took 95 seconds to
+    # produce 51 results scoring 11/Critical, 45 of them errors - an artifact that
+    # reads as a genuine assessment. Fail at the door instead. -ListChecks is
+    # exempt: it is a documented dry-run that must work before connecting.
+    if (-not $ListChecks) {
+        # -ErrorAction SilentlyContinue does not suppress command *resolution* failure, so
+        # with ExchangeOnlineManagement not installed this leaked a raw
+        # CommandNotFoundException instead of the actionable guard below.
+        $exoCmdletAvailable = [bool](Get-Command -Name 'Get-ConnectionInformation' -ErrorAction SilentlyContinue)
+        # Get-ConnectionInformation also returns records whose State is Disconnected or
+        # Reconnecting. Treating any record as a live session let a stale connection past this
+        # guard and straight back into the all-error report it exists to prevent, so filter on
+        # State exactly as the connection-reuse logic in Connect-METSession.ps1 already does.
+        $exoSession = if ($exoCmdletAvailable) {
+            @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+                Where-Object { $_.State -eq 'Connected' })
+        }
+        else { @() }
+
+        if (-not $exoSession) {
+            $message = if ($exoCmdletAvailable) {
+                'Not connected to Exchange Online. Run Connect-METSession first.'
+            }
+            else {
+                'Not connected to Exchange Online: the ExchangeOnlineManagement module is not available in this session, so Get-ConnectionInformation could not be resolved. Run Test-METPrerequisites to check the required modules, then Connect-METSession.'
+            }
+
+            $PSCmdlet.ThrowTerminatingError(
+                [System.Management.Automation.ErrorRecord]::new(
+                    [System.InvalidOperationException]::new($message),
+                    'METNotConnected',
+                    [System.Management.Automation.ErrorCategory]::ConnectionError,
+                    $null))
+        }
+    }
+
     $checksRoot = Join-Path $PSScriptRoot '..' 'Checks'
 
-    $checkFiles = Get-ChildItem -Path $checksRoot -Recurse -Filter 'MET-*.ps1' |
+    $allCheckFiles = Get-ChildItem -LiteralPath $checksRoot -Recurse -Filter 'MET-*.ps1' |
         Sort-Object Name
+    $checkFiles = $allCheckFiles
 
     if ($Category) {
         $checkFiles = $checkFiles | Where-Object {
@@ -47,6 +85,18 @@
             $id = ($_.BaseName -split '-')[0..1] -join '-'
             $ExcludeCheckId -notcontains $id
         }
+    }
+
+    $knownCheckIds = @($allCheckFiles | ForEach-Object { ($_.BaseName -split '-')[0..1] -join '-' })
+
+    foreach ($requested in @($CheckId) + @($ExcludeCheckId)) {
+        if ($requested -and $knownCheckIds -notcontains $requested) {
+            Write-Warning "'$requested' matched no check. Run Invoke-METAssessment -ListChecks to list the available check IDs (they look like 'MET-EXO010', including the MET- prefix)."
+        }
+    }
+
+    if (@($checkFiles).Count -eq 0) {
+        Write-Warning 'No checks matched the given -Category/-CheckId/-ExcludeCheckId combination. Nothing will run. Run Invoke-METAssessment -ListChecks to list the available checks.'
     }
 
     if ($ListChecks) {
@@ -69,7 +119,7 @@
         TenantName      = ''
     }
 
-    Write-Progress -Activity 'MET Triage' -Status 'Initializing - fetching accepted domains...' `
+    Write-Progress -Activity 'MET Assessment' -Status 'Initializing - fetching accepted domains...' `
         -PercentComplete 0 -Id 1
 
     try {
@@ -105,7 +155,7 @@
     foreach ($file in $checkFiles) {
         $currentIndex++
         $checkIdDisplay = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
-        Write-Progress -Activity 'MET Triage' -Status "$checkIdDisplay - $($file.BaseName)" `
+        Write-Progress -Activity 'MET Assessment' -Status "$checkIdDisplay - $($file.BaseName)" `
             -PercentComplete ([int]($currentIndex / $totalChecks * 100)) `
             -CurrentOperation "Check $currentIndex of $totalChecks" -Id 1
         Write-Verbose "Running check: $($file.BaseName)"
@@ -113,7 +163,7 @@
         # Run the check script inside a scriptblock so that:
         #   1. $METContext is injected as a local variable the script can read.
         #   2. `return` inside the check script exits only this scriptblock,
-        #      not Invoke-METTriage, avoiding the dot-source return-scope trap.
+        #      not Invoke-METAssessment, avoiding the dot-source return-scope trap.
         #   3. Hashtable fields (e.g. GroupMembers) mutated by the check script
         #      persist across checks because hashtables are reference types.
         $checkPath = $file.FullName
@@ -143,6 +193,7 @@
         catch {
             $checkIdPart = ($file.BaseName -split '-' | Select-Object -First 2) -join '-'
             $errResult = [PSCustomObject]@{
+                PSTypeName     = 'MET.CheckResult'
                 CheckId        = $checkIdPart
                 Category       = $file.Directory.Name
                 Name           = $file.BaseName
@@ -166,7 +217,7 @@
         }
     }
 
-    Write-Progress -Activity 'MET Triage' -Completed -Id 1
+    Write-Progress -Activity 'MET Assessment' -Completed -Id 1
 
     if ($PassThru) { return }
 

@@ -6,7 +6,7 @@ BeforeAll {
 
     # Every service cmdlet a check (or a Private helper a check calls) reaches for.
     # Stubs must be created in the MODULE's session state, not the test file's:
-    # Invoke-METTriage dot-sources check scripts inside a scriptblock bound to the
+    # Invoke-METAssessment dot-sources check scripts inside a scriptblock bound to the
     # module, so name resolution walks module scope then global scope and never
     # reaches Pester's script scope. Stubs defined here as plain `function Get-X {}`
     # were therefore invisible to every check, and the whole run failed on
@@ -20,6 +20,7 @@ BeforeAll {
         'Get-ArcConfig'
         'Get-AtpPolicyForO365'
         'Get-ATPProtectionPolicyRule'
+        'Get-ConnectionInformation'
         'Get-CsExternalAccessPolicy'
         'Get-CsOnlineUser'
         'Get-CsTeamsAppPermissionPolicy'
@@ -79,6 +80,12 @@ BeforeAll {
         foreach ($name in $Names) {
             Set-Item -Path "function:script:$name" -Value { }
         }
+
+        # The generic stub above returns nothing, which the Invoke-METAssessment
+        # preflight reads as "not connected". This one has to return an object.
+        Set-Item -Path 'function:script:Get-ConnectionInformation' -Value {
+            [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com' }
+        }
     } $script:TenantCmdlets
 
     function Get-METCheckFile {
@@ -88,7 +95,7 @@ BeforeAll {
     }
 }
 
-Describe 'Invoke-METTriage' {
+Describe 'Invoke-METAssessment' {
 
     Context 'Mock reachability' {
 
@@ -100,7 +107,7 @@ Describe 'Invoke-METTriage' {
                 [PSCustomObject]@{ EnableSafeDocs = $true; AllowSafeDocsOpen = $false }
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO012')
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO012')
 
             $results.Count             | Should -Be 1
             $results[0].Result         | Should -Be 'Pass'
@@ -115,14 +122,14 @@ Describe 'Invoke-METTriage' {
         It 'Returns check descriptors without executing checks' {
             Mock -ModuleName MET Get-AcceptedDomain { @() }
 
-            $list = Invoke-METTriage -ListChecks
+            $list = Invoke-METAssessment -ListChecks
             $list | Should -Not -BeNullOrEmpty
             $list | ForEach-Object { $_ | Should -BeOfType [PSCustomObject] }
             Should -Invoke -ModuleName MET Get-AcceptedDomain -Exactly 0
         }
 
         It 'Every descriptor has CheckId, Category, and Script fields' {
-            $list = Invoke-METTriage -ListChecks
+            $list = Invoke-METAssessment -ListChecks
             $list | Should -Not -BeNullOrEmpty
             $list | ForEach-Object {
                 $_.PSObject.Properties.Name | Should -Contain 'CheckId'
@@ -132,7 +139,7 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'CheckIds match the expected MET-XXX000 pattern' {
-            $list = Invoke-METTriage -ListChecks
+            $list = Invoke-METAssessment -ListChecks
             $list | Should -Not -BeNullOrEmpty
             $list | ForEach-Object {
                 $_.CheckId | Should -Match '^MET-(MDO|EXO|Teams)\d{3}$'
@@ -140,15 +147,15 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Respects -Category filter' {
-            $mdoList = Invoke-METTriage -ListChecks -Category MDO
+            $mdoList = Invoke-METAssessment -ListChecks -Category MDO
             $mdoList | Should -Not -BeNullOrEmpty
             $mdoList.Count | Should -Be (Get-METCheckFile -Category 'MDO').Count
             $mdoList | ForEach-Object { $_.Category | Should -Be 'MDO' }
         }
 
         It 'Respects -ExcludeCheckId filter' {
-            $all      = Invoke-METTriage -ListChecks
-            $filtered = Invoke-METTriage -ListChecks -ExcludeCheckId 'MET-MDO001'
+            $all      = Invoke-METAssessment -ListChecks
+            $filtered = Invoke-METAssessment -ListChecks -ExcludeCheckId 'MET-MDO001'
             $filtered | Should -Not -BeNullOrEmpty
             $filtered | ForEach-Object { $_.CheckId | Should -Not -Be 'MET-MDO001' }
             $filtered.Count | Should -Be ($all.Count - 1)
@@ -163,7 +170,7 @@ Describe 'Invoke-METTriage' {
             $onDisk = Get-METCheckFile
             $onDisk.Count | Should -BeGreaterOrEqual 51
 
-            $list = Invoke-METTriage -ListChecks
+            $list = Invoke-METAssessment -ListChecks
             $list.Count | Should -Be $onDisk.Count
             @($list.Script | Sort-Object) | Should -Be @($onDisk.Name | Sort-Object)
         }
@@ -190,7 +197,7 @@ Describe 'Invoke-METTriage' {
                 }
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-EXO001', 'MET-EXO003' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-EXO001', 'MET-EXO003' -Detailed)
 
             # One Get-AcceptedDomain call for two checks that both consume the domain
             # list: the pre-fetch is shared, not repeated per check.
@@ -210,7 +217,7 @@ Describe 'Invoke-METTriage' {
                 @([PSCustomObject]@{ PrimarySmtpAddress = 'alice@contoso.com'; RecipientTypeDetails = 'UserMailbox' })
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO006', 'MET-MDO009' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO006', 'MET-MDO009' -Detailed)
 
             # Both checks resolve effective coverage over the tenant mailbox list.
             # The first stores it on $METContext; the second must reuse it, so the
@@ -227,7 +234,7 @@ Describe 'Invoke-METTriage' {
                 [PSCustomObject]@{ EnableSafeDocs = $true; AllowSafeDocsOpen = $false }
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO012')
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO012')
 
             $results[0].Metadata                 | Should -Not -BeNullOrEmpty
             $results[0].Metadata['METRunTenant'] | Should -Be 'contoso.com'
@@ -255,7 +262,7 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Converts the terminating error into a scored Fail result' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO009', 'MET-MDO012', 'MET-EXO010' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO009', 'MET-MDO012', 'MET-EXO010' -Detailed)
 
             $crashed = @($results | Where-Object CheckId -eq 'MET-MDO009')
             $crashed.Count             | Should -Be 1
@@ -272,7 +279,7 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Leaves the neighbouring checks returning their real verdicts' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO009', 'MET-MDO012', 'MET-EXO010' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO009', 'MET-MDO012', 'MET-EXO010' -Detailed)
 
             @($results.CheckId | Sort-Object -Unique) |
                 Should -Be @('MET-EXO010', 'MET-MDO009', 'MET-MDO012')
@@ -292,7 +299,7 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Still stamps run provenance on the synthetic failure result' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO009' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO009' -Detailed)
 
             $results[0].Finding                  | Should -Be 'Check script failed to execute'
             $results[0].Metadata                 | Should -Not -BeNullOrEmpty
@@ -303,21 +310,21 @@ Describe 'Invoke-METTriage' {
     Context '-Category filter' {
 
         It 'Returns one result per MDO check and nothing else with -Category MDO' {
-            $results = @(Invoke-METTriage -Category MDO)
+            $results = @(Invoke-METAssessment -Category MDO)
             $results | Should -Not -BeNullOrEmpty
             $results.Count | Should -Be (Get-METCheckFile -Category 'MDO').Count
             $results | ForEach-Object { $_.Category | Should -Be 'MDO' }
         }
 
         It 'Returns one result per EXO check and nothing else with -Category EXO' {
-            $results = @(Invoke-METTriage -Category EXO)
+            $results = @(Invoke-METAssessment -Category EXO)
             $results | Should -Not -BeNullOrEmpty
             $results.Count | Should -Be (Get-METCheckFile -Category 'EXO').Count
             $results | ForEach-Object { $_.Category | Should -Be 'EXO' }
         }
 
         It 'Returns one result per Teams check and nothing else with -Category Teams' {
-            $results = @(Invoke-METTriage -Category Teams)
+            $results = @(Invoke-METAssessment -Category Teams)
             $results | Should -Not -BeNullOrEmpty
             $results.Count | Should -Be (Get-METCheckFile -Category 'Teams').Count
             $results | ForEach-Object { $_.Category | Should -Be 'Teams' }
@@ -327,7 +334,7 @@ Describe 'Invoke-METTriage' {
     Context '-CheckId filter' {
 
         It 'Returns only results for MET-MDO001 when specified' {
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO001')
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO001')
             $results | Should -Not -BeNullOrEmpty
             $results | ForEach-Object { $_.CheckId | Should -Be 'MET-MDO001' }
         }
@@ -336,8 +343,8 @@ Describe 'Invoke-METTriage' {
     Context '-ExcludeCheckId filter' {
 
         It 'Excludes specified check from MDO results' {
-            $all      = @(Invoke-METTriage -Category MDO)
-            $excluded = @(Invoke-METTriage -Category MDO -ExcludeCheckId 'MET-MDO001')
+            $all      = @(Invoke-METAssessment -Category MDO)
+            $excluded = @(Invoke-METAssessment -Category MDO -ExcludeCheckId 'MET-MDO001')
             $excluded | Should -Not -BeNullOrEmpty
             $excluded | ForEach-Object { $_.CheckId | Should -Not -Be 'MET-MDO001' }
             $excluded.Count | Should -Be ($all.Count - 1)
@@ -369,7 +376,7 @@ Describe 'Invoke-METTriage' {
 
         It 'Streams PSCustomObject results to the pipeline as checks complete' {
             $streamed = [System.Collections.Generic.List[PSCustomObject]]::new()
-            Invoke-METTriage -CheckId 'MET-EXO002' -PassThru | ForEach-Object {
+            Invoke-METAssessment -CheckId 'MET-EXO002' -PassThru | ForEach-Object {
                 $streamed.Add($_)
                 $_ | Should -BeOfType [PSCustomObject]
             }
@@ -377,8 +384,8 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Streams the pre-aggregation objects the default mode collapses' {
-            $streamed = @(Invoke-METTriage -CheckId 'MET-EXO002' -PassThru)
-            $batch    = @(Invoke-METTriage -CheckId 'MET-EXO002')
+            $streamed = @(Invoke-METAssessment -CheckId 'MET-EXO002' -PassThru)
+            $batch    = @(Invoke-METAssessment -CheckId 'MET-EXO002')
 
             @($streamed.AffectedObject | Sort-Object) | Should -Be @('contoso.com', 'fabrikam.com')
             @($streamed.Result | Sort-Object -Unique) | Should -Be @('Pass')
@@ -392,8 +399,8 @@ Describe 'Invoke-METTriage' {
         }
 
         It 'Streams exactly what -Detailed collects, object for object' {
-            $collected = @(Invoke-METTriage -CheckId 'MET-EXO002' -Detailed)
-            $streamed  = @(Invoke-METTriage -CheckId 'MET-EXO002' -PassThru)
+            $collected = @(Invoke-METAssessment -CheckId 'MET-EXO002' -Detailed)
+            $streamed  = @(Invoke-METAssessment -CheckId 'MET-EXO002' -PassThru)
 
             $streamed.Count | Should -Be $collected.Count
             for ($i = 0; $i -lt $collected.Count; $i++) {
@@ -415,7 +422,7 @@ Describe 'Invoke-METTriage' {
                 [PSCustomObject]@{ EnableSafeDocs = $true; AllowSafeDocsOpen = $false }
             }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO012')
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO012')
             $results | Should -Not -BeNullOrEmpty
             $results[0].Result | Should -Be 'Pass'
             $results | ForEach-Object {
@@ -435,7 +442,7 @@ Describe 'Invoke-METTriage' {
             Mock -ModuleName MET Get-AntiPhishPolicy { @() }
             Mock -ModuleName MET Get-AntiPhishRule   { @() }
 
-            $results = @(Invoke-METTriage -CheckId 'MET-MDO004' -Detailed)
+            $results = @(Invoke-METAssessment -CheckId 'MET-MDO004' -Detailed)
 
             $results.Count       | Should -Be 1
             $results[0].CheckId  | Should -Be 'MET-MDO004'
@@ -450,7 +457,7 @@ Describe 'Invoke-METTriage' {
 
         It 'Returns exactly one aggregated result per check on disk without throwing' {
             $results = $null
-            { $script:fullRun = @(Invoke-METTriage) } | Should -Not -Throw
+            { $script:fullRun = @(Invoke-METAssessment) } | Should -Not -Throw
             $results = $script:fullRun
 
             $onDisk = Get-METCheckFile

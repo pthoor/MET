@@ -1,6 +1,14 @@
 ﻿function Test-METPrerequisites {
-    [CmdletBinding()]
-    param()
+    [CmdletBinding(PositionalBinding = $false)]
+    param(
+        [Parameter()]
+        [switch] $PassThru,
+
+        # A Test- verb should answer a yes/no question. Without this,
+        # if (Test-METPrerequisites) is always true - a non-empty array is truthy.
+        [Parameter()]
+        [switch] $Quiet
+    )
 
     $checks = [System.Collections.Generic.List[PSCustomObject]]::new()
 
@@ -19,14 +27,13 @@
 
     # ── Modules ──────────────────────────────────────────────────────────────
     $moduleChecks = @(
-        [PSCustomObject]@{ Name = 'ExchangeOnlineManagement';         Min = '3.0.0'; Optional = $false }
+        [PSCustomObject]@{ Name = 'ExchangeOnlineManagement';         Min = '3.7.2'; Optional = $false }
         # Graph is optional: Connect-METSession treats a missing module or a
         # failed connection as non-fatal, and Expand-METGroupMembership falls
         # back to Exchange Online cmdlets.
         [PSCustomObject]@{ Name = 'Microsoft.Graph.Identity.SignIns'; Min = '2.0.0'; Optional = $true  }
         [PSCustomObject]@{ Name = 'Microsoft.Graph.Groups';           Min = '2.0.0'; Optional = $true  }
         [PSCustomObject]@{ Name = 'MicrosoftTeams';                   Min = '6.0.0'; Optional = $true  }
-        [PSCustomObject]@{ Name = 'Pester';                           Min = '5.0.0'; Optional = $true  }
     )
 
     foreach ($m in $moduleChecks) {
@@ -91,6 +98,10 @@
     Write-Host '  MET Prerequisite Check' -ForegroundColor Cyan
     Write-Host '  ─────────────────────────────────────────────────────' -ForegroundColor Cyan
 
+    $labelWidth = (@($checks | ForEach-Object {
+        "$($_.Component)$(if ($_.Optional) { ' [optional]' })".Length
+    }) | Measure-Object -Maximum).Maximum + 2
+
     foreach ($c in $checks) {
         $color = switch -Wildcard ($c.Status) {
             'OK'     { 'Green' }
@@ -98,9 +109,9 @@
             default  { 'Yellow'}
         }
         $tag = if ($c.Optional) { ' [optional]' } else { '' }
-        Write-Host ("  {0,-42} {1}" -f "$($c.Component)$tag", $c.Status) -ForegroundColor $color
+        Write-Host ("  {0,-$labelWidth} {1}" -f "$($c.Component)$tag", $c.Status) -ForegroundColor $color
         if ($c.Notes) {
-            Write-Host ("  {0,-42} {1}" -f '', $c.Notes) -ForegroundColor DarkGray
+            Write-Host ("  {0,-$labelWidth} {1}" -f '', $c.Notes) -ForegroundColor DarkGray
         }
     }
 
@@ -116,5 +127,6 @@
         Write-Host ''
     }
 
-    return $checks
+    if ($Quiet) { return -not [bool]$anyRequiredFail }
+    if ($PassThru) { return $checks }
 }

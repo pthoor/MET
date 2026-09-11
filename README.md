@@ -24,8 +24,10 @@
 Exchange Online is the only hard requirement - every MDO and EXO check runs through it, and `Connect-METSession` aborts if it cannot connect.
 
 ```powershell
-Install-Module ExchangeOnlineManagement -MinimumVersion 3.0.0 -Scope CurrentUser
+Install-Module ExchangeOnlineManagement -MinimumVersion 3.7.2 -Scope CurrentUser
 ```
+
+The floor is `-DisableWAM`, the switch `Connect-METSession` passes automatically off Windows; derived in `docs/superpowers/notes/2026-09-10-exo-version-floor.md`. Note EXO's own supported-OS table requires PowerShell 7.6.0+ starting at module 3.10.0 (3.5.0-3.9.2 need only 7.4.0+) - on MET's PowerShell 7.4 floor, EXO 3.10.x cannot be installed at all.
 
 ### Optional modules
 
@@ -139,7 +141,7 @@ Install-Module ExchangeOnlineManagement, Microsoft.Graph.Identity.SignIns, Micro
 Connect-METSession
 
 # 3. Run all checks
-$results = Invoke-METTriage
+$results = Invoke-METAssessment
 
 # 4. View in console
 $results | Get-METReport
@@ -151,6 +153,8 @@ $results | Get-METReport -Format HTML -OutputPath ./assessments
 $results | Get-METReport -Format JSON -OutputPath ./assessments
 ```
 
+`Invoke-METTriage` remains available as an alias.
+
 ### Service Principal (unattended / CI)
 
 ```powershell
@@ -159,7 +163,7 @@ Connect-METSession `
     -TenantId            $tenantId `
     -CertificateThumbprint $thumb
 
-$results = Invoke-METTriage
+$results = Invoke-METAssessment
 $results | Get-METReport -Format JSON -OutputPath ./assessments
 ```
 
@@ -180,19 +184,19 @@ Connect-METSession `
 
 ```powershell
 # MDO checks only
-Invoke-METTriage -Category MDO
+Invoke-METAssessment -Category MDO
 
 # EXO checks only
-Invoke-METTriage -Category EXO
+Invoke-METAssessment -Category EXO
 
 # Teams checks only (requires MicrosoftTeams module)
-Invoke-METTriage -Category Teams
+Invoke-METAssessment -Category Teams
 
 # Specific check IDs
-Invoke-METTriage -CheckId MET-MDO001, MET-EXO001
+Invoke-METAssessment -CheckId MET-MDO001, MET-EXO001
 
 # All checks except transport rule audit (informational)
-Invoke-METTriage -ExcludeCheckId MET-EXO007
+Invoke-METAssessment -ExcludeCheckId MET-EXO007
 ```
 
 ### Multi-tenant / MSSP access
@@ -211,16 +215,16 @@ For app-only auth **that includes Exchange Online**, `-TenantId` **must be the c
 
 ```powershell
 Connect-METSession -DelegatedOrganization customerA.onmicrosoft.com
-Invoke-METTriage | Get-METReport -Format All -OutputPath ./assessments/customerA-2026-09-09/
+Invoke-METAssessment | Get-METReport -Format All -OutputPath ./assessments/customerA-2026-09-09/
 
 Disconnect-METSession
 Connect-METSession -DelegatedOrganization customerB.onmicrosoft.com
-Invoke-METTriage | Get-METReport -Format All -OutputPath ./assessments/customerB-2026-09-09/
+Invoke-METAssessment | Get-METReport -Format All -OutputPath ./assessments/customerB-2026-09-09/
 ```
 
 Give each customer its own `-OutputPath`. The report header (console/JSON/HTML) records the auth mode, tenant, and services used for the run, from state `Connect-METSession` sets on success - send that to the customer's SOC so they can reconcile your sign-in against a known MET run instead of triaging it as an incident.
 
-> `Invoke-METTriage -DelegatedOrganization` is a placeholder and does not scope anything yet - the delegation happens entirely at `Connect-METSession` time, and `Invoke-METTriage` then runs against whatever session is live. Under GDAP, Graph checks degrade non-fatally: group expansion falls back to Exchange Online cmdlets and `MET-Teams014` reports `NotApplicable` unless the delegated Graph roles are present.
+> `Invoke-METAssessment -DelegatedOrganization` is a placeholder and does not scope anything yet - the delegation happens entirely at `Connect-METSession` time, and `Invoke-METAssessment` then runs against whatever session is live. Under GDAP, Graph checks degrade non-fatally: group expansion falls back to Exchange Online cmdlets and `MET-Teams014` reports `NotApplicable` unless the delegated Graph roles are present.
 
 ### Skip a service
 

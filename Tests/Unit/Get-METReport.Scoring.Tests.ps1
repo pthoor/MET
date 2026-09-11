@@ -1,6 +1,7 @@
 BeforeAll {
     $root = Join-Path $PSScriptRoot '..' '..'
     Import-Module (Join-Path $root 'MET.psd1') -Force
+    . (Join-Path $root 'Private' 'New-METCheckResult.ps1')
 
     function New-Result {
         param(
@@ -85,14 +86,17 @@ Describe 'Posture score arithmetic' {
             ($results | Get-METReport -Format JSON -TenantName 'contoso.com' | ConvertFrom-Json).postureScore |
                 Should -Be $case.Score
 
-            $html = $results | Get-METReport -Format HTML -TenantName 'contoso.com' | Out-String
+            $folder = Join-Path $TestDrive "band-$($case.Result)"
+            $results | Get-METReport -Format HTML -OutputPath $folder -TenantName 'contoso.com' -NoLaunch | Out-Null
+            $generated = Get-ChildItem -Path $folder -Recurse -Filter '*.html' | Select-Object -First 1
+            $html = Get-Content -Path $generated.FullName -Raw
             $html | Should -Match $case.Band -Because "a score of $($case.Score) is documented as $($case.Band)"
         }
     }
 }
 
 Describe 'Checks that failed to run' {
-    # Invoke-METTriage synthesises a Fail/High result with Score = 0 for any check that
+    # Invoke-METAssessment synthesises a Fail/High result with Score = 0 for any check that
     # throws. If that score were null, Get-METReport would drop the check from the
     # weighted average and report a clean posture over a table of its own failures.
     It 'Counts a crashed check against the score instead of silently excluding it' {
@@ -142,5 +146,78 @@ Describe 'Malformed results do not destroy the report' {
             (New-Result -CheckId 'MET-B' -Result 'Fail' -Severity $null  -Score 0)
         )
         $json.checks.Count | Should -Be 2
+    }
+}
+
+Describe 'Get-METReport with no scorable results' {
+    # An empty set is not a catastrophic tenant, it is an absent measurement.
+    It 'does not present an empty result set as 0 / Critical' {
+        $output = @(Get-METReport -InputObject @() -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'No scorable results'
+        $output | Should -Not -Match 'Critical'
+    }
+
+    It 'does not present an all-Info result set as 0 / Critical' {
+        $info = New-METCheckResult -CheckId 'MET-EXO016' -Category EXO -Name 'ARC Trusted Sealers Review' `
+            -Result Info -Severity Informational -AffectedObject 'Tenant' -Finding 'None configured.'
+
+        $output = @($info | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'No scorable results'
+    }
+}
+
+Describe 'Get-METReport issues table ordering' {
+    # Sort-Object Severity is alphabetical: Critical, High, Low, Medium.
+    It 'orders by severity weight, not alphabetically' {
+        $results = @(
+            New-METCheckResult -CheckId 'MET-EXO008' -Category EXO -Name 'Quarantine Retention' `
+                -Result Fail -Severity Low -AffectedObject 'Default' -Finding 'Low finding.'
+            New-METCheckResult -CheckId 'MET-EXO021' -Category EXO -Name 'Mailbox Audit Logging' `
+                -Result Fail -Severity Medium -AffectedObject 'Tenant' -Finding 'Medium finding.'
+            New-METCheckResult -CheckId 'MET-EXO010' -Category EXO -Name 'Direct Send Protection' `
+                -Result Fail -Severity Critical -AffectedObject 'Tenant' -Finding 'Critical finding.'
+            New-METCheckResult -CheckId 'MET-MDO001' -Category MDO -Name 'Safe Links' `
+                -Result Fail -Severity High -AffectedObject 'Default' -Finding 'High finding.'
+        )
+
+        $output = @($results | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $positions = @('Critical finding.','High finding.','Medium finding.','Low finding.') |
+            ForEach-Object { $output.IndexOf($_) }
+
+        $positions[0] | Should -BeLessThan $positions[1]
+        $positions[1] | Should -BeLessThan $positions[2]
+        $positions[2] | Should -BeLessThan $positions[3]
+    }
+}
+
+Describe 'Get-METReport error bucket consistency' {
+    BeforeAll {
+        $script:Errored = [PSCustomObject]@{
+            PSTypeName = 'MET.CheckResult'
+            CheckId = 'MET-EXO011'; Category = 'EXO'; Name = 'Mail Flow Connector Hygiene'
+            Result = 'Fail'; Severity = 'High'; Score = 0; AffectedObject = 'N/A'
+            Finding = 'Check script failed to execute'; Recommendation = ''; ReferenceUrl = ''
+            Timestamp = [datetime]::UtcNow; Error = 'Unable to reach the service.'; Metadata = $null
+        }
+    }
+
+    # Pass 0, Fail 0, Warning 4, Error 45 printed directly above 40 rows whose Result
+    # column read 'Fail'. Bucketing errored checks separately is the documented design;
+    # the table contradicting the summary above it is not.
+    It 'labels errored rows Error rather than Fail' {
+        $output = @($script:Errored | Get-METReport -Format Console 6>&1) -join "`n"
+
+        $output | Should -Match 'could not run'
+        $output | Should -Match 'MET-EXO011'
+    }
+
+    It 'counts an errored check once, in the Error bucket only' {
+        $json = $script:Errored | Get-METReport -Format JSON | ConvertFrom-Json
+
+        $json.summary.Error | Should -Be 1
+        $json.summary.Fail  | Should -Be 0
     }
 }

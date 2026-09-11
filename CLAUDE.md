@@ -25,7 +25,7 @@ MET/
 ├── MET.psd1                         # Module manifest
 ├── MET.psm1                         # Module root - dot-sources Public/ and Private/
 ├── Public/
-│   ├── Invoke-METTriage.ps1         # Main entry point - runs all or selected checks
+│   ├── Invoke-METAssessment.ps1     # Main entry point - runs all or selected checks
 │   ├── Get-METReport.ps1            # Formats and exports results (console / JSON / HTML)
 │   ├── Connect-METSession.ps1       # Handles EXO + Teams + Graph auth
 │   ├── Disconnect-METSession.ps1    # Tears down all three legs; clears tenant-identity tracking
@@ -108,7 +108,7 @@ MET/
 │   │   ├── Checks.Teams.Tests.ps1        # Teams002, Teams003, Teams004 only - every other Teams check has its own file below
 │   │   └── Checks.<ID>.Tests.ps1         # One self-contained file per check (own BeforeAll, own cmdlet stubs) rather than sharing one per-category file. Avoids every new check needing to touch a shared file. This is the convention for all new checks, and existing checks move here as they gain coverage - MDO008, MDO010, MDO011, MDO012, Teams005 and EXO007 were added this way. Some also carry a suffix when a check has more than one file (e.g. Checks.MDO001.EffectiveCoverage.Tests.ps1).
 │   └── Integration/
-│       └── Invoke-METTriage.Tests.ps1
+│       └── Invoke-METAssessment.Tests.ps1
 ├── docs/
 │   ├── checks/                       # One .md per check describing what it tests and why
 │   └── CONTRIBUTING.md
@@ -128,7 +128,7 @@ MET/
 | Requirement | Detail |
 |---|---|
 | PowerShell | 7.4+ (tested on 7.4, 7.6) |
-| ExchangeOnlineManagement | 3.9+ (modern auth, REST-based) - required |
+| ExchangeOnlineManagement | 3.7.2+ (modern auth, REST-based) - required. Floor is `-DisableWAM`, the switch `Connect-METSession` passes off Windows; derived in `docs/superpowers/notes/2026-09-10-exo-version-floor.md`. Note EXO's own supported-OS table requires PowerShell 7.6.0+ starting at module 3.10.0 (3.5.0-3.9.2 need only 7.4.0+) - on MET's PS 7.4 floor, EXO 3.10.x cannot be installed at all |
 | Microsoft.Graph.Identity.SignIns / .Groups | 2.x - optional; a missing module or failed Graph connection is non-fatal, and group expansion degrades to Exchange Online cmdlets (see [Connection Requirements for New Checks](#connection-requirements-for-new-checks)) |
 | MicrosoftTeams | 6.x+ (latest 7.x) - optional; Teams checks skip gracefully if absent |
 | Pester | 5.x for all tests |
@@ -146,8 +146,13 @@ No Python. No ARM. No Terraform. No legacy Basic Auth. Full support is Windows-o
 Import-Module ./MET.psd1 -Force
 
 # Lint (matches CI's lint job exactly - must be zero errors)
+# -Path is [string], so passing the array as one argument throws
+# "Cannot convert 'System.Object[]'" and analyses nothing while reporting no findings.
+# Loop one path at a time, as pester.yml does.
 Install-Module PSScriptAnalyzer -MinimumVersion 1.21.0 -Scope CurrentUser
-Invoke-ScriptAnalyzer -Path Public,Private,Checks -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+@('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1') | ForEach-Object {
+    Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+}
 
 # Unit tests (no tenant connection required - all EXO/Graph/Teams cmdlets are mocked)
 $config = New-PesterConfiguration
@@ -208,32 +213,34 @@ Every check returns one or more objects from `New-METCheckResult`. Shape:
 
 ---
 
-## Invoke-METTriage - Behaviour
+## Invoke-METAssessment - Behaviour
+
+`Invoke-METTriage` remains available as an alias.
 
 ```powershell
 # Run all checks
-Invoke-METTriage
+Invoke-METAssessment
 
 # Run only MDO checks
-Invoke-METTriage -Category MDO
+Invoke-METAssessment -Category MDO
 
 # Run specific check IDs
-Invoke-METTriage -CheckId MET-MDO001, MET-EXO001
+Invoke-METAssessment -CheckId MET-MDO001, MET-EXO001
 
 # Run against a delegated org (MSSP scenario)
-Invoke-METTriage -DelegatedOrganization contoso.onmicrosoft.com
+Invoke-METAssessment -DelegatedOrganization contoso.onmicrosoft.com
 
 # Exclude checks
-Invoke-METTriage -ExcludeCheckId MET-EXO007
+Invoke-METAssessment -ExcludeCheckId MET-EXO007
 
 # Dry-run: list what would run without connecting or executing anything
-Invoke-METTriage -ListChecks
+Invoke-METAssessment -ListChecks
 
 # Stream results as each check completes, instead of buffering
-Invoke-METTriage -PassThru
+Invoke-METAssessment -PassThru
 
 # Full per-object detail (skip the multi-item aggregation described below)
-Invoke-METTriage -Detailed
+Invoke-METAssessment -Detailed
 ```
 
 Returns `[PSCustomObject[]]` - the full collection of check results. `Get-METReport` handles formatting.
@@ -242,13 +249,13 @@ Returns `[PSCustomObject[]]` - the full collection of check results. `Get-METRep
 
 ### Check Execution Model
 
-`Invoke-METTriage` does not dot-source `Checks/` at module load time (unlike `Public/` and `Private/`, which `MET.psm1` loads on import). Instead, each call to `Invoke-METTriage`:
+`Invoke-METAssessment` does not dot-source `Checks/` at module load time (unlike `Public/` and `Private/`, which `MET.psm1` loads on import). Instead, each call to `Invoke-METAssessment`:
 
 1. Discovers check scripts fresh via `Get-ChildItem -Path Checks -Recurse -Filter 'MET-*.ps1'` - dropping a new file into `Checks/<Category>/` is enough to register it; no manifest or export list to update.
 2. Pre-fetches shared context once (currently `AcceptedDomains` via `Get-AcceptedDomain`) into a `$METContext` hashtable, so every check that needs it doesn't repeat the same round-trip.
-3. Runs each check inside a wrapper scriptblock - `& { param($METContext) . $checkPath } $METContext` - rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METTriage` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
+3. Runs each check inside a wrapper scriptblock - `& { param($METContext) . $checkPath } $METContext` - rather than a plain `. $checkPath`. This does three things simultaneously: injects `$METContext` as a local variable the check script can read; scopes `return` inside the check to the scriptblock instead of exiting `Invoke-METAssessment` itself; and because hashtables are reference types, lets a check mutate `$METContext` (e.g. cache group membership) so later checks reuse the work.
 4. Catches any terminating error per-check and converts it into a synthetic `Fail`/`High` result with the exception text in `Error`, so one broken check never aborts the run.
-5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object - see `Get-METAggregationNoun` in `Invoke-METTriage.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
+5. Unless `-Detailed` or `-PassThru` is passed, aggregates multiple result objects sharing the same `CheckId` (e.g. one per domain or per policy) into a single summary object - see `Get-METAggregationNoun` in `Invoke-METAssessment.ps1` for the per-check-family noun used in that summary (`domains`, `quarantine policies`, default `policies`).
 
 ---
 
@@ -411,7 +418,7 @@ Wraps `Connect-ExchangeOnline`, `Connect-MicrosoftTeams`, and `Connect-MgGraph`.
 - Interactive (browser by default; `-UseDeviceAuthentication` as a documented headless-only fallback - see below)
 - Service principal with certificate: `-CertificateThumbprint` (Windows certificate store) or `-CertificatePath` + `-CertificatePassword` (any platform, including Linux/macOS/Codespaces - `-CertificateThumbprint` is Windows-only per Microsoft's own docs), plus `-AppId`, `-TenantId`
 - Managed Identity (`-ManagedIdentity`)
-- Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METTriage's placeholder param of the same name. Threaded through to all three legs (EXO natively; Graph and Teams via their own `-TenantId` parameter, both of which accept a domain string for exactly this CSP/GDAP scenario - previously silently ignored for Graph/Teams, so a delegated-org run could authenticate against the operator's own home tenant instead of the customer's)
+- Delegated org (`-DelegatedOrganization`) - for Connect-METSession only, unlike Invoke-METAssessment's placeholder param of the same name. Threaded through to all three legs (EXO natively; Graph and Teams via their own `-TenantId` parameter, both of which accept a domain string for exactly this CSP/GDAP scenario - previously silently ignored for Graph/Teams, so a delegated-org run could authenticate against the operator's own home tenant instead of the customer's)
 - `-SkipExchangeOnline`, `-SkipGraph`, `-SkipTeams` - opt out of a leg entirely (e.g. skip Graph if you're only running EXO checks)
 - `Disconnect-METSession` - tears down all three legs (each in its own try/catch), and clears the tenant-identity tracking used for the reuse check above. Run this before switching `-DelegatedOrganization` in the same PowerShell session.
 

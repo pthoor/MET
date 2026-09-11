@@ -1,5 +1,5 @@
 function Get-METWorstSeverity {
-    # Returns the highest-weighted severity in a set. Used when Invoke-METTriage
+    # Returns the highest-weighted severity in a set. Used when Invoke-METAssessment
     # collapses a check's per-domain/per-policy results into one summary object:
     # the aggregate must inherit the severity of the worst finding it represents,
     # not of whichever item happened to be emitted first. Inheriting Informational
