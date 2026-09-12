@@ -174,31 +174,42 @@ New-SafeAttachmentRule `
 
 ### Step 8 - Exclude the opt-in group from preset policies
 
-Users in `Promotions-OptIn` must be excluded from both the Standard and Strict preset scope, otherwise the preset wins the priority order and the custom policies never apply. Presets have two rule sets: EOP (anti-spam, anti-phish, anti-malware) and ATP (Safe Links, Safe Attachments).
+Users in `Promotions-OptIn` must be excluded from every Standard or Strict preset scope that currently covers them, otherwise the preset wins the priority order and the custom policies never apply. Presets have two rule sets: EOP (anti-spam, anti-phish, anti-malware) and ATP (Safe Links, Safe Attachments).
+
+Preserve every existing preset exclusion when adding the opt-in group. Passing only `Promotions-OptIn` to `-ExceptIfSentToMemberOf` replaces that multi-valued collection. The loop below reads each current collection, appends the group, removes empty or duplicate entries, and writes the merged values back, following Microsoft's [guidance for modifying multivalued Exchange properties](https://learn.microsoft.com/exchange/modifying-multivalued-properties-exchange-2013-help).
 
 ```powershell
 # View current preset scope
 Get-EOPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
 Get-ATPProtectionPolicyRule | Format-List Name, SentToMemberOf, ExceptIfSentToMemberOf
 
-# Exclude from Strict preset - EOP rules
-Set-EOPProtectionPolicyRule `
-    -Identity               'Strict Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
+$group = 'Promotions-OptIn'
+$presetNames = @(
+    'Strict Preset Security Policy'
+    # Add 'Standard Preset Security Policy' here if these users are also covered by it.
+)
 
-# Exclude from Strict preset - ATP rules (Safe Links + Safe Attachments)
-Set-ATPProtectionPolicyRule `
-    -Identity               'Strict Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
+foreach ($presetName in $presetNames) {
+    $eopRule = Get-EOPProtectionPolicyRule -Identity $presetName
+    $eopExceptions = @(
+        $eopRule.ExceptIfSentToMemberOf | ForEach-Object { [string] $_ }
+        $group
+    ) | Where-Object { $_ } | Sort-Object -Unique
 
-# Repeat for Standard preset if users are also covered by it
-Set-EOPProtectionPolicyRule `
-    -Identity               'Standard Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
+    Set-EOPProtectionPolicyRule `
+        -Identity               $presetName `
+        -ExceptIfSentToMemberOf $eopExceptions
 
-Set-ATPProtectionPolicyRule `
-    -Identity               'Standard Preset Security Policy' `
-    -ExceptIfSentToMemberOf 'Promotions-OptIn'
+    $atpRule = Get-ATPProtectionPolicyRule -Identity $presetName
+    $atpExceptions = @(
+        $atpRule.ExceptIfSentToMemberOf | ForEach-Object { [string] $_ }
+        $group
+    ) | Where-Object { $_ } | Sort-Object -Unique
+
+    Set-ATPProtectionPolicyRule `
+        -Identity               $presetName `
+        -ExceptIfSentToMemberOf $atpExceptions
+}
 ```
 
 ### How the Promotions folder feature works after setup

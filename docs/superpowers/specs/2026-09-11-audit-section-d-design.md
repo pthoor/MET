@@ -100,7 +100,7 @@ Pages whose severity-frontmatter issue is already enforced and green (EXO013, EX
 ### 6. Other residual D-17 items
 
 - Save `docs/schema/MET-report-schema.json` as UTF-8 without a BOM.
-- Replace the stale concrete `v0.6.0` release command with a `<ModuleVersion>` placeholder.
+- Replace the stale concrete `v0.6.0` release command with a manifest-derived shell variable that reads `ModuleVersion` from `MET.psd1` and uses it for the tag.
 - Change `Tests/Html/README.md` from `npm install` to reproducible `npm ci` and add a short section describing the `html-report` CI job.
 
 ## Evidence and Verification

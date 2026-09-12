@@ -29,7 +29,7 @@ Neither base failure emits the four named result families below.
 |---|---|---|
 | Fail | High | Reporting is completely disabled: no reports go to Microsoft, no non-Microsoft add-in is configured, and no Junk, Not Junk, or Phishing flow goes to a custom mailbox. |
 | Fail | High | One or both reporting-mode properties are absent or `$null` and no reporting flow is observed; the report-button mode and destinations cannot be established. The result identifies the absent property or properties and includes an error message. |
-| Fail | High | A non-Microsoft add-in is configured but `EnableReportToMicrosoft` is disabled. Reports are not visible on the Defender Submissions page and Microsoft receives no feedback. |
+| Fail | High | A non-Microsoft add-in is configured and `EnableReportToMicrosoft` is confirmed disabled, absent, or `$null`. When the property is absent or `$null`, MET treats the unknown value as not enabled on this path and emits the same failure even though the setting was not observed. In all cases, MET does not establish that reports reach the Defender Submissions page or Microsoft. |
 | Fail | High | The built-in Outlook reporting path sends one or more report flows to a custom mailbox, but `EnableReportToMicrosoft` is disabled. Microsoft performs no analysis and the Defender Submissions page is empty. |
 | Warning | Medium | A non-Microsoft add-in is configured and reports are forwarded to Microsoft. The add-in and preservation of message metadata need verification. |
 | NotApplicable | High | `EnableReportToMicrosoft` is confirmed `$true`, but `EnableThirdPartyAddress` is absent or `$null`; MET cannot establish whether the Microsoft built-in button or a non-Microsoft add-in is in use. The result includes an error message. |

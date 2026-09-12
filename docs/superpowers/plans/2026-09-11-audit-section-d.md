@@ -6,7 +6,7 @@
 
 **Architecture:** Keep runtime code and tests untouched. Treat each check's `$METCheckInfo` and emitted `New-METCheckResult` branches as authoritative, move the remediation cookbook out of the product front door, and update independently owned document groups with a review gate after each task.
 
-**Tech Stack:** Markdown, PowerShell 7.6, PSScriptAnalyzer 1.25.0, Pester 6.0.1, JSON Schema draft-07, Node.js/Playwright.
+**Tech Stack:** Markdown, PowerShell 7.6, PSScriptAnalyzer 1.25.0, Pester 5.9.0, JSON Schema draft-07, Node.js/Playwright.
 
 **Spec:** `docs/superpowers/specs/2026-09-11-audit-section-d-design.md`
 
