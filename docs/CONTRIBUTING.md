@@ -115,11 +115,7 @@ On any branch that resolves to `NotApplicable` or `Warning` because of an absent
 
 ### 4. Write Pester tests
 
-Add tests to the appropriate file in `Tests/Unit/`:
-
-- `Checks.MDO.Tests.ps1` - MDO checks
-- `Checks.EXO.Tests.ps1` - EXO checks
-- `Checks.Teams.Tests.ps1` - Teams checks
+Add a self-contained test file at `Tests/Unit/Checks.<ID>.Tests.ps1`, with its own `BeforeAll` and cmdlet stubs. This is the convention for every new check. `Checks.MDO.Tests.ps1`, `Checks.EXO.Tests.ps1`, and `Checks.Teams.Tests.ps1` are legacy files only; do not add new coverage to them.
 
 Tests must use `Mock` to simulate EXO/Graph/Teams cmdlets - never connect to a real tenant in unit tests. Define stubs in `BeforeAll` if the cmdlet is not already stubbed.
 
@@ -148,7 +144,7 @@ Create `docs/checks/MET-<ID>-<ShortName>.md` using the structure:
 
 ### 6. Update the README
 
-Add the new check to the check inventory table in `README.md`, with the same `Severity` you declared in the check's `$METCheckInfo` header. You do **not** need to add an entry anywhere for the HTML report's control descriptions - `CONTROLS_META` is generated at report-render time from every check's own `$METCheckInfo.Description` via `Get-METCheck`, so the `Description` field you wrote in step 2 is the report description; there is no second copy to keep in sync.
+Add the new check to the check inventory table in `README.md`, with the same `Severity` you declared in the check's `$METCheckInfo` header. `$METCheckInfo.Description` is the report-description source, so there is no separate report-description entry to maintain.
 
 The `Severity` you write in the README table and in the new check's `docs/checks/*.md` `**Severity:**` line are not auto-generated the way `Description` is - `Tests/Unit/DocsSeverityParity.Tests.ps1` enforces them instead. It re-derives every check's Severity from its `$METCheckInfo` header (the same header `Tests/Unit/CheckMetadata.Tests.ps1` proves is correct against the check's own code) and fails, naming the specific `CheckId`, if either the README row or the doc front-matter line disagrees with it. Get both right the first time and the test passes silently; get either wrong and `Invoke-Pester -Path ./Tests/Unit` will tell you exactly which one.
 
@@ -172,7 +168,7 @@ Invoke-Pester -Configuration $config
 
 ## Code conventions
 
-- **Approved verbs only** - `Invoke-`, `Get-`, `Test-`, `New-`, `Resolve-`
+- **Approved verbs only** - `Connect-`, `Disconnect-`, `Expand-`, `Find-`, `Format-`, `Get-`, `Import-`, `Invoke-`, `New-`, `Resolve-`, `Test-`
 - **No inline comments** unless explaining a non-obvious workaround
 - **No `Write-Host`** - use `Write-Verbose` for progress, `Write-Warning` for non-fatal issues
 - **No positional parameters** on public functions
@@ -180,7 +176,7 @@ Invoke-Pester -Configuration $config
 - **No plain-text secrets** - all auth through `Connect-METSession`
 - **An absent property never yields `Pass`** - `Warning` when it is absent on only some objects, `NotApplicable` with `-ErrorMessage` when absent on all
 - **Rule 2: a fail-closed verdict must not describe a value it did not observe** - on a `NotApplicable`/`Warning` branch, say what was not established, never name a value nothing returned; also say why that is not graded as a pass. Not on `Fail` branches - see above
-- **No external HTTP calls inside check scripts** - DNS lookups via `Resolve-DnsName` are allowed for email auth checks
+- **DNS and HTTP in checks** - use `Resolve-METDnsName` for DNS lookups. Do not call DNS cmdlets directly and do not make direct HTTP calls from check scripts.
 
 ---
 
@@ -191,8 +187,11 @@ Invoke-Pester -Configuration $config
 - [ ] `New-METCheckResult` used for all output
 - [ ] `try/catch` wraps all remote calls
 - [ ] Pester tests added (Pass, Fail, API-error, and absent-property scenarios)
+- [ ] Test is self-contained in `Tests/Unit/Checks.<ID>.Tests.ps1`; the three category test files were left unchanged
+- [ ] If this multi-result check family needs an aggregation noun other than `policies`, a `Get-METAggregationNoun` mapping and matching aggregation test were added; otherwise no mapping is needed
 - [ ] Check doc added to `docs/checks/`
 - [ ] README check inventory updated
+- [ ] CLAUDE.md check inventory synchronized with the authoritative README inventory
 - [ ] All unit tests pass locally (`Invoke-Pester -Configuration $config`), including `Tests/Unit/CheckMetadata.Tests.ps1` against the new check's header
 
 ---

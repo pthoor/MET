@@ -19,8 +19,9 @@ The workflow requests the API key only in the protected publish job. GitHub's bu
    ```bash
    git switch main
    git pull --ff-only
-   git tag -a v0.6.0 -m "Release v0.6.0"
-   git push origin v0.6.0
+   version="$(pwsh -NoLogo -NoProfile -Command '(Import-PowerShellDataFile ./MET.psd1).ModuleVersion')"
+   git tag -a "v${version}" -m "Release v${version}"
+   git push origin "v${version}"
    ```
 
 4. Approve the `production` deployment, if the environment requires approval.

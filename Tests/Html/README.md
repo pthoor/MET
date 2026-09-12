@@ -40,7 +40,7 @@ stable origin across reloads. Override the port with `MET_HTML_PORT`.
 
 ```bash
 cd Tests/Html
-npm install                 # installs @playwright/test only
+npm ci                       # installs the locked @playwright/test dependency
 
 # If this machine has no Chromium yet AND PLAYWRIGHT_BROWSERS_PATH is not preset:
 npx playwright install chromium
@@ -51,6 +51,12 @@ npm test -- -g 'accept risk'   # run one describe block
 npm run test:headed         # watch it in a visible browser
 npx playwright show-trace test-results/<test>/trace.zip   # inspect a failure
 ```
+
+## CI
+
+`.github/workflows/pester.yml` runs the `html-report` job on pull requests and pushes
+to `main`. The job installs the locked dependencies with `npm ci`, installs Chromium,
+and runs `npm test`.
 
 On an image that already ships the browser (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`,
 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`), skip `npx playwright install` entirely - the config

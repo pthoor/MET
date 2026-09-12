@@ -1,27 +1,26 @@
-﻿# MET-MDO011 - User Tags
+# MET-MDO011 - User Tags
 
 **Category:** MDO | **Severity:** Low
 
 ## What it checks
 
-- Whether custom user tags (beyond built-in Priority Account) have been created (`Get-Tag`)
-- Whether any alert policies reference those tags
+MET cannot enumerate custom user tags or determine whether alert policies are tag-aware through its Exchange Online session. Exchange Online PowerShell has no cmdlet for custom-tag enumeration, and alert-policy queries require a Security and Compliance session.
+
+Review both settings manually in the Microsoft 365 Defender portal: **Settings > Email & collaboration > User tags**. The built-in Priority account tag is a separate setting; it can be set through PowerShell with `Set-User -Identity <UPN> -VIP $true` and is assessed by MET-MDO010.
 
 ## Why it matters
 
-User tags let you group specific populations of users (e.g. "Board Members", "Finance Team") and then filter threat-hunting views, reports, and alert policies by those groups. Without tags, SecOps must manually identify which high-value accounts are affected by each incident.
+User tags identify high-risk populations, such as board members and finance teams, in Defender investigations, reporting, and alerting. Reviewing both tag membership and tag-aware alert policies helps SecOps identify whether important populations receive the intended visibility and response.
 
-## Pass / Fail / Warning
+## Result
 
-| Result | Condition |
-|---|---|
-| Pass | Custom tags exist and at least one alert policy references them |
-| Warning | No custom tags defined |
-| Warning | Tags exist but no alert policies reference them |
+| Result | Severity | Condition |
+|---|---|---|
+| Info | Low | Custom user tags and tag-aware alert policies cannot be assessed through MET's Exchange Online session; review them in the Defender portal. |
 
 ## Recommendation
 
-Create tags for your high-risk user populations. Then configure alert policies in Microsoft 365 Defender that trigger notifications when users in those tags are targeted.
+Verify custom user tags and tag-aware alert policies manually in the Microsoft 365 Defender portal under **Settings > Email & collaboration > User tags**.
 
 ## Reference
 
