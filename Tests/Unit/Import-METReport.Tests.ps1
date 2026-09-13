@@ -94,11 +94,10 @@ Describe 'Import-METReport' {
     }
 
     It 'Round-trips through Get-METReport with the original tenant on the page' {
-        # Get-METReport nests its output under a timestamped subfolder rather than honouring
-        # a literal -OutputPath file path (a known, pre-existing defect tracked separately -
-        # not fixed here). Pass a folder and locate the generated file the same way
-        # Get-METReport.Html.Tests.ps1 and ControlsMetadata.Tests.ps1 already do, rather than
-        # assuming -OutputPath names the file directly.
+        # A directory -OutputPath nests its output under a timestamped subfolder; the exact
+        # filename doesn't matter here, so pass a folder and locate the generated file the
+        # same way Get-METReport.Html.Tests.ps1 and ControlsMetadata.Tests.ps1 already do,
+        # rather than naming a file directly.
         $folder = Join-Path $TestDrive 'rerendered'
         Import-METReport -Path $script:SavedReport | Get-METReport -Format HTML -OutputPath $folder -NoLaunch | Out-Null
         $generated = Get-ChildItem -Path $folder -Recurse -Filter '*.html' | Select-Object -First 1
