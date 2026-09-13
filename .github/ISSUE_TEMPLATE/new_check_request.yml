@@ -1,0 +1,87 @@
+name: New check request
+description: Propose a new MET-<Category><NNN> check, or a control plane MET doesn't assess yet.
+labels: ["new check"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        MET's unit of work is a numbered check (`MET-MDO014`, `MET-EXO023`, `MET-Teams015`, ...).
+        See `docs/CONTRIBUTING.md` for the full authoring guide and `CLAUDE.md`'s Check Inventory
+        Detail tables for what's already covered - a proposal that duplicates or narrowly extends
+        an existing check may already be in scope for that check instead of a new one.
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: MDO (Defender for Office 365), EXO (Exchange Online / EOP), or Teams.
+      options:
+        - MDO
+        - EXO
+        - Teams
+    validations:
+      required: true
+
+  - type: input
+    id: name
+    attributes:
+      label: Proposed check name
+      description: Human-readable name, as it would appear in Get-METCheck and the HTML report card.
+      placeholder: Remote Domain Automatic Forwarding
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Proposed severity
+      description: The worst Severity this check could emit. See CLAUDE.md's Scoring Model (Critical=40, High=20, Medium=10, Low=5, Informational=0).
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+        - Informational
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What should this check assess?
+      description: What tenant setting, policy, or configuration does this look at, and what cmdlet(s) or Graph endpoint(s) would it use?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter?
+      description: What's the attack or misconfiguration this catches? Real-world context (a named threat actor technique, a Microsoft advisory, a support case) is useful here.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: requires-module
+    attributes:
+      label: Required module(s)
+      description: Per CLAUDE.md's Connection Requirements for New Checks - default to Exchange Online or native Teams cmdlets; a direct Graph dependency needs no Exchange Online equivalent to exist, and must degrade non-fatally if Graph is unavailable.
+      multiple: true
+      options:
+        - ExchangeOnlineManagement
+        - MicrosoftTeams
+        - Microsoft.Graph (only if no EXO/Teams equivalent exists)
+    validations:
+      required: true
+
+  - type: textarea
+    id: pass-fail
+    attributes:
+      label: Pass / Fail / Warning criteria
+      description: What tenant state is a Pass, what's a Fail, and what's a Warning? Remember CLAUDE.md's rule - an absent property is never a Pass.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Reference links
+      description: Microsoft documentation, advisories, or other sources for this control.

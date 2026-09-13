@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in MET is broken - a check, the report, connection handling, or anything else.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. If this is a **security vulnerability**
+        (credential exposure, a logic flaw that could false-negative a critical check, etc.),
+        please follow [SECURITY.md](https://github.com/pthoor/MET/blob/main/SECURITY.md)
+        instead of filing a public issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: MET version
+      description: Output of `(Get-Module MET).Version` or `Import-PowerShellDataFile ./MET.psd1 | Select ModuleVersion`
+      placeholder: 0.11.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - GitHub Codespaces
+    validations:
+      required: true
+
+  - type: input
+    id: pwsh-version
+    attributes:
+      label: PowerShell version
+      description: Output of `$PSVersionTable.PSVersion`
+      placeholder: 7.4.20
+    validations:
+      required: true
+
+  - type: input
+    id: check-id
+    attributes:
+      label: Affected check ID (if applicable)
+      description: e.g. MET-EXO009, MET-MDO001. Leave blank if this isn't check-specific (e.g. Get-METReport, Connect-METSession).
+      placeholder: MET-EXO009
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact Result/Finding/Error text from the check result object where relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The command(s) you ran. Redact tenant names, domains, and any other identifying data.
+      placeholder: |
+        Connect-METSession ...
+        Invoke-METAssessment -CheckId MET-EXO009
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Relevant module versions (ExchangeOnlineManagement, MicrosoftTeams, Microsoft.Graph.*), tenant characteristics that might matter (preset security policies in use, delegated/GDAP admin, etc.)
