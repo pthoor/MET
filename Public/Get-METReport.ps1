@@ -1662,12 +1662,8 @@ function applyFilters() {
 
   let visible = 0, inScopeTotal = 0;
   allCards.forEach(function(card) {
-    const cat      = card.dataset.category;
-    const result   = card.dataset.result;
-    const isErr    = card.dataset.error === '1';
-    const sev      = card.dataset.sev;
-    const sText    = card.dataset.search || '';
-    const isAcc    = card.dataset.accepted === '1';
+    const cat   = card.dataset.category;
+    const isAcc = card.dataset.accepted === '1';
 
     // Accepted cards move out of All/MDO/EXO/Teams and into the Accepted tab.
     let inScope;
@@ -1681,13 +1677,7 @@ function applyFilters() {
     }
     if (inScope) inScopeTotal++;
 
-    let show = inScope;
-    if (show && sevFilter) show = sev === sevFilter;
-    // Error is its own bucket, mutually exclusive with every Result-based option, matching the
-    // ERROR badge on the card itself and the summary/donut counts above.
-    if (show && resFilter) show = resFilter === 'Error' ? isErr : (result === resFilter && !isErr);
-    if (show && search)    show = sText.includes(search);
-
+    const show = inScope && cardMatchesFilters(card, search, sevFilter, resFilter);
     card.style.display = show ? '' : 'none';
     if (show) visible++;
   });
@@ -1697,9 +1687,32 @@ function applyFilters() {
   updateTabCounts();
 }
 
+// Whether a card matches the current search/severity/result filters, independent of which
+// tab is active - shared by applyFilters (per-tab visibility) and updateTabCounts (per-category
+// badges), so the two can never disagree about what "currently matching" means.
+function cardMatchesFilters(card, search, sevFilter, resFilter) {
+  const result = card.dataset.result;
+  const isErr  = card.dataset.error === '1';
+  const sev    = card.dataset.sev;
+  const sText  = card.dataset.search || '';
+
+  let match = true;
+  if (sevFilter) match = sev === sevFilter;
+  // Error is its own bucket, mutually exclusive with every Result-based option, matching the
+  // ERROR badge on the card itself and the summary/donut counts above.
+  if (match && resFilter) match = resFilter === 'Error' ? isErr : (result === resFilter && !isErr);
+  if (match && search)    match = sText.includes(search);
+  return match;
+}
+
 function updateTabCounts() {
+  const search    = document.getElementById('search').value.toLowerCase();
+  const sevFilter = document.getElementById('sev-filter').value;
+  const resFilter = document.getElementById('result-filter').value;
+
   const counts = {All:0, MDO:0, EXO:0, Teams:0, Accepted:0};
   allCards.forEach(function(card) {
+    if (!cardMatchesFilters(card, search, sevFilter, resFilter)) return;
     if (card.dataset.accepted === '1') { counts.Accepted++; return; }
     counts.All++;
     counts[card.dataset.category] = (counts[card.dataset.category] || 0) + 1;
