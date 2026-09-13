@@ -42,7 +42,7 @@ Exchange Online is the only hard requirement - every MDO and EXO check runs thro
 Install-Module ExchangeOnlineManagement -MinimumVersion 3.7.2 -Scope CurrentUser
 ```
 
-The floor is `-DisableWAM`, the switch `Connect-METSession` passes automatically off Windows; derived in `docs/superpowers/notes/2026-09-10-exo-version-floor.md`. Note EXO's own supported-OS table requires PowerShell 7.6.0+ starting at module 3.10.0 (3.5.0-3.9.2 need only 7.4.0+) - on MET's PowerShell 7.4 floor, EXO 3.10.x cannot be installed at all.
+Version 3.7.2 is the minimum because it provides the `-DisableWAM` switch that `Connect-METSession` forwards to Exchange Online when requested. Note EXO's own supported-OS table requires PowerShell 7.6.0+ starting at module 3.10.0 (3.5.0-3.9.2 need only 7.4.0+) - on MET's PowerShell 7.4 floor, EXO 3.10.x cannot be installed at all.
 
 ### Optional modules
 
