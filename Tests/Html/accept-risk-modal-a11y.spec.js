@@ -26,6 +26,23 @@ test.describe('Accept Risk modal dialog semantics', () => {
     const labelledBy = await modal.getAttribute('aria-labelledby');
     expect(labelledBy).toBeTruthy();
     await expect(page.locator(`#${labelledBy}`)).toHaveText('Accept Risk');
+
+    const describedBy = await modal.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    await expect(page.locator(`#${describedBy}`)).toContainText('business justification');
+  });
+
+  test('confirming moves focus to the active tab, not a detached or hidden element', async ({ page }) => {
+    await openModalFor(page, 'MET-MDO001');
+    await page.locator('#modal-text').fill('Compensating control in place.');
+    await page.locator('#modal-confirm').click();
+    await expect(page.locator('#modal-overlay')).not.toHaveClass(/open/);
+
+    // Accepting removes the card from the All tab's scope entirely (it moves to
+    // Accepted), so the pre-confirm trigger button is both replaced (rebuildCard) and
+    // no longer visible even if it weren't - focus must land somewhere stable instead.
+    await expect(page.locator('.card[data-check-id="MET-MDO001"]')).not.toBeVisible();
+    await expect(page.locator('.tab.active')).toBeFocused();
   });
 
   test('Escape closes the modal without accepting anything', async ({ page }) => {
@@ -44,6 +61,11 @@ test.describe('Accept Risk modal dialog semantics', () => {
     const acceptBtn = card.getByRole('button', { name: /accept risk/i });
     await acceptBtn.click();
     await expect(page.locator('#modal-overlay')).toHaveClass(/open/);
+    // The overlay gaining 'open' doesn't guarantee focus has moved inside it yet - the
+    // production code focuses #modal-text on a 50ms setTimeout. Escape's handler lives on
+    // #modal-overlay and only fires for a keydown that bubbles up through it, so pressing
+    // Escape while focus is still on acceptBtn (outside the overlay) is a no-op.
+    await expect(page.locator('#modal-text')).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#modal-overlay')).not.toHaveClass(/open/);

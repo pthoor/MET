@@ -985,13 +985,13 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
 <div class="toolbar">
   <div class="tabs" role="tablist">
-    <div class="tab active" data-tab="All" role="tab" tabindex="0" aria-selected="true">All <span class="tab-count" id="tc-all">0</span></div>
-    <div class="tab" data-tab="Top5" role="tab" tabindex="-1" aria-selected="false">Top 5 Remediation</div>
-    <div class="tab" data-tab="MDO" role="tab" tabindex="-1" aria-selected="false">MDO <span class="tab-count" id="tc-mdo">0</span></div>
-    <div class="tab" data-tab="EXO" role="tab" tabindex="-1" aria-selected="false">EXO <span class="tab-count" id="tc-exo">0</span></div>
-    <div class="tab" data-tab="Teams" role="tab" tabindex="-1" aria-selected="false">Teams <span class="tab-count" id="tc-teams">0</span></div>
-    <div class="tab" data-tab="Accepted" role="tab" tabindex="-1" aria-selected="false">Accepted <span class="tab-count" id="tc-accepted">0</span></div>
-    <div class="tab" data-tab="Controls" role="tab" tabindex="-1" aria-selected="false">All Controls <span class="tab-count" id="tc-controls">0</span></div>
+    <div class="tab active" data-tab="All" role="tab" tabindex="0" aria-selected="true" aria-controls="cards-container">All <span class="tab-count" id="tc-all">0</span></div>
+    <div class="tab" data-tab="Top5" role="tab" tabindex="-1" aria-selected="false" aria-controls="top5-section">Top 5 Remediation</div>
+    <div class="tab" data-tab="MDO" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">MDO <span class="tab-count" id="tc-mdo">0</span></div>
+    <div class="tab" data-tab="EXO" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">EXO <span class="tab-count" id="tc-exo">0</span></div>
+    <div class="tab" data-tab="Teams" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">Teams <span class="tab-count" id="tc-teams">0</span></div>
+    <div class="tab" data-tab="Accepted" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">Accepted <span class="tab-count" id="tc-accepted">0</span></div>
+    <div class="tab" data-tab="Controls" role="tab" tabindex="-1" aria-selected="false" aria-controls="ctrl-ref">All Controls <span class="tab-count" id="tc-controls">0</span></div>
   </div>
   <div class="filters">
     <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search...">
@@ -1009,20 +1009,20 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 </div>
 
 <div class="main">
-  <div class="top5" id="top5-section">
+  <div class="top5" id="top5-section" role="tabpanel" aria-label="Top 5 Remediation Actions">
     <div class="top5-header" id="top5-toggle">
       <span>&#x1F4CB; Top 5 Remediation Actions</span>
       <span class="top5-chevron open" id="top5-chevron">&#x25BC;</span>
     </div>
     <div class="top5-body open" id="top5-body"></div>
   </div>
-  <div class="cards" id="cards-container"></div>
+  <div class="cards" id="cards-container" role="tabpanel" aria-label="Checks"></div>
   <div class="no-results" id="no-results" style="display:none">No checks match the current filters.</div>
-  <div class="ctrl-ref" id="ctrl-ref"></div>
+  <div class="ctrl-ref" id="ctrl-ref" role="tabpanel" aria-label="All Controls"></div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
     <div class="modal-title" id="modal-title">Accept Risk</div>
     <div class="modal-desc" id="modal-desc">Provide a business justification for accepting this risk.</div>
     <textarea id="modal-text" placeholder="Business justification (required)..."></textarea>
@@ -1770,7 +1770,16 @@ let modalTriggerEl = null;
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
   pendingKey = null;
-  if (modalTriggerEl) { modalTriggerEl.focus(); modalTriggerEl = null; }
+  // The trigger button survives an Escape/Cancel close, but Confirm's rebuildCard()
+  // replaces it, and accepting the risk can also remove the card from view entirely
+  // (it moves out of the current tab's scope) - fall back to the active tab, always
+  // present and visible, rather than focusing a detached or hidden element.
+  let target = modalTriggerEl;
+  if (!target || !document.body.contains(target) || target.offsetParent === null) {
+    target = document.querySelector('.tab.active');
+  }
+  if (target) target.focus();
+  modalTriggerEl = null;
 }
 
 function getModalFocusable() {

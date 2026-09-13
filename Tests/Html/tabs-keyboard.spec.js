@@ -30,6 +30,21 @@ test.describe('tab bar keyboard operability', () => {
     }
   });
 
+  test('every tab is associated with a labelled tabpanel via aria-controls', async ({ page }) => {
+    const tabs = page.locator('.tab');
+    const count = await tabs.count();
+    for (let i = 0; i < count; i++) {
+      const tab = tabs.nth(i);
+      const controls = await tab.getAttribute('aria-controls');
+      expect(controls, `tab "${await tab.getAttribute('data-tab')}" has no aria-controls`).toBeTruthy();
+
+      const panel = page.locator('#' + controls);
+      await expect(panel).toHaveAttribute('role', 'tabpanel');
+      const label = await panel.getAttribute('aria-label');
+      expect(label, `panel #${controls} has no aria-label`).toBeTruthy();
+    }
+  });
+
   test('Tab from the search box reaches the active tab directly', async ({ page }) => {
     await page.locator('#search').focus();
     await page.keyboard.press('Shift+Tab');
