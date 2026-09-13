@@ -984,14 +984,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 </div>
 
 <div class="toolbar">
-  <div class="tabs">
-    <div class="tab active" data-tab="All">All <span class="tab-count" id="tc-all">0</span></div>
-    <div class="tab" data-tab="Top5">Top 5 Remediation</div>
-    <div class="tab" data-tab="MDO">MDO <span class="tab-count" id="tc-mdo">0</span></div>
-    <div class="tab" data-tab="EXO">EXO <span class="tab-count" id="tc-exo">0</span></div>
-    <div class="tab" data-tab="Teams">Teams <span class="tab-count" id="tc-teams">0</span></div>
-    <div class="tab" data-tab="Accepted">Accepted <span class="tab-count" id="tc-accepted">0</span></div>
-    <div class="tab" data-tab="Controls">All Controls <span class="tab-count" id="tc-controls">0</span></div>
+  <div class="tabs" role="tablist">
+    <div class="tab active" data-tab="All" role="tab" tabindex="0" aria-selected="true" aria-controls="cards-container">All <span class="tab-count" id="tc-all">0</span></div>
+    <div class="tab" data-tab="Top5" role="tab" tabindex="-1" aria-selected="false" aria-controls="top5-section">Top 5 Remediation</div>
+    <div class="tab" data-tab="MDO" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">MDO <span class="tab-count" id="tc-mdo">0</span></div>
+    <div class="tab" data-tab="EXO" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">EXO <span class="tab-count" id="tc-exo">0</span></div>
+    <div class="tab" data-tab="Teams" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">Teams <span class="tab-count" id="tc-teams">0</span></div>
+    <div class="tab" data-tab="Accepted" role="tab" tabindex="-1" aria-selected="false" aria-controls="cards-container">Accepted <span class="tab-count" id="tc-accepted">0</span></div>
+    <div class="tab" data-tab="Controls" role="tab" tabindex="-1" aria-selected="false" aria-controls="ctrl-ref">All Controls <span class="tab-count" id="tc-controls">0</span></div>
   </div>
   <div class="filters">
     <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search...">
@@ -1009,21 +1009,21 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 </div>
 
 <div class="main">
-  <div class="top5" id="top5-section">
+  <div class="top5" id="top5-section" role="tabpanel" aria-label="Top 5 Remediation Actions">
     <div class="top5-header" id="top5-toggle">
       <span>&#x1F4CB; Top 5 Remediation Actions</span>
       <span class="top5-chevron open" id="top5-chevron">&#x25BC;</span>
     </div>
     <div class="top5-body open" id="top5-body"></div>
   </div>
-  <div class="cards" id="cards-container"></div>
+  <div class="cards" id="cards-container" role="tabpanel" aria-label="Checks"></div>
   <div class="no-results" id="no-results" style="display:none">No checks match the current filters.</div>
-  <div class="ctrl-ref" id="ctrl-ref"></div>
+  <div class="ctrl-ref" id="ctrl-ref" role="tabpanel" aria-label="All Controls"></div>
 </div>
 
 <div class="modal-overlay" id="modal-overlay">
-  <div class="modal">
-    <div class="modal-title">Accept Risk</div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
+    <div class="modal-title" id="modal-title">Accept Risk</div>
     <div class="modal-desc" id="modal-desc">Provide a business justification for accepting this risk.</div>
     <textarea id="modal-text" placeholder="Business justification (required)..."></textarea>
     <div class="modal-actions">
@@ -1401,9 +1401,9 @@ function createCard(check) {
   const fixHtml = (check.recommendation || errorHtml) ? (
     '<div class="card-fix">' +
     '<div class="fix-toggle" tabindex="0" role="button">' +
-    '<span class="fix-chevron">&#x25BA;</span> How to fix</div>' +
+    '<span class="fix-chevron">&#x25BA;</span> ' + (hasError ? 'Details' : 'How to fix') + '</div>' +
     '<div class="fix-content">' +
-    (errorHtml || buildRecommendation(check.recommendation)) +
+    errorHtml + buildRecommendation(check.recommendation) +
     '</div></div>'
   ) : '';
 
@@ -1604,12 +1604,23 @@ function renderControlsRef() {
   });
 }
 
-function switchToTab(tabName) {
-  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
-  const target = document.querySelector('.tab[data-tab="' + tabName + '"]');
-  if (target) target.classList.add('active');
-  activeTab = tabName;
+// Roving tabindex per WAI-ARIA tab pattern: exactly one tab is in the Tab order at a time
+// (tabindex=0), the rest are tabindex=-1 and reached only via arrow keys once the tablist
+// itself has focus.
+function activateTab(target) {
+  document.querySelectorAll('.tab').forEach(function(t) {
+    const isTarget = t === target;
+    t.classList.toggle('active', isTarget);
+    t.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+    t.setAttribute('tabindex', isTarget ? '0' : '-1');
+  });
+  activeTab = target.dataset.tab;
   applyFilters();
+}
+
+function switchToTab(tabName) {
+  const target = document.querySelector('.tab[data-tab="' + tabName + '"]');
+  if (target) activateTab(target);
 }
 
 // ── Filtering ────────────────────────────────────────────────────
@@ -1701,12 +1712,22 @@ function updateTabCounts() {
   document.getElementById('tc-controls').textContent = CHECKS.length;
 }
 
-document.querySelectorAll('.tab').forEach(function(tab) {
-  tab.addEventListener('click', function() {
-    document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
-    this.classList.add('active');
-    activeTab = this.dataset.tab;
-    applyFilters();
+const tabEls = Array.from(document.querySelectorAll('.tab'));
+tabEls.forEach(function(tab, i) {
+  tab.addEventListener('click', function() { activateTab(this); });
+  tab.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activateTab(this); return; }
+    let nextIndex = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown')      nextIndex = (i + 1) % tabEls.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp')    nextIndex = (i - 1 + tabEls.length) % tabEls.length;
+    else if (e.key === 'Home')                                nextIndex = 0;
+    else if (e.key === 'End')                                 nextIndex = tabEls.length - 1;
+    if (nextIndex !== null) {
+      e.preventDefault();
+      const next = tabEls[nextIndex];
+      next.focus();
+      activateTab(next);
+    }
   });
 });
 document.getElementById('search').addEventListener('input', applyFilters);
@@ -1744,11 +1765,33 @@ document.getElementById('btn-collapse-all').addEventListener('click', function()
 
 // ── Accept risk ──────────────────────────────────────────────────
 let pendingKey = null;
+let modalTriggerEl = null;
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  pendingKey = null;
+  // The trigger button survives an Escape/Cancel close, but Confirm's rebuildCard()
+  // replaces it, and accepting the risk can also remove the card from view entirely
+  // (it moves out of the current tab's scope) - fall back to the active tab, always
+  // present and visible, rather than focusing a detached or hidden element.
+  let target = modalTriggerEl;
+  if (!target || !document.body.contains(target) || target.offsetParent === null) {
+    target = document.querySelector('.tab.active');
+  }
+  if (target) target.focus();
+  modalTriggerEl = null;
+}
+
+function getModalFocusable() {
+  return Array.from(document.querySelectorAll('#modal-overlay .modal textarea, #modal-overlay .modal button'))
+    .filter(function(el) { return !el.disabled; });
+}
 
 document.addEventListener('click', function(e) {
   const acceptBtn = e.target.closest('.btn-accept');
   if (acceptBtn) {
     pendingKey = acceptBtn.dataset.resultKey;
+    modalTriggerEl = acceptBtn;
     const pendingCheck = CHECKS.find(function(c){ return resultKey(c) === pendingKey; });
     const label = pendingCheck
       ? pendingCheck.checkId + (pendingCheck.affectedObject ? ' (' + pendingCheck.affectedObject + ')' : '')
@@ -1777,25 +1820,44 @@ document.getElementById('modal-text').addEventListener('input', function() {
 });
 
 document.getElementById('modal-cancel').addEventListener('click', function() {
-  document.getElementById('modal-overlay').classList.remove('open');
-  pendingKey = null;
+  closeModal();
 });
 
 document.getElementById('modal-confirm').addEventListener('click', function() {
   if (!pendingKey) return;
   const just = document.getElementById('modal-text').value.trim();
-  setAccepted(pendingKey, just);
-  document.getElementById('modal-overlay').classList.remove('open');
-  rebuildCard(pendingKey);
+  const key = pendingKey;
+  setAccepted(key, just);
+  rebuildCard(key);
   updateTabCounts();
   recalcScore();
   renderTop5();
   applyFilters();
-  pendingKey = null;
+  closeModal();
 });
 
 document.getElementById('modal-overlay').addEventListener('click', function(e) {
   if (e.target === this) { document.getElementById('modal-cancel').click(); }
+});
+
+document.getElementById('modal-overlay').addEventListener('keydown', function(e) {
+  if (!this.classList.contains('open')) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    document.getElementById('modal-cancel').click();
+    return;
+  }
+  if (e.key === 'Tab') {
+    const focusable = getModalFocusable();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
 });
 
 function rebuildCard(key) {

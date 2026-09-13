@@ -131,6 +131,25 @@ Describe 'Get-METReport HTML card and summary emission' {
         $script:cardHtml | Should -Match 'card-error'
     }
 
+    It 'carries both the error and the recommendation through to the embedded data when a check has both' {
+        # G-2: the client-side renderer used to discard the recommendation outright whenever
+        # an error was present - exactly the guidance an operator needs when a check fails on
+        # a permission gap. Whether the two are actually rendered together (and the "Details"
+        # vs. "How to fix" heading choice, which is runtime JS logic no static regex can see)
+        # is proven in a real browser by Tests/Html/error-recommendation.spec.js; this pins
+        # the one thing a static assertion can: neither field is dropped before it even
+        # reaches the embedded CHECKS payload the client script reads from.
+        $bothPopulated = New-METTestResult -CheckId 'MET-EXO011' -Category 'EXO' -Name 'Mail Flow Connector Hygiene' `
+            -Result 'Fail' -Severity 'High' -Score 0 -AffectedObject 'Inbound connectors' `
+            -Finding 'Retrieval failed' -Recommendation 'Re-run with a Security Reader role.' `
+            -ErrorText "The term 'Get-InboundConnector' is not recognized."
+
+        $html = Get-METTestHtml -Results @($bothPopulated) -Folder (Join-Path $TestDrive 'error-plus-rec')
+
+        $html | Should -Match '"error":"The term .Get-InboundConnector. is not recognized\."'
+        $html | Should -Match '"recommendation":"Re-run with a Security Reader role\."'
+    }
+
     It 'carries structured Metadata through to the embedded check data' {
         $withMetadata = New-METTestResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' `
             -Result 'Pass' -Severity 'High' -Score 100 -AffectedObject 'Tenant' -Finding 'ok' `
