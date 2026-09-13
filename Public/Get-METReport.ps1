@@ -1025,7 +1025,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
     <div class="modal-title" id="modal-title">Accept Risk</div>
     <div class="modal-desc" id="modal-desc">Provide a business justification for accepting this risk.</div>
-    <textarea id="modal-text" placeholder="Business justification (required)..."></textarea>
+    <textarea id="modal-text" maxlength="4000" placeholder="Business justification (required)..."></textarea>
     <div class="modal-actions">
       <button class="btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn-primary" id="modal-confirm" disabled>Accept Risk</button>
@@ -1042,6 +1042,10 @@ const TENANT_ID = $tenantIdJson;
 const INITIAL_SCORE = $overallScore;
 const SEV_WEIGHT = {Critical:40,High:20,Medium:10,Low:5,Informational:0};
 const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(--accent-teams)'};
+// A risk-acceptance justification is a business note, not a document - 4000 characters
+// (roughly a page of text) is generous for that while keeping a single localStorage entry
+// well clear of QuotaExceededError. Mirrors the textarea's maxlength attribute above.
+const JUSTIFICATION_MAX_LENGTH = 4000;
 
 function sevOf(s){ return s || 'Informational'; }
 
@@ -1100,8 +1104,25 @@ function lsRemove(key) {
 // wrong acceptance state into the new per-result scheme. Existing acceptances are dropped.
 function lsKey(key){ return 'MET_accepted_' + TENANT_ID + '_' + key; }
 function isAccepted(key){ return !!lsGet(lsKey(key)); }
-function getJustification(key){ return lsGet(lsKey(key)); }
-function setAccepted(key, justification){ lsSet(lsKey(key), justification || 'Accepted'); }
+// Stored value is JSON: { justification, acceptedAt }. Older reports wrote a bare
+// justification string with no date at all - parsed defensively here so that data keeps
+// working: a value that isn't valid JSON, or doesn't have the expected shape, is treated as
+// the raw justification string with no acceptedAt, rather than dropped or shown as
+// "undefined"/"[object Object]".
+function getAcceptance(key) {
+  const raw = lsGet(lsKey(key));
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && typeof parsed.justification === 'string') {
+      return { justification: parsed.justification, acceptedAt: parsed.acceptedAt || null };
+    }
+  } catch (e) { /* legacy bare-string value - fall through */ }
+  return { justification: raw, acceptedAt: null };
+}
+function setAccepted(key, justification){
+  lsSet(lsKey(key), JSON.stringify({ justification: justification || 'Accepted', acceptedAt: new Date().toISOString() }));
+}
 function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
@@ -1400,8 +1421,16 @@ function createCard(check) {
     actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">&#x2713; Accept Risk</button>';
   }
   if (accepted) {
-    const just = esc(getJustification(key));
-    actionsHtml += '<span style="font-size:12px;color:var(--result-accepted)">Accepted: ' + just + '</span>';
+    const acceptance = getAcceptance(key) || { justification: 'Accepted', acceptedAt: null };
+    const just = esc(acceptance.justification || 'Accepted');
+    let dateHtml = '';
+    if (acceptance.acceptedAt) {
+      const acceptedAtDate = new Date(acceptance.acceptedAt);
+      if (!isNaN(acceptedAtDate.getTime())) {
+        dateHtml = ' <span class="accepted-date">(' + esc(acceptedAtDate.toLocaleString()) + ')</span>';
+      }
+    }
+    actionsHtml += '<span style="font-size:12px;color:var(--result-accepted)">Accepted: ' + just + dateHtml + '</span>';
     actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">Undo acceptance</button>';
   }
 
@@ -1869,7 +1898,8 @@ document.getElementById('modal-cancel').addEventListener('click', function() {
 
 document.getElementById('modal-confirm').addEventListener('click', function() {
   if (!pendingKey) return;
-  const just = document.getElementById('modal-text').value.trim();
+  let just = document.getElementById('modal-text').value.trim();
+  if (just.length > JUSTIFICATION_MAX_LENGTH) just = just.slice(0, JUSTIFICATION_MAX_LENGTH);
   const key = pendingKey;
   setAccepted(key, just);
   rebuildCard(key);
