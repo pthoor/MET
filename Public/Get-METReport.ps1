@@ -1017,7 +1017,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="top5-body open" id="top5-body"></div>
   </div>
   <div class="cards" id="cards-container" role="tabpanel" aria-label="Checks"></div>
-  <div class="no-results" id="no-results" style="display:none">No checks match the current filters.</div>
+  <div class="no-results" id="no-results" style="display:none">$(if ($allResults.Count -eq 0) { 'No check results in this report.' } else { 'No checks match the current filters.' })</div>
   <div class="ctrl-ref" id="ctrl-ref" role="tabpanel" aria-label="All Controls"></div>
 </div>
 
@@ -1038,6 +1038,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 'use strict';
 
 const CHECKS = $checksJson;
+const IS_EMPTY_REPORT = CHECKS.length === 0;
 const TENANT_ID = $tenantIdJson;
 const INITIAL_SCORE = $overallScore;
 const SEV_WEIGHT = {Critical:40,High:20,Medium:10,Low:5,Informational:0};
@@ -1143,12 +1144,12 @@ function weightedScore(checks) {
   return wTotal > 0 ? Math.round((wSum / wTotal) * 100) : null;
 }
 function recalcScore() {
-  const raw = weightedScore(CHECKS);
+  const raw = IS_EMPTY_REPORT ? null : weightedScore(CHECKS);
   const score = raw ?? 0;
-  const band = bandOf(raw);
-  document.getElementById('donut-score-text').textContent = score;
+  const band = IS_EMPTY_REPORT ? 'None' : bandOf(raw);
+  document.getElementById('donut-score-text').textContent = IS_EMPTY_REPORT ? '\u2014' : score;
   const bandEl = document.getElementById('score-band');
-  bandEl.textContent = band;
+  bandEl.textContent = IS_EMPTY_REPORT ? 'No data' : band;
   bandEl.className = 'score-band band-' + band.toLowerCase();
   const banner = document.getElementById('score-banner');
   if (banner) banner.dataset.band = band.toLowerCase();
@@ -1950,8 +1951,9 @@ function rebuildCard(key) {
 (function() {
   const LS_SCORE_KEY = 'MET_score_' + TENANT_ID;
   const prev = lsGet(LS_SCORE_KEY);
-  if (prev !== null) {
-    const delta = INITIAL_SCORE - parseInt(prev, 10);
+  const prevScore = prev !== null ? parseInt(prev, 10) : NaN;
+  if (Number.isFinite(prevScore)) {
+    const delta = INITIAL_SCORE - prevScore;
     if (delta !== 0) {
       const el = document.getElementById('score-delta');
       if (el) {

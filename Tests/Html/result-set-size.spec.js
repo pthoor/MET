@@ -31,11 +31,15 @@ test.describe('empty report', () => {
   });
 
   // An empty set is an absent measurement, not a catastrophic tenant - see
-  // Tests/Html/band-none.spec.js for the same assertion on a non-empty all-Info set,
-  // and after a client-side rescore.
-  test('reports band None, not a false Critical', async ({ page }) => {
+  // Tests/Html/band-none.spec.js for the same "not a false Critical" assertion on a
+  // non-empty all-Info set (and after a client-side rescore), where the result is the
+  // 'None' band. A zero-check report is a stricter case still (G-8): it must not even
+  // read as a real 'None' band value, but as a distinct "no data at all" state - see
+  // Tests/Html/empty-report-banner.spec.js for the full behavior this renders.
+  test('reports a no-data state, not a false Critical', async ({ page }) => {
     await page.goto('/report-empty.html');
-    await expect(page.locator('#score-band')).toHaveText('None');
+    await expect(page.locator('#score-band')).toHaveText('No data');
     await expect(page.locator('#score-band')).toHaveClass(/band-none/);
+    await expect(page.locator('#donut-score-text')).toHaveText('—');
   });
 });
