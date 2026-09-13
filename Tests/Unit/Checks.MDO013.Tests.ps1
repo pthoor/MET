@@ -22,7 +22,6 @@ BeforeAll {
 Describe 'MET-MDO013 Policy Precedence Conflicts' {
     BeforeEach {
         $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'MDO' 'MET-MDO013-PolicyPrecedenceConflicts.ps1'
-        $METContext = @{}
     }
 
     Context 'No mailboxes exist' {

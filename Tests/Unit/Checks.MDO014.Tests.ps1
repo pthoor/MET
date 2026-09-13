@@ -28,7 +28,6 @@ Describe 'MET-MDO014 Group Reference Audit' {
         Mock Get-HostedContentFilterRule { @() }
         Mock Get-SafeAttachmentRule      { @() }
         Mock Get-AntiPhishRule           { @() }
-        $METContext = @{}
     }
 
     Context 'No mailboxes exist' {

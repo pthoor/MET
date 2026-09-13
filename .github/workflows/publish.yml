@@ -73,10 +73,10 @@ jobs:
         shell: pwsh
         run: |
           Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
-          $paths = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
-          $results = $paths | ForEach-Object {
+          $results = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1') | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           }
+          $results += Invoke-ScriptAnalyzer -Path Tests -Recurse -Settings ./Tests/PSScriptAnalyzerSettings.psd1
           $blocking = @($results | Where-Object { $_.Severity -in @('Error', 'Warning') })
           if ($blocking.Count -gt 0) {
             $blocking | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize
