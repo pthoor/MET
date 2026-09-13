@@ -375,28 +375,16 @@ function Get-METReport {
             if ($wantsHtml) { $resolvedHtmlPath = $OutputPath }
           }
           else {
-            if ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') {
-              $baseFolder = $OutputPath
-              if (-not (Test-Path -LiteralPath $baseFolder)) {
-                New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
-              }
-              $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
+            # $namesExplicitFile is false here, which means its negation
+            # ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') is guaranteed
+            # true - $OutputPath is either an existing directory, an extensionless path, or
+            # -Format All (which already requires a directory), so it is always the container
+            # runs get grouped under, never a filename needing its parent resolved separately.
+            $baseFolder = $OutputPath
+            if (-not (Test-Path -LiteralPath $baseFolder)) {
+              New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
             }
-            else {
-              # Split-Path has no parameter set pairing -LiteralPath with -Parent or -Leaf, so
-              # that combination throws 'Parameter set cannot be resolved' before anything is
-              # written. [System.IO.Path] is literal by nature, which keeps the -LiteralPath
-              # intent (a folder named 'Contoso [2026]' must not be glob-expanded) that
-              # reverting to Split-Path -Path would throw away.
-              $parentFolder = [System.IO.Path]::GetDirectoryName($OutputPath)
-              if ([string]::IsNullOrWhiteSpace($parentFolder)) {
-                $parentFolder = (Get-Location).Path
-              }
-              if (-not (Test-Path -LiteralPath $parentFolder)) {
-                New-Item -ItemType Directory -Path $parentFolder -Force | Out-Null
-              }
-              $assessmentOutputFolder = Join-Path $parentFolder $assessmentFolderName
-            }
+            $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
 
             New-Item -ItemType Directory -Path $assessmentOutputFolder -Force | Out-Null
 

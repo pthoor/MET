@@ -350,6 +350,18 @@ Describe 'Get-METReport path and input handling' {
         (Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-layout') -Directory) | Should -BeNullOrEmpty
     }
 
+    # Same contract as the JSON test above, but for the parallel $resolvedHtmlPath assignment -
+    # the JSON assertion alone does not prove HTML takes the same direct-write path rather than
+    # continuing to nest under a nonexistent-here $assessmentOutputFolder.
+    It 'writes a named HTML output file exactly at the given path, with no per-run subfolder' {
+        $target = Join-Path $TestDrive 'named-html-layout' 'custom-name.html'
+
+        $script:Sample | Get-METReport -Format HTML -OutputPath $target -NoLaunch | Out-Null
+
+        Test-Path -LiteralPath $target | Should -BeTrue
+        (Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-html-layout') -Directory) | Should -BeNullOrEmpty
+    }
+
     # -OutputPath containing brackets must survive the file-naming branch too, which is
     # why the fix uses [System.IO.Path] rather than reverting to Split-Path -Path.
     It 'writes to a named output file under a bracketed folder' {
