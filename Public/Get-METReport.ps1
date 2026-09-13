@@ -49,13 +49,13 @@ function Get-METReport {
 
     .PARAMETER OutputPath
         Where to write the report file(s), for -Format JSON, HTML, or All. For a single format
-        (JSON or HTML), pass a file path to name the output file directly, or a directory to
-        accept the default filename (MET-report.json / MET-report.html) inside it. For -Format
-        All, pass a directory - both files are written into it. Ignored, with a warning, when
-        -Format is Console. Known current-behaviour caveat: the report is presently written into
-        a timestamped subfolder created under the location given here, rather than at the exact
-        path/filename passed - this is a known, separately tracked defect, not an intended part
-        of this parameter's contract, and is expected to be fixed in a future release.
+        (JSON or HTML), pass a file path with an extension to write exactly there, or a
+        directory (or an extensionless path) to have the default filename (MET-report.json /
+        MET-report.html) written inside a timestamped <run>-<tenant> subfolder created under
+        it - grouping runs is useful for a directory, but a filename you typed is written
+        exactly as given, with no subfolder inserted underneath it. For -Format All, pass a
+        directory - both files are written into a timestamped subfolder under it. Ignored,
+        with a warning, when -Format is Console.
 
     .PARAMETER TenantName
         Overrides the tenant label shown in the console header, JSON `tenant` field, and HTML
@@ -347,17 +347,19 @@ function Get-METReport {
         if ($OutputPath -and ($wantsJson -or $wantsHtml)) {
           $outputIsDirectory = Test-Path -LiteralPath $OutputPath -PathType Container
           $hasExtension = [System.IO.Path]::HasExtension($OutputPath)
+          $namesExplicitFile = $hasExtension -and -not $outputIsDirectory -and $Format -ne 'All'
 
-          if ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') {
-            $baseFolder = $OutputPath
-            if (-not (Test-Path -LiteralPath $baseFolder)) {
-              New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
-            }
-            $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
-          }
-          else {
-            # Split-Path has no parameter set pairing -LiteralPath with -Parent or -Leaf, so
-            # that combination throws 'Parameter set cannot be resolved' before anything is
+          if ($namesExplicitFile) {
+            # C-23: an explicit filename with an extension is written exactly there, with no
+            # per-run <timestamp>-<tenant> subfolder inserted underneath it. Grouping runs
+            # under a subfolder is genuinely useful applied to a directory, which is a
+            # container - applied to a filename the caller typed, it is the command
+            # overriding an explicit instruction, and an artifact upload in CI cannot
+            # reference a path it cannot predict. A directory, an extensionless path, or
+            # -Format All (which already requires a directory) still get the subfolder below.
+            #
+            # Split-Path has no parameter set pairing -LiteralPath with -Parent, so that
+            # combination throws 'Parameter set cannot be resolved' before anything is
             # written. [System.IO.Path] is literal by nature, which keeps the -LiteralPath
             # intent (a folder named 'Contoso [2026]' must not be glob-expanded) that
             # reverting to Split-Path -Path would throw away.
@@ -368,29 +370,43 @@ function Get-METReport {
             if (-not (Test-Path -LiteralPath $parentFolder)) {
               New-Item -ItemType Directory -Path $parentFolder -Force | Out-Null
             }
-            $assessmentOutputFolder = Join-Path $parentFolder $assessmentFolderName
+
+            if ($wantsJson) { $resolvedJsonPath = $OutputPath }
+            if ($wantsHtml) { $resolvedHtmlPath = $OutputPath }
           }
+          else {
+            # $namesExplicitFile is false here, which means its negation
+            # ($outputIsDirectory -or -not $hasExtension -or $Format -eq 'All') is guaranteed
+            # true - $OutputPath is either an existing directory, an extensionless path, or
+            # -Format All (which already requires a directory), so it is always the container
+            # runs get grouped under, never a filename needing its parent resolved separately.
+            $baseFolder = $OutputPath
+            if (-not (Test-Path -LiteralPath $baseFolder)) {
+              New-Item -ItemType Directory -Path $baseFolder -Force | Out-Null
+            }
+            $assessmentOutputFolder = Join-Path $baseFolder $assessmentFolderName
 
-          New-Item -ItemType Directory -Path $assessmentOutputFolder -Force | Out-Null
+            New-Item -ItemType Directory -Path $assessmentOutputFolder -Force | Out-Null
 
-          if ($wantsJson) {
-            $jsonLeaf = if ($Format -eq 'JSON' -and $hasExtension -and -not $outputIsDirectory) {
-              [System.IO.Path]::GetFileName($OutputPath)
+            if ($wantsJson) {
+              $jsonLeaf = if ($Format -eq 'JSON' -and $hasExtension -and -not $outputIsDirectory) {
+                [System.IO.Path]::GetFileName($OutputPath)
+              }
+              else {
+                'MET-report.json'
+              }
+              $resolvedJsonPath = Join-Path $assessmentOutputFolder $jsonLeaf
             }
-            else {
-              'MET-report.json'
-            }
-            $resolvedJsonPath = Join-Path $assessmentOutputFolder $jsonLeaf
-          }
 
-          if ($wantsHtml) {
-            $htmlLeaf = if ($Format -eq 'HTML' -and $hasExtension -and -not $outputIsDirectory) {
-              [System.IO.Path]::GetFileName($OutputPath)
+            if ($wantsHtml) {
+              $htmlLeaf = if ($Format -eq 'HTML' -and $hasExtension -and -not $outputIsDirectory) {
+                [System.IO.Path]::GetFileName($OutputPath)
+              }
+              else {
+                'MET-report.html'
+              }
+              $resolvedHtmlPath = Join-Path $assessmentOutputFolder $htmlLeaf
             }
-            else {
-              'MET-report.html'
-            }
-            $resolvedHtmlPath = Join-Path $assessmentOutputFolder $htmlLeaf
           }
         }
 

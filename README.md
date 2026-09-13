@@ -427,7 +427,7 @@ Settings MET deliberately does not assess as a check. Two different reasons land
 
 The HTML report is a **single self-contained file** - all CSS and JavaScript are inlined, no CDN or internet connection required to view it.
 
-When `-OutputPath` is provided, MET creates a timestamped run folder and writes reports inside it (for example `./assessments/20260602-102530-contoso.onmicrosoft.com/`).
+When `-OutputPath` names a directory (or a path with no extension), MET creates a timestamped run folder inside it and writes reports there (for example `./assessments/20260602-102530-contoso.onmicrosoft.com/`). When `-OutputPath` names a file with an extension - for example `./MET-report.json` - the report is written exactly there instead, with no run folder inserted underneath it.
 
 ### Re-render a saved report
 

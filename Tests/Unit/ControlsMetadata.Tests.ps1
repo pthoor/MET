@@ -23,10 +23,10 @@ Describe 'CONTROLS_META generation' {
     }
 
     It 'Emits one entry per check into the rendered report' {
-        # Get-METReport's -OutputPath always resolves to a fresh timestamped subfolder
-        # (even when given a file path with an extension - see :177/:214/:229), so the
+        # A directory -OutputPath resolves to a fresh timestamped subfolder, so the
         # generated file is located the same way Get-METReport.Html.Tests.ps1 does,
-        # rather than read back from the literal path passed in.
+        # rather than read back from a literal path. The exact filename doesn't matter
+        # to this test, which is why it passes a directory rather than a named file.
         $results = @(
             [PSCustomObject]@{
                 PSTypeName = 'MET.CheckResult'

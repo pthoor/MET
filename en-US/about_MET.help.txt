@@ -245,10 +245,10 @@ EXAMPLES
         Unattended, certificate-based sign-in suitable for a scheduled or
         CI-driven run on any platform. -PassThru returns the FileInfo
         object for the HTML file actually written, which is the reliable
-        way to learn its path: -OutputPath currently writes the report
-        into a timestamped subfolder generated under the location given,
-        rather than at that exact path - a known, separately tracked
-        defect, not this parameter's intended contract.
+        way to learn its path when -OutputPath names a directory: a
+        directory groups the run under a timestamped subfolder, while a
+        filename with an extension (e.g. ./report.html) is written
+        exactly there instead.
 
     Re-rendering a saved report
         Import-METReport -Path ./assessments/2026-09-09/MET-report.json |

@@ -336,17 +336,30 @@ Describe 'Get-METReport path and input handling' {
         $written.Count | Should -Be 1
     }
 
-    # The named file still lands inside the per-run <timestamp>-<tenant> subfolder, which is
-    # the behavior that shipped before the -LiteralPath regression. Asserted so a future
-    # change to that layout is a deliberate one.
-    It 'keeps a named output file inside the per-run assessment folder' {
+    # C-23: an explicit filename with an extension is written exactly there, with no
+    # per-run <timestamp>-<tenant> subfolder inserted underneath it - an artifact upload in
+    # CI cannot reference a path it cannot predict, and needing -PassThru to discover where
+    # -OutputPath actually went was the defect. A bare directory (or a path with no
+    # extension) still gets the subfolder - see the tests above.
+    It 'writes a named output file exactly at the given path, with no per-run subfolder' {
         $target = Join-Path $TestDrive 'named-layout' 'custom-name.json'
 
         $script:Sample | Get-METReport -Format JSON -OutputPath $target | Out-Null
 
-        $runFolder = Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-layout') -Directory | Select-Object -First 1
-        $runFolder | Should -Not -BeNullOrEmpty
-        Test-Path -LiteralPath (Join-Path $runFolder.FullName 'custom-name.json') | Should -BeTrue
+        Test-Path -LiteralPath $target | Should -BeTrue
+        (Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-layout') -Directory) | Should -BeNullOrEmpty
+    }
+
+    # Same contract as the JSON test above, but for the parallel $resolvedHtmlPath assignment -
+    # the JSON assertion alone does not prove HTML takes the same direct-write path rather than
+    # continuing to nest under a nonexistent-here $assessmentOutputFolder.
+    It 'writes a named HTML output file exactly at the given path, with no per-run subfolder' {
+        $target = Join-Path $TestDrive 'named-html-layout' 'custom-name.html'
+
+        $script:Sample | Get-METReport -Format HTML -OutputPath $target -NoLaunch | Out-Null
+
+        Test-Path -LiteralPath $target | Should -BeTrue
+        (Get-ChildItem -LiteralPath (Join-Path $TestDrive 'named-html-layout') -Directory) | Should -BeNullOrEmpty
     }
 
     # -OutputPath containing brackets must survive the file-naming branch too, which is
