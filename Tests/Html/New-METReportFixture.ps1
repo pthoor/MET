@@ -33,6 +33,15 @@
                        browser leaves nothing scorable, which is the live client-side path
                        (recalcScore/bandOf) that produced a false Critical band before the
                        'None' band existed on that side too.
+    LongFinding    - one Fail with a short Finding and one Fail with a 1600+ character
+                       Finding. Regression fixture for G-6: the Top 5 row for the long
+                       Finding must stay clamped to roughly the short row's height instead
+                       of expanding to fit the whole text.
+    RankingBySum   - three MET-EXO004 Medium-severity Fails (weight 10 each, summing to 30)
+                       plus a single MET-MDO001 High-severity Fail (weight 20). Regression
+                       fixture for G-5: proves Top 5 ranks groups by the SUM of member
+                       severity weights, not by the single highest per-item severity in a
+                       group (which would rank the Medium group below the lone High result).
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +49,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum')]
     [string] $Scenario = 'Rich'
 )
 
@@ -244,6 +253,50 @@ $fixtures = switch ($Scenario) {
             New-FixtureResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
                 -Severity 'Informational' -Score $null -AffectedObject 'Tenant' `
                 -Finding 'No trusted sealers configured'
+        )
+    }
+
+    'RankingBySum' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy A' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy B' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy C' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+        )
+    }
+
+    'LongFinding' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email.' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+
+            New-FixtureResult -CheckId 'MET-EXO001' -Category 'EXO' -Name 'DMARC Record' -Result 'Fail' `
+                -Severity 'Critical' -Score 0 -AffectedObject 'contoso.com' `
+                -Finding (('DMARC policy is set to none, which means no enforcement action is taken against spoofed mail failing authentication checks. ' * 20).Trim()) `
+                -Recommendation 'Publish a DMARC record with p=quarantine.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure'
         )
     }
 

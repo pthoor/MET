@@ -811,7 +811,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .top5-rank{font-size:18px;font-weight:700;color:var(--text3);text-align:center}
 .top5-id{font-size:12px;font-family:monospace;color:var(--text2)}
 .top5-name{font-weight:500}
-.top5-finding{font-size:12px;color:var(--text2);line-height:1.5}
+.top5-finding{font-size:12px;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .finding-policy{margin-bottom:6px}.finding-policy:last-child{margin-bottom:0}
 .finding-policy-name{font-weight:600;color:var(--text)}
 .finding-list{margin:3px 0 0 0;padding-left:16px;list-style:disc}
@@ -1044,6 +1044,18 @@ const SEV_WEIGHT = {Critical:40,High:20,Medium:10,Low:5,Informational:0};
 const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(--accent-teams)'};
 
 function sevOf(s){ return s || 'Informational'; }
+
+// Mirrors Get-METAggregationNoun in Public/Invoke-METAssessment.ps1 so a grouped Top 5 row
+// (see renderTop5()) uses the same per-checkId noun as the console/JSON aggregation path.
+function getAggregationNoun(checkId) {
+  if (/^MET-EXO00[1-3]$/.test(checkId)) return 'domains';
+  if (checkId === 'MET-EXO004') return 'quarantine policies';
+  if (checkId === 'MET-EXO018') return 'remote domains';
+  if (checkId === 'MET-EXO020') return 'connection filter policies';
+  if (checkId === 'MET-EXO022') return 'sharing policies';
+  if (checkId === 'MET-MDO014') return 'groups';
+  return 'policies';
+}
 
 const CONTROLS_META = {
 $controlsMetaEntries
@@ -1486,13 +1498,30 @@ sortedChecks.forEach(function(check) {
 
 // ── Top 5 ────────────────────────────────────────────────────────
 function renderTop5() {
-  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)); });
-  const resOrder   = {Fail:0, Warning:1};
-  const top5 = actionable.slice().sort(function(a,b) {
-    const rDiff = (resOrder[a.result] ?? 9) - (resOrder[b.result] ?? 9);
-    if (rDiff !== 0) return rDiff;
-    return (SEV_WEIGHT[b.severity]||0) - (SEV_WEIGHT[a.severity]||0);
-  }).slice(0,5);
+  // G-5: group actionable results by CheckId and rank by summed severity weight, per
+  // CLAUDE.md's "Severity weight × number of Fail results sharing the same remediation
+  // category." A check whose Error field is populated couldn't be assessed at all, so it
+  // is excluded before grouping - it does not belong in a remediation list.
+  const actionable = CHECKS.filter(function(c) {
+    return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)) && !c.error;
+  });
+
+  const groupOrder = [];
+  const groups = {};
+  actionable.forEach(function(c) {
+    let group = groups[c.checkId];
+    if (!group) {
+      group = { checkId: c.checkId, name: c.name, result: c.result, severity: c.severity, finding: c.finding, weight: 0, keys: [] };
+      groups[c.checkId] = group;
+      groupOrder.push(c.checkId);
+    }
+    group.weight += (SEV_WEIGHT[c.severity] || 0);
+    group.keys.push(resultKey(c));
+  });
+
+  const top5 = groupOrder.map(function(id) { return groups[id]; })
+    .sort(function(a, b) { return b.weight - a.weight; })
+    .slice(0, 5);
 
   const body = document.getElementById('top5-body');
   body.innerHTML = '';
@@ -1503,25 +1532,27 @@ function renderTop5() {
     body.appendChild(p);
     return;
   }
-  top5.forEach(function(check, i) {
-    const key = resultKey(check);
-    const rbClass = 'rb-' + slug(check.result);
+  top5.forEach(function(group, i) {
+    const primaryKey = group.keys[0];
+    const count = group.keys.length;
+    const nameText = group.name + (count > 1 ? ' (' + count + ' ' + getAggregationNoun(group.checkId) + ')' : '');
+    const rbClass = 'rb-' + slug(group.result);
     const row = document.createElement('div');
     row.className = 'top5-row';
-    row.dataset.resultKey = key;
+    row.dataset.resultKey = primaryKey;
     row.innerHTML =
       '<div class="top5-rank">' + (i+1) + '</div>' +
       '<div>' +
-        '<div class="top5-id">' + esc(check.checkId) + '</div>' +
-        '<div class="top5-name">' + esc(check.name) + '</div>' +
+        '<div class="top5-id">' + esc(group.checkId) + '</div>' +
+        '<div class="top5-name">' + esc(nameText) + '</div>' +
       '</div>' +
-      '<div class="top5-finding">' + fmtFinding(check.finding) + '</div>' +
+      '<div class="top5-finding">' + fmtFinding(group.finding) + '</div>' +
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
-        '<span class="result-badge ' + rbClass + '">' + esc(check.result.toUpperCase()) + '</span>' +
-        '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+        '<span class="result-badge ' + rbClass + '">' + esc(group.result.toUpperCase()) + '</span>' +
+        '<span class="sev-pill sev-' + slug(sevOf(group.severity)) + '">' + esc(sevOf(group.severity).toUpperCase()) + '</span>' +
       '</div>';
     row.addEventListener('click', function() {
-      const card = cardMap[key];
+      const card = cardMap[primaryKey];
       if (!card) return;
       const body = card.querySelector('.card-body');
       const chev = card.querySelector('.card-chevron');
