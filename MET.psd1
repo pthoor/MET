@@ -6,6 +6,7 @@
     Copyright            = '(c) 2026 Pierre Thoor. MIT License.'
     Description          = 'Security Posture Scanner for MDO, EXO and Teams - assesses MDO, EXO/EOP, and Teams protection posture.'
     PowerShellVersion    = '7.4'
+    CompatiblePSEditions = @('Core')
     RequiredModules      = @()
     # Dependencies are checked at runtime by Test-METPrerequisites and Connect-METSession.
     # Declaring them in RequiredModules causes a hard import failure when they aren't installed,
