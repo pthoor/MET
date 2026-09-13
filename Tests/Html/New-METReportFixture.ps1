@@ -17,6 +17,10 @@
                        bucket carrying a populated Error field. Error is mutually exclusive
                        with every Result-based bucket, so only the two clean results may
                        appear under Fail/Warning and the donut must show three segments.
+    ErrorWithRecommendation - a single Fail carrying both a populated Error (the check
+                       itself failed to run) and a populated Recommendation. Regression
+                       fixture for G-2: the two must render together, not the recommendation
+                       being discarded because an error is present.
     SameAffectedObject - three MET-EXO006 results sharing both CheckId AND AffectedObject
                        (the real-world shape - EXO006's ten sections all use AffectedObject
                        'Report Submission Policy'), distinguished only by Name. Regression
@@ -36,7 +40,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'InfoOnly', 'FailPlusInfo')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo')]
     [string] $Scenario = 'Rich'
 )
 
@@ -144,6 +148,18 @@ $fixtures = switch ($Scenario) {
             New-FixtureResult -CheckId 'MET-Teams006' -Category 'Teams' -Name 'Info that failed to run' -Result 'Info' `
                 -Severity 'Informational' -Score $null -AffectedObject 'Tenant federation configuration' `
                 -Finding 'Partial retrieval' -ErrorText 'Get-CsTenantFederationConfiguration threw'
+        )
+    }
+
+    # G-2: the recommendation must survive alongside the error banner - a check that failed
+    # to run because of a permission gap still needs to tell the operator how to fix that gap.
+    'ErrorWithRecommendation' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO011' -Category 'EXO' -Name 'Mail Flow Connector Hygiene' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Inbound connectors' `
+                -Finding 'Retrieval failed' `
+                -Recommendation 'Re-run with a Security Reader role.' `
+                -ErrorText "The term 'Get-InboundConnector' is not recognized as the name of a cmdlet."
         )
     }
 
