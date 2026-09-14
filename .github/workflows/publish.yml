@@ -73,10 +73,24 @@ jobs:
         shell: pwsh
         run: |
           Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
-          $paths = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
-          $results = $paths | ForEach-Object {
+          $results = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1') | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           }
+
+          # workflow_dispatch can re-run this against an old tag (e.g. v0.6.0) whose tree
+          # predates Tests/ and its PSScriptAnalyzerSettings.psd1 overlay - only lint Tests
+          # when it exists, and fall back to the root settings if the overlay isn't there yet.
+          if (Test-Path ./Tests) {
+            $testsSettings = if (Test-Path ./Tests/PSScriptAnalyzerSettings.psd1) {
+              './Tests/PSScriptAnalyzerSettings.psd1'
+            } else {
+              './PSScriptAnalyzerSettings.psd1'
+            }
+            $results += Invoke-ScriptAnalyzer -Path Tests -Recurse -Settings $testsSettings
+          } else {
+            Write-Host 'Tests directory not present at this tag; skipping Tests lint.'
+          }
+
           $blocking = @($results | Where-Object { $_.Severity -in @('Error', 'Warning') })
           if ($blocking.Count -gt 0) {
             $blocking | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize
@@ -209,7 +223,7 @@ jobs:
           $version = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
           $stage = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE', 'README.md') -Destination $stage
+          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE', 'README.md', 'CHANGELOG.md') -Destination $stage
           Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $stage -Recurse
           Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop
           Compress-Archive -Path "$stage/*" -DestinationPath "met-$version.zip"

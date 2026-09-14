@@ -41,10 +41,10 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: |
-          $paths   = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1')
-          $results = $paths | ForEach-Object {
+          $results = @('Public', 'Private', 'Checks', 'MET.psm1', 'MET.psd1') | ForEach-Object {
             Invoke-ScriptAnalyzer -Path $_ -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           }
+          $results += Invoke-ScriptAnalyzer -Path Tests -Recurse -Settings ./Tests/PSScriptAnalyzerSettings.psd1
 
           if ($results) {
             $results | Sort-Object Severity, ScriptName, Line |

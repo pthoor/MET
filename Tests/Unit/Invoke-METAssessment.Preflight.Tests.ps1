@@ -83,7 +83,7 @@ Describe 'Invoke-METAssessment connection preflight' {
         Mock -ModuleName 'MET' -CommandName 'Get-ConnectionInformation' -MockWith { }
         Mock -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -MockWith { @() }
 
-        try { Invoke-METAssessment } catch { }
+        try { Invoke-METAssessment } catch { $null = $_ }
 
         Should -Invoke -ModuleName 'MET' -CommandName 'Get-AcceptedDomain' -Times 0
     }
