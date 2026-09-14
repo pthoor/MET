@@ -7,6 +7,7 @@
         'PSReviewUnusedParameter'
         'PSUseSingularNouns'
         'PSUseShouldProcessForStateChangingFunctions'
+        'PSShouldProcess'
         'PSUseDeclaredVarsMoreThanAssignments'
         'PSAvoidUsingConvertToSecureStringWithPlainText'
     )
