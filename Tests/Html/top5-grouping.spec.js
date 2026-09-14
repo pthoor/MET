@@ -37,6 +37,47 @@ test.describe('Top 5 ranks groups by summed severity weight', () => {
   });
 });
 
+// Copilot review of commit 466fd0c, item 7: a single CheckId can emit actionable members
+// with different severities and findings (e.g. MET-MDO010's High Fail for the protection
+// toggle vs. its Medium Warning for tagging). The grouped Top 5 row kept only the first
+// member seen, which could show an arbitrary/less-severe issue. The group must show the
+// highest-priority member deterministically (Fail before Warning, then higher severity
+// weight), same ranking used for card sorting elsewhere in this file.
+test.describe('Top 5 group picks the highest-priority member, not the first one seen', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/report-mixed-severity-group.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+  });
+
+  test('the group shows the High Fail\'s severity and finding, even though the Medium Warning is listed first', async ({ page }) => {
+    const rows = page.locator('.top5-row');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator('.top5-id')).toHaveText('MET-MDO010');
+    await expect(rows.first().locator('.sev-pill')).toHaveText('HIGH');
+    await expect(rows.first()).toContainText('Priority account protection is disabled tenant-wide');
+    await expect(rows.first()).not.toContainText('No priority account tags are applied');
+  });
+
+  test('the grouped row still names the member count', async ({ page }) => {
+    await expect(page.locator('.top5-row .top5-name')).toContainText('2');
+  });
+});
+
+// Copilot review of commit 466fd0c, item 9: the NullFields fixture's actionable Warning has
+// no usable Name - Top 5 must fall back to the CheckId, same as the card title already does
+// (G-14 item 6), instead of rendering a blank name.
+test.describe('Top 5 falls back to CheckId when Name is null', () => {
+  test('a null-Name actionable check shows its CheckId in the Top 5 name', async ({ page }) => {
+    await page.goto('/report-null-fields.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+
+    const row = page.locator('.top5-row').filter({ hasText: 'MET-EXO099' });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator('.top5-name')).not.toHaveText('');
+    await expect(row.locator('.top5-name')).toContainText('MET-EXO099');
+  });
+});
+
 test.describe('Top 5 excludes errored checks', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/report-error-buckets.html');

@@ -23,6 +23,7 @@ const SCENARIOS = [
   { scenario: 'UnknownCategory', file: 'report-unknown-category.html' },
   { scenario: 'NullFields', file: 'report-null-fields.html' },
   { scenario: 'CoverageTable', file: 'report-coverage-table.html' },
+  { scenario: 'MixedSeverityGroup', file: 'report-mixed-severity-group.html' },
 ];
 
 function pwshExecutable() {

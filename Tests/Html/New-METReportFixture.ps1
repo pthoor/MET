@@ -59,6 +59,11 @@
                        New-METEffectivePolicyCoverageResult emits. Regression fixture for
                        G-14 item 7: the coverage table must render inside a block container,
                        not nested inside a <span class="field-value">.
+    MixedSeverityGroup - one CheckId (MET-MDO010, mirroring its real two-Name shape) emitting
+                       both a High Fail and a Medium Warning. Regression fixture for the
+                       Top 5 grouping fix: the group's displayed severity/finding/name must
+                       come from the higher-priority (Fail, then higher severity weight)
+                       member, not whichever result happens to be first in iteration order.
 #>
 [CmdletBinding()]
 param(
@@ -66,7 +71,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable', 'MixedSeverityGroup')]
     [string] $Scenario = 'Rich'
 )
 
@@ -392,6 +397,27 @@ $fixtures = switch ($Scenario) {
                         }
                     )
                 }
+        )
+    }
+
+    # A single CheckId with members at different Result/Severity, mirroring MET-MDO010's
+    # real two-Name shape (High Fail for the toggle, Medium Warning for tagging). The worse
+    # member (High Fail) is listed second, on purpose - proves the Top 5 group picks the
+    # highest-priority member deterministically rather than whichever is first in iteration
+    # order.
+    'MixedSeverityGroup' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO010' -Category 'MDO' -Name 'Priority Account Tagging' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Tenant' `
+                -Finding 'No priority account tags are applied to a differentiated protection policy' `
+                -Recommendation 'Apply priority account tags to a Strict or Standard preset policy.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/priority-accounts-turn-on-protection'
+
+            New-FixtureResult -CheckId 'MET-MDO010' -Category 'MDO' -Name 'Priority Account Protection Toggle' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Tenant' `
+                -Finding 'Priority account protection is disabled tenant-wide' `
+                -Recommendation 'Enable the priority account protection toggle.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/priority-accounts-turn-on-protection'
         )
     }
 

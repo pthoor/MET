@@ -48,4 +48,21 @@ test.describe('score delta vs. a corrupt cached score', () => {
     await expect(deltaEl).toHaveText('+10');
     await expect(deltaEl).toHaveClass(/delta-up/);
   });
+
+  // Copilot review of commit 466fd0c, item 2: parseInt is not a strict validity check -
+  // parseInt("40garbage", 10) is 40, which IS finite, so the Number.isFinite guard above
+  // did not catch a corrupted-but-parseable cached value. Number("40garbage") is NaN.
+  test('a corrupted-but-parseable cached score ("40garbage") renders no delta', async ({ page, context }) => {
+    await context.addInitScript((key) => {
+      window.localStorage.setItem(key, '40garbage');
+    }, SCORE_KEY);
+
+    await page.goto('/report.html');
+    await expect(page.locator('#cards-container .card').first()).toBeVisible();
+
+    const deltaEl = page.locator('#score-delta');
+    await expect(deltaEl).toHaveText('');
+    await expect(deltaEl).not.toHaveClass(/delta-up/);
+    await expect(deltaEl).not.toHaveClass(/delta-down/);
+  });
 });

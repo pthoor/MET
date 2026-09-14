@@ -31,6 +31,31 @@ test.describe('empty report: score banner does not present as a real posture sco
     await expect(noResults).toHaveText('No check results in this report.');
     await expect(noResults).not.toHaveText('No checks match the current filters.');
   });
+
+  // Copilot review of commit 466fd0c, item 3: an empty report's INITIAL_SCORE is the
+  // server's placeholder (0), not an observed score - comparing it against a real cached
+  // score from a prior (non-empty) run produced a misleading negative delta right next to
+  // the "No data" banner, contradicting it.
+  test('no score delta renders, even with a real cached score from a prior run', async ({ page, context }) => {
+    await context.addInitScript(() => {
+      window.localStorage.setItem('MET_score_contoso.onmicrosoft.com', '74');
+    });
+    await page.goto('/report-empty.html');
+
+    const deltaEl = page.locator('#score-delta');
+    await expect(deltaEl).toHaveText('');
+    await expect(deltaEl).not.toHaveClass(/delta-up/);
+    await expect(deltaEl).not.toHaveClass(/delta-down/);
+    await expect(page.locator('#score-delta-caption')).toBeHidden();
+  });
+
+  // The Top 5 panel must not claim a clean assessment when no checks ran at all - a
+  // "No failing or warning checks" message implies a real run found nothing to fix.
+  test('the Top 5 panel does not claim a clean result set', async ({ page }) => {
+    await page.goto('/report-empty.html');
+    await expect(page.locator('#top5-body')).not.toContainText('No failing or warning checks.');
+    await expect(page.locator('#top5-body')).toContainText('No check results in this report.');
+  });
 });
 
 test.describe('non-empty report: filtered-to-zero keeps the original message', () => {

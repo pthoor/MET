@@ -682,6 +682,10 @@ function Get-METReport {
   --fs-md: 20px;
   --fs-lg: 28px;
   --fs-score: 56px;
+  /* Sticky-offset for .card-group-header, kept in sync with the toolbar's actual
+     rendered height by a ResizeObserver (G-codex item 5) - a hardcoded px offset
+     assumed a one-row toolbar and let a wrapped two-row toolbar obscure the header. */
+  --toolbar-h: 48px;
   --bg: #f3f2f1;
   --surface: #ffffff;
   --surface2: #faf9f8;
@@ -921,7 +925,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
    ancestor breaks position:sticky on the header (it becomes the header's own scroll
    container, so it "sticks" immediately instead of tracking the real page scroll). */
 .card-group{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
-.card-group-header{position:sticky;top:48px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;user-select:none;font-size:var(--fs-2xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
+.card-group-header{position:sticky;top:var(--toolbar-h);z-index:20;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;user-select:none;font-size:var(--fs-2xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
 .card-group-header:hover{color:var(--text)}
 .card-group-title{display:flex;align-items:center;gap:8px}
 .card-group-count{font-weight:700;color:var(--text3)}
@@ -959,7 +963,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 /* One rule for every interactive element on the page (G-14 item 9) - native <button>/<a>/
    <input>/<select> got the UA default ring, .card-header had its own explicit ring, and
    .fix-toggle (a div[role=button][tabindex=0]) had none at all. */
-.card-header:focus-visible,.fix-toggle:focus-visible,.tab:focus-visible,.band-info-icon:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
+.card-header:focus-visible,.fix-toggle:focus-visible,.tab:focus-visible,.band-info-icon:focus-visible,.top5-row:focus-visible,.ctrl-row:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
 /* Low-chroma outlined chip: severity describes the control, not this run's finding, so it
    no longer competes with the result badge for the reader's attention (G-13 item 2). */
 .sev-pill{font-size:var(--fs-2xs);font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
@@ -1058,6 +1062,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   .toolbar,.print-btn,.modal-overlay,.band-info-icon,.card-chevron,.fix-chevron,.btn-accept,.btn-undo,.btn-collapse,.card-group-chevron{display:none !important}
   .card{display:block !important;box-shadow:none;break-inside:avoid}
   .card-group-header{position:static}
+  .card-group.empty{display:block !important}
   .card-group-body.collapsed{display:flex !important}
   .card-body{display:flex !important}
   .fix-content{display:block !important}
@@ -1380,7 +1385,7 @@ function renderDonut() {
     { v: pass,  color: 'var(--result-pass)'   },
     { v: na,    color: 'var(--result-na)'     },
     { v: info,  color: 'var(--result-na)'     },
-    { v: error, color: 'var(--sev-critical)'  }
+    { v: error, color: 'var(--result-error)'  }
   ].filter(function(s) { return s.v > 0; });
   const r = 54, circ = 2 * Math.PI * r;
   let offset = 0;
@@ -1630,9 +1635,14 @@ function createCard(check) {
   const affectedObjectHtml = check.affectedObject
     ? '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value" dir="auto">' + esc(check.affectedObject) + '</span></div>'
     : '';
+  // fmtFinding() can return block content (<div class="finding-policy">, <ul>) for
+  // multi-line/multi-policy findings, so this needs a block container too, not the
+  // <span> every purely-textual field-value uses - a <span> around block content is a
+  // parse-tree hazard browsers silently repair (same fix as the coverage table below,
+  // G-14 item 7).
   const findingValueHtml = fmtFinding(check.finding);
   const findingHtml = findingValueHtml
-    ? '<div class="card-field"><span class="field-label">Finding</span><span class="field-value" dir="auto">' + findingValueHtml + '</span></div>'
+    ? '<div class="card-field"><span class="field-label">Finding</span><div class="field-value" dir="auto">' + findingValueHtml + '</div></div>'
     : '';
   // A <table> (coverageHtml) needs a block container, not the <span> every other field-value
   // uses - a <span> around block content is a parse-tree hazard browsers silently repair
@@ -1799,14 +1809,33 @@ function renderTop5() {
     return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)) && !c.error;
   });
 
+  // A single CheckId can emit members with different Result/Severity/Finding (e.g.
+  // MET-MDO010's High Fail for the toggle vs. its Medium Warning for tagging) - the
+  // group's displayed name/result/severity/finding/primaryKey must come from the
+  // single highest-priority member, not whichever happens to be first in iteration
+  // order. Same result-then-severity-weight ranking used for card sorting above
+  // (Fail before Warning, then higher SEV_WEIGHT first).
+  const TOP5_RESULT_RANK = {Fail:0, Warning:1};
   const groupOrder = [];
   const groups = {};
   actionable.forEach(function(c) {
     let group = groups[c.checkId];
     if (!group) {
-      group = { checkId: c.checkId, name: c.name, result: c.result, severity: c.severity, finding: c.finding, weight: 0, keys: [] };
+      group = { checkId: c.checkId, name: c.name, result: c.result, severity: c.severity, finding: c.finding, primaryKey: resultKey(c), weight: 0, keys: [] };
       groups[c.checkId] = group;
       groupOrder.push(c.checkId);
+    } else {
+      const curRank = TOP5_RESULT_RANK[group.result] ?? 9;
+      const newRank = TOP5_RESULT_RANK[c.result] ?? 9;
+      const curWeight = SEV_WEIGHT[group.severity] || 0;
+      const newWeight = SEV_WEIGHT[c.severity] || 0;
+      if (newRank < curRank || (newRank === curRank && newWeight > curWeight)) {
+        group.name = c.name;
+        group.result = c.result;
+        group.severity = c.severity;
+        group.finding = c.finding;
+        group.primaryKey = resultKey(c);
+      }
     }
     group.weight += (SEV_WEIGHT[c.severity] || 0);
     group.keys.push(resultKey(c));
@@ -1821,17 +1850,26 @@ function renderTop5() {
   if (!top5.length) {
     const p = document.createElement('div');
     p.style.cssText = 'padding:16px;color:var(--text2);font-size:var(--fs-xs)';
-    p.textContent = 'No failing or warning checks.';
+    // An empty report ran no checks at all - "No failing or warning checks" implies a
+    // clean assessment, which contradicts the "No data" state shown in the score banner.
+    p.textContent = IS_EMPTY_REPORT ? 'No check results in this report.' : 'No failing or warning checks.';
     body.appendChild(p);
     return;
   }
   top5.forEach(function(group, i) {
-    const primaryKey = group.keys[0];
+    const primaryKey = group.primaryKey;
     const count = group.keys.length;
-    const nameText = group.name + (count > 1 ? ' (' + count + ' ' + getAggregationNoun(group.checkId) + ')' : '');
+    // Same CheckId fallback used for the card title (G-14 item 6) - a check with no
+    // usable Name must not render a blank Top 5 row.
+    const nameText = (group.name || group.checkId) + (count > 1 ? ' (' + count + ' ' + getAggregationNoun(group.checkId) + ')' : '');
     const row = document.createElement('div');
     row.className = 'top5-row';
     row.dataset.resultKey = primaryKey;
+    // Keyboard-reachable click target, same role/tabindex/keydown pattern already used
+    // for .card-header and the tabs elsewhere in this file.
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.setAttribute('aria-label', 'Jump to check ' + group.checkId);
     // G-13 item 8: no result badge here - every row is already a Fail or a Warning by
     // construction (see the `actionable` filter above), so a second badge repeating that
     // is pure noise in a remediation list. One severity chip is enough.
@@ -1843,7 +1881,11 @@ function renderTop5() {
       '</div>' +
       '<div class="top5-finding" dir="auto">' + fmtFinding(group.finding) + '</div>' +
       '<span class="sev-pill sev-' + slug(sevOf(group.severity)) + '">' + esc(sevOf(group.severity).toUpperCase()) + '</span>';
-    row.addEventListener('click', function() {
+    // The Top 5 tab hides #cards-container in applyFilters(), so scrollIntoView() on a
+    // display:none card can't reach or expand it - switch to the All tab first, same as
+    // the Controls-row jump handler in renderControlsRef() already does.
+    const jumpToCard = function() {
+      switchToTab('All');
       const card = cardMap[primaryKey];
       if (!card) return;
       ensureGroupExpanded(card);
@@ -1854,6 +1896,10 @@ function renderTop5() {
         chev.classList.add('open');
       }
       card.scrollIntoView({behavior:'smooth', block:'center'});
+    };
+    row.addEventListener('click', jumpToCard);
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToCard(); }
     });
     body.appendChild(row);
   });
@@ -1900,7 +1946,10 @@ function renderControlsRef() {
       const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
       const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(c.result)));
       const desc = CONTROLS_META[c.checkId] || c.name;
-      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card">';
+      // role="button"/tabindex on a <tr> keeps this row a valid table row while making
+      // it a keyboard-reachable click target - same reasoning as .top5-row above; a
+      // wrapping focusable element would break the existing table cell layout.
+      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card" role="button" tabindex="0" aria-label="Jump to check ' + esc(c.checkId) + '">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
       html += '<td><span class="sev-pill sev-' + slug(sevOf(c.severity)) + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
@@ -1919,14 +1968,18 @@ function renderControlsRef() {
   });
 
   el.querySelectorAll('.ctrl-row').forEach(function(row) {
-    row.addEventListener('click', function() {
-      const key = this.dataset.resultKey;
+    const jumpToCard = function() {
+      const key = row.dataset.resultKey;
       switchToTab('All');
       const card = cardMap[key];
       if (card) {
         ensureGroupExpanded(card);
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
+    };
+    row.addEventListener('click', jumpToCard);
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToCard(); }
     });
   });
 }
@@ -2230,28 +2283,55 @@ function rebuildCard(key) {
   if (idx !== -1) allCards[idx] = newCard;
 }
 
+// ── Sticky toolbar-height sync ──────────────────────────────────────
+// .card-group-header's sticky offset (--toolbar-h) must track the toolbar's real
+// rendered height, not a hardcoded value - the toolbar wraps to two rows at narrow
+// widths (the report's documented 1024px minimum), and a stale offset lets the
+// taller wrapped toolbar cover the sticky group header instead of sitting above it.
+(function() {
+  const toolbarEl = document.querySelector('.toolbar');
+  if (!toolbarEl) return;
+  const syncToolbarHeight = function() {
+    document.documentElement.style.setProperty('--toolbar-h', toolbarEl.offsetHeight + 'px');
+  };
+  syncToolbarHeight();
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncToolbarHeight).observe(toolbarEl);
+  } else {
+    window.addEventListener('resize', syncToolbarHeight);
+  }
+})();
+
 // ── Init ─────────────────────────────────────────────────────────
 (function() {
   const LS_SCORE_KEY = 'MET_score_' + TENANT_ID;
-  const prev = lsGet(LS_SCORE_KEY);
-  const prevScore = prev !== null ? parseInt(prev, 10) : NaN;
-  if (Number.isFinite(prevScore)) {
-    const delta = INITIAL_SCORE - prevScore;
-    if (delta !== 0) {
-      const el = document.getElementById('score-delta');
-      if (el) {
-        el.textContent = (delta > 0 ? '+' : '') + delta;
-        el.className = 'score-delta ' + (delta > 0 ? 'delta-up' : 'delta-down');
+  // G-copilot item 3: an empty report's INITIAL_SCORE is a placeholder (0), not an
+  // observed score - comparing it against a real cached score would produce a
+  // misleading delta next to the "No data" banner, and caching it would poison the
+  // comparison for the next real run. Skip the cache read/write entirely.
+  if (!IS_EMPTY_REPORT) {
+    const prev = lsGet(LS_SCORE_KEY);
+    // Number(...) is strict - Number("40garbage") is NaN - unlike parseInt, which
+    // would parse "40garbage" as 40 and treat a corrupted cache value as valid.
+    const prevScore = prev !== null ? Number(prev) : NaN;
+    if (Number.isFinite(prevScore) && prevScore >= 0 && prevScore <= 100) {
+      const delta = INITIAL_SCORE - prevScore;
+      if (delta !== 0) {
+        const el = document.getElementById('score-delta');
+        if (el) {
+          el.textContent = (delta > 0 ? '+' : '') + delta;
+          el.className = 'score-delta ' + (delta > 0 ? 'delta-up' : 'delta-down');
+        }
+        // G-13 item 7: the delta previously appeared with no stated baseline. Labelled here,
+        // not dropped, since "vs. last viewed run" is literally what INITIAL_SCORE is being
+        // compared against - the score cached in this browser's localStorage the last time a
+        // report for this tenant was opened.
+        const captionEl = document.getElementById('score-delta-caption');
+        if (captionEl) captionEl.style.display = '';
       }
-      // G-13 item 7: the delta previously appeared with no stated baseline. Labelled here,
-      // not dropped, since "vs. last viewed run" is literally what INITIAL_SCORE is being
-      // compared against - the score cached in this browser's localStorage the last time a
-      // report for this tenant was opened.
-      const captionEl = document.getElementById('score-delta-caption');
-      if (captionEl) captionEl.style.display = '';
     }
+    lsSet(LS_SCORE_KEY, INITIAL_SCORE);
   }
-  lsSet(LS_SCORE_KEY, INITIAL_SCORE);
 })();
 renderTop5();
 renderControlsRef();
