@@ -673,39 +673,99 @@ function Get-METReport {
 <link rel="icon" type="image/svg+xml" media="(prefers-color-scheme: dark)" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iIzEyMTUxYSI+PC9jaXJjbGU+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc0LjA0IDc0LjA0IiBmaWxsPSJub25lIiBzdHJva2U9IiMyYjMyM2MiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48L3BhdGg+CiAgPHBhdGggZD0iTSAyNS45NiA3NC4wNCBBIDM0IDM0IDAgMSAxIDc5LjI3IDMyLjY5IiBmaWxsPSJub25lIiBzdHJva2U9Im9rbGNoKDAuNjUgMC4xMyAyMDUpIiBzdHJva2Utd2lkdGg9IjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PC9wYXRoPgogIDxsaW5lIHgxPSI1MCIgeTE9IjUwIiB4Mj0iNzQuNCIgeTI9IjM1LjgiIHN0cm9rZT0iI2YyZjFlZSIgc3Ryb2tlLXdpZHRoPSI1IiBzdHJva2UtbGluZWNhcD0icm91bmQiPjwvbGluZT4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI3LjUiIGZpbGw9IiNmMmYxZWUiPjwvY2lyY2xlPgo8L3N2Zz4=">
 <style>
 :root {
+  /* Type scale (G-13 item 5): 11/13/15/20/28/56. 56 and 28 are each used exactly once -
+     the posture score digit and the report's main title, respectively - everything else
+     consolidates onto 11/13/15/20 instead of the ad-hoc 10-22px values this replaced. */
+  --fs-2xs: 11px;
+  --fs-xs: 13px;
+  --fs-sm: 15px;
+  --fs-md: 20px;
+  --fs-lg: 28px;
+  --fs-score: 56px;
+  /* Sticky-offset for .card-group-header, kept in sync with the toolbar's actual
+     rendered height by a ResizeObserver (G-codex item 5) - a hardcoded px offset
+     assumed a one-row toolbar and let a wrapped two-row toolbar obscure the header. */
+  --toolbar-h: 48px;
   --bg: #f3f2f1;
   --surface: #ffffff;
   --surface2: #faf9f8;
   --border: #edebe9;
   --text: #201f1e;
   --text2: #605e5c;
-  --text3: #a19f9d;
+  /* #6b6968 on #ffffff = 5.46:1 (was #a19f9d at 2.64:1 - G-11). Used only as text/borders
+     directly on the page surface - see --chip-* and --result-* below for the separate
+     "opaque fill behind white text" role, which does not depend on this token or on theme. */
+  --text3: #6b6968;
+  /* "Surface accent" role: text, links, borders and outline-chip color read directly
+     against --surface/--surface2. Lightened ~15-20% and desaturated for dark mode in the
+     media query below (G-13 item 4) because a dark background changes what these need to
+     look legible - unlike --chip-* and --result-* below, which are opaque fills behind a
+     fixed white overlay and so need no theme-dependent adjustment at all. */
   --accent-mdo: #0078d4;
   --accent-exo: #008272;
   --accent-teams: #7719aa;
+  /* "Opaque fill" role: category chip backgrounds with a white label on top. Deliberately
+     NOT overridden for dark mode - lightening a fill color (as the surface accents above
+     do) would wreck the white-text contrast that made it work in light mode to begin with,
+     since fill-plus-fixed-text contrast has nothing to do with the surrounding page theme. */
+  --chip-mdo: #0078d4;
+  --chip-exo: #008272;
+  --chip-teams: #7719aa;
+  /* Fallback fill for an unrecognised category chip (e.g. a hostile/unknown slug) - fixed
+     across themes for the same reason as --chip-*, not --text3 (which lightens for dark
+     mode and would ruin the white-label contrast this fill needs). */
+  --chip-neutral: #6b6968;
+  /* Severity is now read from an outlined, low-chroma chip (text+border on --surface2),
+     not a solid fill - see .sev-pill below (G-13 item 2). That makes this a "surface
+     accent" role too, lightened for dark mode alongside --accent-*. */
   --sev-critical: #d13438;
   --sev-high: #ca5010;
   --sev-medium: #986f0b;
   --sev-low: #0078d4;
-  --sev-info: #8a8886;
+  --sev-info: #6a6866;
+  /* Result now drives the card's left border/background tint and every solid result
+     badge (rb-pass etc.), score band, and donut segment - an opaque-fill role like
+     --chip-*, so these are also left un-overridden for dark mode. */
   --result-pass: #107c10;
   --result-fail: #d13438;
   --result-warn: #ca5010;
   --result-na: #8a8886;
   --result-accepted: #0078d4;
+  /* A check that failed to run is a third state, not a severity and not a Fail/Warning -
+     see .card[data-error] below (G-13 item 9). Kept neutral/slate on purpose so it never
+     reads as "critical" (red) or "actionable finding" (amber/red) at a glance. */
+  --result-error: #4f4f5c;
+  /* Subtle per-result card background tints (G-13 item 2) - decorative, theme-specific,
+     overridden below for dark mode same as the neutral surface tokens they sit beside. */
+  --tint-fail: #fdf3f3;
+  --tint-warn: #fdf8ef;
+  --tint-pass: #f2faf3;
   --shadow: 0 2px 8px rgba(0,0,0,.08);
   --radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1a19;
-    --surface: #252423;
-    --surface2: #2d2c2b;
-    --border: #3b3a39;
+    /* Widened from the original #1b1a19/#252423/#2d2c2b - three steps close enough that
+       header/banner/toolbar/cards fused into one slab (G-13 item 4). */
+    --bg: #16151a;
+    --surface: #201f24;
+    --surface2: #2b2a30;
+    --border: #3d3b42;
     --text: #f3f2f1;
     --text2: #c8c6c4;
-    --text3: #8a8886;
+    --text3: #97949f;
+    --accent-mdo: #4aa3e8;
+    --accent-exo: #2fae9c;
+    --accent-teams: #b088e0;
+    --sev-critical: #f1707a;
+    --sev-high: #e0965a;
+    --sev-medium: #e0ac3d;
+    --sev-low: #4aa3e8;
+    --sev-info: #a29e9b;
+    --tint-fail: #2a1c1e;
+    --tint-warn: #2a2419;
+    --tint-pass: #1b2a1c;
     --shadow: 0 2px 8px rgba(0,0,0,.4);
   }
 }
@@ -717,214 +777,293 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
 /* ── Header ──────────────────────────────────────────────────────── */
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px 16px 20px;box-shadow:var(--shadow);border-left:4px solid var(--accent-mdo);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.header-title{font-size:20px;font-weight:600;margin-bottom:3px;letter-spacing:-.01em}
-.header-meta{font-size:12px;color:var(--text2)}
+/* Main title - one of the two type-scale sizes used exactly once (G-13 item 5). */
+.header-title{font-size:var(--fs-lg);font-weight:600;margin-bottom:3px;letter-spacing:-.01em}
+.header-meta{font-size:var(--fs-xs);color:var(--text2)}
 .header-brand{display:flex;align-items:center;gap:12px}
 .header-icon{width:30px;height:30px;flex-shrink:0;color:var(--accent-mdo)}
-.print-btn{font-size:12px;font-weight:600;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;background:var(--surface2);white-space:nowrap;flex-shrink:0}
+.print-btn{font-size:var(--fs-xs);font-weight:600;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:6px 12px;background:var(--surface2);white-space:nowrap;flex-shrink:0}
 .print-btn:hover{background:var(--border);color:var(--text)}
 
-/* ── Score banner ────────────────────────────────────────────────── */
-.score-banner{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px 16px 20px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;border-left:4px solid var(--border);transition:border-left-color .3s}
+/* ── Score banner (G-13 item 1: reworked to use its width - score digit up to the
+   type scale's 56px, band given full-height treatment instead of an 11px pill, category
+   meters doubled) ─────────────────────────────────────────────────────────────────── */
+.score-banner{background:var(--surface);border-bottom:1px solid var(--border);padding:20px 24px;display:flex;align-items:stretch;gap:28px;flex-wrap:wrap;border-left:4px solid var(--border);transition:border-left-color .3s}
 .score-banner[data-band="excellent"],.score-banner[data-band="good"]{border-left-color:var(--result-pass)}
 .score-banner[data-band="fair"]{border-left-color:var(--sev-medium)}
 .score-banner[data-band="poor"]{border-left-color:var(--sev-high)}
 .score-banner[data-band="critical"]{border-left-color:var(--result-fail)}
-.score-main{display:flex;flex-direction:row;align-items:center;gap:14px}
+.score-main{display:flex;flex-direction:row;align-items:center;gap:18px}
 .score-donut{flex-shrink:0}
-.score-main-meta{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
-.score-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text2)}
+.score-main-meta{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.score-label{font-size:var(--fs-2xs);font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text2)}
 .score-row{display:flex;align-items:baseline;gap:8px}
-.score-delta{font-size:16px;font-weight:700;line-height:1}
+.score-delta{font-size:var(--fs-sm);font-weight:700;line-height:1}
 .delta-up{color:var(--result-pass)}
 .delta-down{color:var(--result-fail)}
+/* G-13 item 7: the delta previously appeared with no stated baseline. */
+.score-delta-caption{font-size:var(--fs-2xs);color:var(--text2);margin-top:1px}
 .bar-excellent,.bar-good{background:var(--result-pass)}
 .bar-fair{background:var(--sev-medium)}
 .bar-poor{background:var(--sev-high)}
 .bar-critical{background:var(--result-fail)}
-.score-band-wrap{position:relative;display:flex;align-items:center;gap:6px;margin-top:4px}
-.score-band{font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;color:#fff;letter-spacing:.06em;text-transform:uppercase}
-.band-excellent,.band-good{background:var(--result-pass)}
-.band-fair{background:var(--sev-medium)}
-.band-poor{background:var(--sev-high)}
-.band-critical{background:var(--result-fail)}
-.band-none{background:var(--text2)}
-.band-info-icon{font-size:13px;color:var(--text3);cursor:default;user-select:none;line-height:1;transition:color .15s}
-.score-band-wrap:hover .band-info-icon{color:var(--text2)}
-.band-tooltip{position:absolute;left:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px 12px;min-width:190px;display:none;z-index:200;pointer-events:none}
+/* Band panel: previously an 11px pill folded under the score label; now a self-contained,
+   full-height block so it reads as a peer of the score, not a caption on it. */
+.score-band-panel{align-self:stretch;display:flex;align-items:center;min-width:150px;padding:0 24px;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.score-band-wrap{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.score-band{font-size:var(--fs-md);font-weight:700;line-height:1;letter-spacing:-.01em}
+.band-excellent,.band-good{color:var(--result-pass)}
+.band-fair{color:var(--sev-medium)}
+.band-poor{color:var(--sev-high)}
+.band-critical{color:var(--result-fail)}
+.band-none{color:var(--text2)}
+.band-caption{display:flex;align-items:center;gap:6px;font-size:var(--fs-2xs);color:var(--text2);text-transform:uppercase;letter-spacing:.08em}
+.band-info-icon{font-size:var(--fs-sm);color:var(--text3);cursor:default;user-select:none;line-height:1;transition:color .15s}
+.score-band-wrap:hover .band-info-icon,.score-band-wrap:focus-within .band-info-icon{color:var(--text2)}
+.band-tooltip{position:absolute;left:0;top:calc(100% + 10px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px 12px;min-width:190px;display:none;z-index:200;pointer-events:none}
 .score-band-wrap:hover .band-tooltip,.score-band-wrap:focus-within .band-tooltip{display:block}
-.btr{display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);font-size:12px}
+.btr{display:flex;align-items:center;gap:8px;padding:3px 0;color:var(--text2);font-size:var(--fs-xs)}
 .btr.cur{color:var(--text);font-weight:600}
 .bdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.brange{font-family:monospace;font-size:11px;min-width:54px;color:var(--text3)}
+.brange{font-family:monospace;font-size:var(--fs-2xs);min-width:54px;color:var(--text3)}
 .btr.cur .brange{color:var(--text2)}
-.cat-badge{padding:4px 12px;border-radius:10px;font-size:13px;font-weight:600;color:#fff}
-.cat-mdo{background:var(--accent-mdo)}
-.cat-exo{background:var(--accent-exo)}
-.cat-teams{background:var(--accent-teams)}
-.cat-meters{display:flex;flex-direction:column;gap:8px;min-width:220px;max-width:320px}
-.cat-meter-row{display:grid;grid-template-columns:56px 1fr 28px;align-items:center;gap:8px;font-size:12px}
+.cat-badge{padding:4px 12px;border-radius:10px;font-size:var(--fs-xs);font-weight:600;color:#fff}
+/* Opaque fills behind a fixed white label - --chip-*, not --accent-* (see :root above). */
+.cat-mdo{background:var(--chip-mdo)}
+.cat-exo{background:var(--chip-exo)}
+.cat-teams{background:var(--chip-teams)}
+/* Fallback for a category outside MDO/EXO/Teams (G-14 item 3) - same neutral fill as an
+   unrecognised .card-cat-chip, so the All Controls section header for it doesn't go unstyled. */
+.cat-other{background:var(--chip-neutral)}
+/* Category meters at 2x: 6px tracks -> 12px, 12px labels -> the scale's 13px, filling the
+   width the enlarged score/band freed up instead of leaving it empty. */
+.cat-meters{display:flex;flex-direction:column;gap:10px;min-width:240px;max-width:340px;justify-content:center}
+.cat-meter-row{display:grid;grid-template-columns:60px 1fr 32px;align-items:center;gap:10px;font-size:var(--fs-xs)}
 .cat-meter-name{font-weight:600;color:var(--text2);display:flex;align-items:center;gap:6px}
-.cat-meter-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.cat-meter-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
-.cat-meter-bar{height:100%;border-radius:3px;transition:width .4s ease,background .3s}
-.card-cat-chip{font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--text3)}
+.cat-meter-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cat-meter-track{height:12px;background:var(--border);border-radius:6px;overflow:hidden}
+.cat-meter-bar{height:100%;border-radius:6px;transition:width .4s ease,background .3s}
+.card-cat-chip{font-size:var(--fs-2xs);font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--chip-neutral)}
 .cat-meter-val{text-align:right;font-weight:700;color:var(--text2)}
-.score-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;padding-left:16px;border-left:1px solid var(--border)}
+.score-summary{display:flex;gap:16px;flex-wrap:wrap;font-size:var(--fs-xs);padding-left:16px;border-left:1px solid var(--border);align-items:center}
 .summary-item{display:flex;flex-direction:column;align-items:center;gap:2px}
-.summary-count{font-size:22px;font-weight:700}
-.summary-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+.summary-count{font-size:var(--fs-md);font-weight:700}
+.summary-label{font-size:var(--fs-2xs);color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
 .s-pass{color:var(--result-pass)}
 .s-fail{color:var(--result-fail)}
 .s-warn{color:var(--result-warn)}
 .s-na{color:var(--result-na)}
 .s-info{color:var(--result-na)}
-.s-err{color:var(--sev-critical)}
+/* Errors get the same neutral treatment as everywhere else (G-13 item 9) - not
+   --sev-critical, so a run with checks that failed to execute doesn't read as a wall of
+   critical findings in the summary strip either. */
+.s-err{color:var(--text2)}
 
 /* ── Toolbar ─────────────────────────────────────────────────────── */
 .toolbar{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;flex-wrap:wrap}
 .tabs{display:flex;gap:0}
-.tab{padding:12px 16px;font-size:14px;font-weight:500;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
+.tab{padding:12px 16px;font-size:var(--fs-sm);font-weight:500;color:var(--text2);border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;white-space:nowrap}
 .tab:hover{color:var(--text)}
 .tab.active{color:var(--accent-mdo);border-bottom-color:var(--accent-mdo)}
-.tab .tab-count{margin-left:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0 6px;font-size:11px;color:var(--text2)}
+.tab .tab-count{margin-left:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0 6px;font-size:var(--fs-2xs);color:var(--text2)}
 .filters{display:flex;align-items:center;gap:8px;margin-left:auto;padding:8px 0}
-.search-box{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:13px;width:220px}
+.search-box{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:var(--fs-xs);width:220px}
 .search-box::placeholder{color:var(--text3)}
-.filter-select{padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:13px}
-.result-count{font-size:12px;color:var(--text2);white-space:nowrap}
+.filter-select{padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-size:var(--fs-xs)}
+.result-count{font-size:var(--fs-xs);color:var(--text2);white-space:nowrap}
 
 /* ── Main content ────────────────────────────────────────────────── */
 .main{padding:16px 24px;display:flex;flex-direction:column;gap:16px}
 
 /* ── Top 5 ───────────────────────────────────────────────────────── */
 .top5{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
-.top5-header{padding:12px 16px;font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--surface2)}
+.top5-header{padding:12px 16px;font-weight:600;font-size:var(--fs-sm);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--surface2)}
 .top5-header:hover{background:var(--border)}
-.top5-chevron{font-size:12px;transition:transform .2s}
+.top5-chevron{font-size:var(--fs-xs);transition:transform .2s}
 .top5-chevron.open{transform:rotate(180deg)}
 .top5-body{border-top:1px solid var(--border);display:none}
 .top5-body.open{display:block}
+/* G-13 item 8: simplified to rank + id/name + the (already G-6 clamped) finding + one
+   severity chip - the result badge is redundant here since every row is already a Fail or
+   a Warning by construction (see renderTop5()'s filter). */
 .top5-row{display:grid;grid-template-columns:32px 160px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
 .top5-row:last-child{border-bottom:none}
 .top5-row:hover{background:var(--surface2)}
-.top5-rank{font-size:18px;font-weight:700;color:var(--text3);text-align:center}
-.top5-id{font-size:12px;font-family:monospace;color:var(--text2)}
-.top5-name{font-weight:500}
-.top5-finding{font-size:12px;color:var(--text2);line-height:1.5}
+.top5-rank{font-size:var(--fs-md);font-weight:700;color:var(--text2);text-align:center}
+.top5-id{font-size:var(--fs-2xs);font-family:monospace;color:var(--text2)}
+.top5-name{font-weight:500;font-size:var(--fs-xs)}
+.top5-finding{font-size:var(--fs-xs);color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .finding-policy{margin-bottom:6px}.finding-policy:last-child{margin-bottom:0}
 .finding-policy-name{font-weight:600;color:var(--text)}
 .finding-list{margin:3px 0 0 0;padding-left:16px;list-style:disc}
 .finding-list li{margin:2px 0}
 .finding-list-indent{padding-left:20px}
-.code-block{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;margin-top:6px;word-break:break-all;display:block;color:var(--text)}
+.code-block{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--fs-xs);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;margin-top:6px;word-break:break-all;display:block;color:var(--text)}
 .finding-code{margin-left:12px}
-.inline-code{font-family:'Cascadia Code','Consolas',monospace;font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;color:var(--text);word-break:break-word}
+.inline-code{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--fs-xs);background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;color:var(--text);word-break:break-word}
+/* codifyQuotes applies this instead of the 5px default right padding when the chip is
+   immediately followed by punctuation with no space (e.g. "...p=quarantine.") - the full
+   padding plus the chip's border otherwise reads as a stray space before the punctuation
+   (G-14 item 2). */
+.inline-code--tight{padding-right:1px}
 .coverage-wrap{margin-top:8px;overflow-x:auto}
-.coverage-summary{font-size:12px;color:var(--text2);margin-bottom:8px}
-.coverage-table{width:100%;border-collapse:collapse;font-size:12px}
+.coverage-summary{font-size:var(--fs-xs);color:var(--text2);margin-bottom:8px}
+.coverage-table{width:100%;border-collapse:collapse;font-size:var(--fs-xs)}
 .coverage-table th{text-align:left;padding:6px 8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);white-space:nowrap}
 .coverage-table td{padding:7px 8px;border:1px solid var(--border);vertical-align:top}
 .coverage-table .coverage-policy{font-weight:600;white-space:nowrap}
 .coverage-table .coverage-zero{color:var(--text2)}
 
-/* ── Cards grid ──────────────────────────────────────────────────── */
-.cards{display:flex;flex-direction:column;gap:8px}
+/* ── Cards grid (G-13 item 3): grouped by result with sticky, collapsible headers that
+   surface counts at a glance, instead of 30+ identical shadowed boxes with no structure.
+   Mirrors the density of the All Controls table (#ctrl-ref) - one bordered container per
+   group instead of one per card. See renderCardGroups()/rebuildCard() in the script. ── */
+.cards{display:flex;flex-direction:column;gap:20px}
 .no-results{text-align:center;padding:48px;color:var(--text2)}
 
-/* ── Card ────────────────────────────────────────────────────────── */
-.card{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--sev-info);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;transition:box-shadow .15s}
-.card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
-.card[data-sev="Critical"]{border-left-color:var(--sev-critical)}
-.card[data-sev="High"]{border-left-color:var(--sev-high)}
-.card[data-sev="Medium"]{border-left-color:var(--sev-medium)}
-.card[data-sev="Low"]{border-left-color:var(--sev-low)}
-.card[data-sev="Informational"]{border-left-color:var(--sev-info)}
-.card[data-error="1"]{border-left-color:var(--sev-critical)}
-.card-header{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
+/* overflow:hidden lives on .card-group-body, not .card-group itself - an overflow:hidden
+   ancestor breaks position:sticky on the header (it becomes the header's own scroll
+   container, so it "sticks" immediately instead of tracking the real page scroll). */
+.card-group{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-group-header{position:sticky;top:var(--toolbar-h);z-index:20;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer;user-select:none;font-size:var(--fs-2xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
+.card-group-header:hover{color:var(--text)}
+.card-group-title{display:flex;align-items:center;gap:8px}
+.card-group-count{font-weight:700;color:var(--text3)}
+.card-group-chevron{font-size:var(--fs-xs);color:var(--text3);transition:transform .2s;flex-shrink:0}
+.card-group-chevron.open{transform:rotate(180deg)}
+.card-group-body{display:flex;flex-direction:column;overflow:hidden;border-bottom-left-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+.card-group-body.collapsed{display:none}
+.card-group.empty{display:none}
+
+/* ── Card row: a ~36px hairline-divided row by default, not an individually boxed/shadowed
+   card - the group container above now carries the border/shadow every card used to carry
+   on its own. Expanding a row (.card-body.open) is the only thing that grows its height. */
+.card{border-bottom:1px solid var(--border);border-left:4px solid transparent;transition:background .15s}
+.card:last-child{border-bottom:none}
+/* Result drives the left border and a subtle background tint; severity moves to a
+   low-chroma outlined chip instead (G-13 item 2 - see .sev-pill below). Pass gets only a
+   thin, quiet accent: a passing control is not the thing asking for the reader's attention. */
+.card[data-result="Fail"]{border-left-color:var(--result-fail);background:var(--tint-fail)}
+.card[data-result="Warning"]{border-left-color:var(--result-warn);background:var(--tint-warn)}
+.card[data-result="Pass"]{border-left-color:var(--result-pass);background:var(--tint-pass)}
+.card[data-result="NotApplicable"],.card[data-result="Info"]{border-left-color:var(--border)}
+/* Accepted overrides the Fail/Warning tint above - a resolved risk should read as settled,
+   not still-urgent (source order after the per-result rules is what makes this win). */
+.card[data-accepted="1"]{border-left-color:var(--result-accepted);background:var(--surface)}
+/* A check that failed to run is a third state - not a severity, and not simply "Fail" or
+   "Warning" repainted red/amber (G-13 item 9). Dashed and neutral so tool-failure can never
+   be mistaken for a critical finding or a resolved risk; wins over both rules above. */
+/* border-style:dashed alone produces too few, too-long dashes to read at a ~36px collapsed
+   row height - a diagonal hazard-stripe fill on the left edge reads as "third state" at
+   any row height, including collapsed. */
+.card[data-error="1"]{border-left-color:transparent;background:var(--surface);position:relative}
+.card[data-error="1"]::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background-image:repeating-linear-gradient(135deg,var(--result-error) 0 3px,transparent 3px 6px)}
+.card-header{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;user-select:none;min-height:36px}
 .card-header:hover{background:var(--surface2)}
-.card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
-.sev-pill{font-size:11px;font-weight:700;padding:2px 7px;border-radius:8px;color:#fff;white-space:nowrap;flex-shrink:0;background:var(--sev-info)}
-.sev-critical{background:var(--sev-critical)}
-.sev-high{background:var(--sev-high)}
-.sev-medium{background:var(--sev-medium)}
-.sev-low{background:var(--sev-low)}
-.sev-informational{background:var(--sev-info)}
-.card-id{font-size:12px;font-family:monospace;color:var(--text2);flex-shrink:0}
+/* One rule for every interactive element on the page (G-14 item 9) - native <button>/<a>/
+   <input>/<select> got the UA default ring, .card-header had its own explicit ring, and
+   .fix-toggle (a div[role=button][tabindex=0]) had none at all. */
+.card-header:focus-visible,.fix-toggle:focus-visible,.tab:focus-visible,.band-info-icon:focus-visible,.top5-row:focus-visible,.ctrl-row:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
+/* Low-chroma outlined chip: severity describes the control, not this run's finding, so it
+   no longer competes with the result badge for the reader's attention (G-13 item 2). */
+.sev-pill{font-size:var(--fs-2xs);font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
+.sev-critical{border-color:var(--sev-critical);color:var(--sev-critical)}
+.sev-high{border-color:var(--sev-high);color:var(--sev-high)}
+.sev-medium{border-color:var(--sev-medium);color:var(--sev-medium)}
+.sev-low{border-color:var(--sev-low);color:var(--sev-low)}
+.sev-informational{border-color:var(--sev-info);color:var(--sev-info)}
+/* Fully desaturated on Pass, whatever the underlying severity - severity is inert once the
+   control has passed, and a solid CRITICAL-red pill on a PASS row is exactly the
+   loudest-channel/quietest-channel inversion this item exists to fix. */
+.sev-pill.is-pass{border-color:var(--border) !important;color:var(--text3) !important;background:var(--surface2) !important}
+.card-id{font-size:var(--fs-2xs);font-family:monospace;color:var(--text2);flex-shrink:0}
 .card-name{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.result-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff;background:var(--result-na)}
+.result-badge{font-size:var(--fs-2xs);font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;color:#fff;background:var(--result-na)}
 .rb-pass{background:var(--result-pass)}
 .rb-fail{background:var(--result-fail)}
 .rb-warning{background:var(--result-warn)}
 .rb-notapplicable,.rb-info{background:var(--result-na)}
 .rb-accepted{background:var(--result-accepted)}
-.rb-error{background:var(--sev-critical)}
-.card-chevron{font-size:11px;color:var(--text3);flex-shrink:0;transition:transform .2s}
+.rb-error{background:var(--result-error)}
+.card-chevron{font-size:var(--fs-2xs);color:var(--text3);flex-shrink:0;transition:transform .2s}
 .card-chevron.open{transform:rotate(180deg)}
 .card-body{display:none;border-top:1px solid var(--border);padding:12px 14px;flex-direction:column;gap:10px}
 .card-body.open{display:flex}
 .card-field{display:flex;flex-direction:column;gap:2px}
-.field-label{font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);letter-spacing:.04em}
-.field-value{font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.field-label{font-size:var(--fs-2xs);font-weight:600;text-transform:uppercase;color:var(--text2);letter-spacing:.04em}
+.field-value{font-size:var(--fs-xs);color:var(--text);white-space:pre-wrap;word-break:break-word;max-width:78ch}
+/* The Effective Policy Coverage table needs its full width (it has its own horizontal
+   scroll via .coverage-wrap) - the 78ch cap above is for prose (Finding/Recommendation),
+   not tabular data, so this field is opted back out of it. */
+.field-value--wide{max-width:none}
 .card-fix{border-top:1px solid var(--border);padding-top:10px}
-.fix-toggle{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;cursor:pointer;color:var(--accent-mdo);padding:2px 0}
+.fix-toggle{display:flex;align-items:center;gap:6px;font-size:var(--fs-xs);font-weight:500;cursor:pointer;color:var(--accent-mdo);padding:2px 0}
 .fix-toggle:hover{text-decoration:underline}
-.fix-chevron{font-size:10px;transition:transform .2s}
-.fix-chevron.open{transform:rotate(180deg)}
-.fix-content{display:none;margin-top:8px;font-size:13px;color:var(--text);line-height:1.5}
+.fix-chevron{font-size:var(--fs-2xs);transition:transform .2s}
+/* &#x25BA; (right-pointing triangle) rotated a further 90deg points down when the
+   section is open - the same "collapsed points at the content, open points down"
+   convention as .card-chevron. 180deg previously rotated it to point left (G-14 item 1). */
+.fix-chevron.open{transform:rotate(90deg)}
+.fix-content{display:none;margin-top:8px;font-size:var(--fs-xs);color:var(--text);line-height:1.5;max-width:78ch}
 .fix-content.open{display:block}
 .fix-content ol{padding-left:18px;display:flex;flex-direction:column;gap:4px}
 .card-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:4px}
-.btn-docs{font-size:12px;color:var(--accent-mdo);padding:4px 0;display:flex;align-items:center;gap:4px}
+.btn-docs{font-size:var(--fs-xs);color:var(--accent-mdo);padding:4px 0;display:flex;align-items:center;gap:4px}
 .btn-docs:hover{text-decoration:underline}
-.btn-accept{font-size:12px;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;background:var(--surface2);transition:background .1s}
+.btn-accept{font-size:var(--fs-xs);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;background:var(--surface2);transition:background .1s}
 .btn-accept:hover{background:var(--border)}
-.btn-undo{font-size:12px;color:var(--result-accepted);border:1px solid var(--result-accepted);border-radius:var(--radius);padding:4px 10px;background:var(--surface);transition:background .1s}
+.btn-undo{font-size:var(--fs-xs);color:var(--result-accepted);border:1px solid var(--result-accepted);border-radius:var(--radius);padding:4px 10px;background:var(--surface);transition:background .1s}
 .btn-undo:hover{background:var(--surface2)}
-.card-error{background:#fde7e9;border-radius:var(--radius);padding:8px 10px;font-size:12px;font-family:monospace;color:var(--sev-critical);word-break:break-word}
-@media (prefers-color-scheme: dark) {
-  .card-error{background:#3a1010}
-}
+/* Low-chroma, near-white-on-dark treatment (G-13 item 4 / G-11): was a saturated red box
+   in both themes (#d13438 on #fde7e9 = 4.16:1 light, #d13438 on #3a1010 = ~3.35:1 dark -
+   the second failed AA outright). Built entirely from the existing neutral --text/--surface2
+   pair, which is already high-contrast in both themes by construction, so this needs no
+   theme-specific override at all - and it reads as "tool failure", not "critical finding",
+   consistent with the dashed neutral card border above. */
+.card-error{background:var(--surface2);border:1px dashed var(--border);border-radius:var(--radius);padding:8px 10px;font-size:var(--fs-xs);font-family:monospace;color:var(--text);word-break:break-word}
 
 /* ── Accept modal ────────────────────────────────────────────────── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:var(--surface);border-radius:var(--radius);box-shadow:0 8px 32px rgba(0,0,0,.24);padding:24px;width:480px;max-width:90vw;display:flex;flex-direction:column;gap:16px}
-.modal-title{font-size:16px;font-weight:600}
-.modal-desc{font-size:13px;color:var(--text2)}
-.modal textarea{border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-family:inherit;font-size:13px;background:var(--surface2);color:var(--text);resize:vertical;min-height:80px;width:100%}
+.modal-title{font-size:var(--fs-md);font-weight:600}
+.modal-desc{font-size:var(--fs-xs);color:var(--text2)}
+.modal textarea{border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-family:inherit;font-size:var(--fs-xs);background:var(--surface2);color:var(--text);resize:vertical;min-height:80px;width:100%}
 .modal textarea:focus{outline:2px solid var(--accent-mdo);border-color:transparent}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end}
-.btn-primary{background:var(--accent-mdo);color:#fff;padding:6px 16px;border-radius:var(--radius);font-size:13px;font-weight:600;transition:opacity .1s}
+.btn-primary{background:var(--chip-mdo);color:#fff;padding:6px 16px;border-radius:var(--radius);font-size:var(--fs-xs);font-weight:600;transition:opacity .1s}
 .btn-primary:hover{opacity:.9}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed}
-.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:6px 16px;border-radius:var(--radius);font-size:13px}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:6px 16px;border-radius:var(--radius);font-size:var(--fs-xs)}
 .btn-secondary:hover{background:var(--border)}
 
 /* ── Collapse / Expand all ───────────────────────────────────────── */
-.btn-collapse{font-size:12px;color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;background:var(--surface2);transition:background .1s;white-space:nowrap}
+.btn-collapse{font-size:var(--fs-xs);color:var(--text2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;background:var(--surface2);transition:background .1s;white-space:nowrap}
 .btn-collapse:hover{background:var(--border)}
 
 /* ── Controls Reference ──────────────────────────────────────────── */
 .ctrl-ref{display:none;flex-direction:column;gap:16px}
 .ctrl-ref.visible{display:flex}
 .ctrl-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
-.ctrl-section-header{padding:12px 16px;font-weight:600;display:flex;align-items:center;gap:10px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:14px}
-.ctrl-table{width:100%;border-collapse:collapse;font-size:13px}
-.ctrl-table th{padding:8px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);border-bottom:1px solid var(--border);background:var(--surface2)}
+.ctrl-section-header{padding:12px 16px;font-weight:600;display:flex;align-items:center;gap:10px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:var(--fs-sm)}
+.ctrl-table{width:100%;border-collapse:collapse;font-size:var(--fs-xs)}
+.ctrl-table th{padding:8px 12px;text-align:left;font-size:var(--fs-2xs);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);border-bottom:1px solid var(--border);background:var(--surface2)}
 .ctrl-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
 .ctrl-table tr:last-child td{border-bottom:none}
 .ctrl-row{cursor:pointer;transition:background .1s}
 .ctrl-row:hover{background:var(--surface2)}
-.ctrl-id{font-family:monospace;font-size:12px;white-space:nowrap;color:var(--text2)}
+.ctrl-id{font-family:monospace;font-size:var(--fs-2xs);white-space:nowrap;color:var(--text2)}
 .ctrl-name{font-weight:500;white-space:nowrap}
 .ctrl-desc{color:var(--text2)}
 
 /* ── Print ───────────────────────────────────────────────────────── */
 @media print {
   body{background:#fff}
-  .toolbar,.print-btn,.modal-overlay,.band-info-icon,.card-chevron,.fix-chevron,.btn-accept,.btn-undo,.btn-collapse{display:none !important}
+  .toolbar,.print-btn,.modal-overlay,.band-info-icon,.card-chevron,.fix-chevron,.btn-accept,.btn-undo,.btn-collapse,.card-group-chevron{display:none !important}
   .card{display:block !important;box-shadow:none;break-inside:avoid}
+  .card-group-header{position:static}
+  .card-group.empty{display:block !important}
+  .card-group-body.collapsed{display:flex !important}
   .card-body{display:flex !important}
   .fix-content{display:block !important}
   #top5-section,.top5-body{display:block !important}
@@ -955,21 +1094,27 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
 <div class="score-banner" data-band="$(($band).ToLower())" id="score-banner">
   <div class="score-main">
-    <svg class="score-donut" width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
-      <circle cx="44" cy="44" r="36" fill="none" stroke="var(--surface2)" stroke-width="9"></circle>
-      <g id="donut-segments" transform="rotate(-90 44 44)"></g>
-      <text x="44" y="50" text-anchor="middle" font-size="21" font-weight="700" fill="var(--text)" id="donut-score-text">$overallScore</text>
+    <svg class="score-donut" width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
+      <circle cx="66" cy="66" r="54" fill="none" stroke="var(--surface2)" stroke-width="14"></circle>
+      <g id="donut-segments" transform="rotate(-90 66 66)"></g>
+      <text x="66" y="84" text-anchor="middle" style="font-size:var(--fs-score)" font-weight="700" fill="var(--text)" id="donut-score-text">$overallScore</text>
     </svg>
     <div class="score-main-meta">
       <div class="score-label">Posture Index</div>
       <div class="score-row">
         <div class="score-delta" id="score-delta"></div>
       </div>
-      <div class="score-band-wrap">
-        <div class="score-band band-$(($band).ToLower())" id="score-band">$band</div>
-        <div class="band-info-icon" tabindex="0" aria-label="Band scale guide">&#x24D8;</div>
-        <div class="band-tooltip" id="band-tooltip" role="tooltip"></div>
+      <div class="score-delta-caption" id="score-delta-caption" style="display:none">vs. last viewed run</div>
+    </div>
+  </div>
+  <div class="score-band-panel">
+    <div class="score-band-wrap">
+      <div class="score-band band-$(($band).ToLower())" id="score-band">$band</div>
+      <div class="band-caption">
+        <span>Posture Band</span>
+        <span class="band-info-icon" tabindex="0" aria-label="Band scale guide">&#x24D8;</span>
       </div>
+      <div class="band-tooltip" id="band-tooltip" role="tooltip"></div>
     </div>
   </div>
   <div class="cat-meters" id="cat-meters"></div>
@@ -994,16 +1139,16 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="tab" data-tab="Controls" role="tab" tabindex="-1" aria-selected="false" aria-controls="ctrl-ref">All Controls <span class="tab-count" id="tc-controls">0</span></div>
   </div>
   <div class="filters">
-    <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search...">
-    <select class="filter-select" id="sev-filter">
+    <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search..." aria-label="Search checks">
+    <select class="filter-select" id="sev-filter" aria-label="Filter by severity">
       <option value="">All Severities</option>
       <option>Critical</option><option>High</option><option>Medium</option><option>Low</option><option>Informational</option>
     </select>
-    <select class="filter-select" id="result-filter">
+    <select class="filter-select" id="result-filter" aria-label="Filter by result">
       <option value="">All Results</option>
       <option>Fail</option><option>Warning</option><option>Pass</option><option>NotApplicable</option><option>Info</option><option>Error</option>
     </select>
-    <span class="result-count" id="result-count"></span>
+    <span class="result-count" id="result-count" aria-live="polite"></span>
     <button class="btn-collapse" id="btn-collapse-all" title="Collapse or expand all visible cards">Collapse All</button>
   </div>
 </div>
@@ -1017,7 +1162,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="top5-body open" id="top5-body"></div>
   </div>
   <div class="cards" id="cards-container" role="tabpanel" aria-label="Checks"></div>
-  <div class="no-results" id="no-results" style="display:none">No checks match the current filters.</div>
+  <div class="no-results" id="no-results" style="display:none">$(if ($allResults.Count -eq 0) { 'No check results in this report.' } else { 'No checks match the current filters.' })</div>
   <div class="ctrl-ref" id="ctrl-ref" role="tabpanel" aria-label="All Controls"></div>
 </div>
 
@@ -1025,7 +1170,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
     <div class="modal-title" id="modal-title">Accept Risk</div>
     <div class="modal-desc" id="modal-desc">Provide a business justification for accepting this risk.</div>
-    <textarea id="modal-text" placeholder="Business justification (required)..."></textarea>
+    <textarea id="modal-text" maxlength="4000" placeholder="Business justification (required)..."></textarea>
     <div class="modal-actions">
       <button class="btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn-primary" id="modal-confirm" disabled>Accept Risk</button>
@@ -1038,22 +1183,59 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 'use strict';
 
 const CHECKS = $checksJson;
+const IS_EMPTY_REPORT = CHECKS.length === 0;
 const TENANT_ID = $tenantIdJson;
 const INITIAL_SCORE = $overallScore;
 const SEV_WEIGHT = {Critical:40,High:20,Medium:10,Low:5,Informational:0};
 const CAT_ACCENT = {MDO:'var(--accent-mdo)',EXO:'var(--accent-exo)',Teams:'var(--accent-teams)'};
+// A risk-acceptance justification is a business note, not a document - 4000 characters
+// (roughly a page of text) is generous for that while keeping a single localStorage entry
+// well clear of QuotaExceededError. Mirrors the textarea's maxlength attribute above.
+const JUSTIFICATION_MAX_LENGTH = 4000;
 
 function sevOf(s){ return s || 'Informational'; }
+
+// Mirrors Get-METAggregationNoun in Public/Invoke-METAssessment.ps1 so a grouped Top 5 row
+// (see renderTop5()) uses the same per-checkId noun as the console/JSON aggregation path.
+function getAggregationNoun(checkId) {
+  if (/^MET-EXO00[1-3]$/.test(checkId)) return 'domains';
+  if (checkId === 'MET-EXO004') return 'quarantine policies';
+  if (checkId === 'MET-EXO018') return 'remote domains';
+  if (checkId === 'MET-EXO020') return 'connection filter policies';
+  if (checkId === 'MET-EXO022') return 'sharing policies';
+  if (checkId === 'MET-MDO014') return 'groups';
+  return 'policies';
+}
 
 const CONTROLS_META = {
 $controlsMetaEntries
 };
 
-const CONTROLS_CATEGORIES = [
-  { id: 'MDO',   label: 'Microsoft Defender for Office 365', cls: 'cat-mdo'   },
-  { id: 'EXO',   label: 'Exchange Online / Email Authentication', cls: 'cat-exo'   },
-  { id: 'Teams', label: 'Microsoft Teams Protection',         cls: 'cat-teams' }
-];
+// Renders every category actually present in CHECKS, not just the three MET ships today
+// (see CLAUDE.md) - a hardcoded 3-entry list would let a typo'd or future category vanish
+// from the All Controls table while #tc-controls (derived from CHECKS.length) kept counting
+// it, so the tab badge and the visible table disagreed (G-14 item 3).
+const CONTROLS_CATEGORY_META = {
+  MDO:   { label: 'Microsoft Defender for Office 365',      cls: 'cat-mdo'   },
+  EXO:   { label: 'Exchange Online / Email Authentication',  cls: 'cat-exo'   },
+  Teams: { label: 'Microsoft Teams Protection',              cls: 'cat-teams' }
+};
+const CONTROLS_CATEGORIES = (function() {
+  const knownOrder = ['MDO', 'EXO', 'Teams'];
+  const seen = {};
+  const list = knownOrder.map(function(id) {
+    seen[id] = true;
+    return { id: id, label: CONTROLS_CATEGORY_META[id].label, cls: CONTROLS_CATEGORY_META[id].cls };
+  });
+  CHECKS.forEach(function(c) {
+    const id = c.category;
+    if (id && !seen[id]) {
+      seen[id] = true;
+      list.push({ id: id, label: id, cls: 'cat-other' });
+    }
+  });
+  return list;
+})();
 
 // ── Result identity ──────────────────────────────────────────────
 // Invoke-METAssessment -Detailed routinely emits several results sharing one CheckId (one per
@@ -1088,8 +1270,25 @@ function lsRemove(key) {
 // wrong acceptance state into the new per-result scheme. Existing acceptances are dropped.
 function lsKey(key){ return 'MET_accepted_' + TENANT_ID + '_' + key; }
 function isAccepted(key){ return !!lsGet(lsKey(key)); }
-function getJustification(key){ return lsGet(lsKey(key)); }
-function setAccepted(key, justification){ lsSet(lsKey(key), justification || 'Accepted'); }
+// Stored value is JSON: { justification, acceptedAt }. Older reports wrote a bare
+// justification string with no date at all - parsed defensively here so that data keeps
+// working: a value that isn't valid JSON, or doesn't have the expected shape, is treated as
+// the raw justification string with no acceptedAt, rather than dropped or shown as
+// "undefined"/"[object Object]".
+function getAcceptance(key) {
+  const raw = lsGet(lsKey(key));
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && typeof parsed.justification === 'string') {
+      return { justification: parsed.justification, acceptedAt: parsed.acceptedAt || null };
+    }
+  } catch (e) { /* legacy bare-string value - fall through */ }
+  return { justification: raw, acceptedAt: null };
+}
+function setAccepted(key, justification){
+  lsSet(lsKey(key), JSON.stringify({ justification: justification || 'Accepted', acceptedAt: new Date().toISOString() }));
+}
 function clearAccepted(key){ lsRemove(lsKey(key)); }
 
 // ── Score calculation ────────────────────────────────────────────
@@ -1110,12 +1309,12 @@ function weightedScore(checks) {
   return wTotal > 0 ? Math.round((wSum / wTotal) * 100) : null;
 }
 function recalcScore() {
-  const raw = weightedScore(CHECKS);
+  const raw = IS_EMPTY_REPORT ? null : weightedScore(CHECKS);
   const score = raw ?? 0;
-  const band = bandOf(raw);
-  document.getElementById('donut-score-text').textContent = score;
+  const band = IS_EMPTY_REPORT ? 'None' : bandOf(raw);
+  document.getElementById('donut-score-text').textContent = IS_EMPTY_REPORT ? '\u2014' : score;
   const bandEl = document.getElementById('score-band');
-  bandEl.textContent = band;
+  bandEl.textContent = IS_EMPTY_REPORT ? 'No data' : band;
   bandEl.className = 'score-band band-' + band.toLowerCase();
   const banner = document.getElementById('score-banner');
   if (banner) banner.dataset.band = band.toLowerCase();
@@ -1186,15 +1385,15 @@ function renderDonut() {
     { v: pass,  color: 'var(--result-pass)'   },
     { v: na,    color: 'var(--result-na)'     },
     { v: info,  color: 'var(--result-na)'     },
-    { v: error, color: 'var(--sev-critical)'  }
+    { v: error, color: 'var(--result-error)'  }
   ].filter(function(s) { return s.v > 0; });
-  const r = 36, circ = 2 * Math.PI * r;
+  const r = 54, circ = 2 * Math.PI * r;
   let offset = 0;
   segs.forEach(function(s) {
     const len = (s.v / total) * circ;
     const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    c.setAttribute('cx', 44); c.setAttribute('cy', 44); c.setAttribute('r', r);
-    c.setAttribute('fill', 'none'); c.setAttribute('stroke', s.color); c.setAttribute('stroke-width', 9);
+    c.setAttribute('cx', 66); c.setAttribute('cy', 66); c.setAttribute('r', r);
+    c.setAttribute('fill', 'none'); c.setAttribute('stroke', s.color); c.setAttribute('stroke-width', 14);
     c.setAttribute('stroke-dasharray', len + ' ' + (circ - len));
     c.setAttribute('stroke-dashoffset', -offset);
     g.appendChild(c);
@@ -1321,10 +1520,15 @@ function codifyQuotes(s) {
   let out = '', lastIndex = 0, m;
   while ((m = re.exec(s)) !== null) {
     out += esc(s.slice(lastIndex, m.index));
+    // A chip immediately followed by punctuation with no space in between (e.g.
+    // "p=quarantine.") gets the tighter right padding so the chip's own box doesn't read
+    // as a stray space before that punctuation (G-14 item 2).
+    const nextChar = s.charAt(re.lastIndex);
+    const cls = nextChar && /[.,;:!?)\]}]/.test(nextChar) ? 'inline-code inline-code--tight' : 'inline-code';
     if (m[1] !== undefined) {
-      out += '<code class="inline-code">' + esc(m[1]) + '</code>';
+      out += '<code class="' + cls + '">' + esc(m[1]) + '</code>';
     } else {
-      out += esc(m[2]) + '<code class="inline-code">' + esc(m[3]) + '</code>';
+      out += esc(m[2]) + '<code class="' + cls + '">' + esc(m[3]) + '</code>';
     }
     lastIndex = re.lastIndex;
   }
@@ -1376,6 +1580,17 @@ function createCard(check) {
   card.dataset.sev      = sevOf(check.severity);
   card.dataset.accepted = accepted ? '1' : '0';
   card.dataset.error    = hasError ? '1' : '0';
+  // Which card-group this row belongs to (G-13 item 3) - the underlying Result (Error wins,
+  // same as the badge), deliberately NOT re-derived from `accepted`. Accept/undo never move
+  // a card to a different DOM parent (see rebuildCard()): the Accepted tab's own filtering
+  // (inScope, in applyFilters()) already scopes to accepted cards regardless of which group
+  // contains them, and grouping by original Fail/Warning/... there is informative in its own
+  // right (which accepted risks were Fails vs. Warnings) rather than lumping everything
+  // under one undifferentiated "Accepted" bucket. Keeping the group fixed for a card's whole
+  // lifetime also keeps DOM order stable across an accept/undo, which the Accept Risk flow
+  // and its tests depend on (a locator like `[data-check-id=X].nth(0)` must keep meaning
+  // "the same card", not silently repoint to a sibling because acceptance re-sorted it).
+  card.dataset.group    = hasError ? 'Error' : check.result;
   card.dataset.search   = [check.checkId, check.name, check.affectedObject, check.finding].join(' ').toLowerCase();
 
   const bodyOpen = startOpen ? ' open' : '';
@@ -1388,8 +1603,16 @@ function createCard(check) {
     actionsHtml += '<button class="btn-accept" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">&#x2713; Accept Risk</button>';
   }
   if (accepted) {
-    const just = esc(getJustification(key));
-    actionsHtml += '<span style="font-size:12px;color:var(--result-accepted)">Accepted: ' + just + '</span>';
+    const acceptance = getAcceptance(key) || { justification: 'Accepted', acceptedAt: null };
+    const just = esc(acceptance.justification || 'Accepted');
+    let dateHtml = '';
+    if (acceptance.acceptedAt) {
+      const acceptedAtDate = new Date(acceptance.acceptedAt);
+      if (!isNaN(acceptedAtDate.getTime())) {
+        dateHtml = ' <span class="accepted-date">(' + esc(acceptedAtDate.toLocaleString()) + ')</span>';
+      }
+    }
+    actionsHtml += '<span style="font-size:var(--fs-xs);color:var(--result-accepted)">Accepted: ' + just + dateHtml + '</span>';
     actionsHtml += '<button class="btn-undo" data-checkid="' + esc(check.checkId) + '" data-result-key="' + esc(key) + '">Undo acceptance</button>';
   }
 
@@ -1407,19 +1630,40 @@ function createCard(check) {
     '</div></div>'
   ) : '';
 
+  // A property the check never populated must not render as a labelled field with nothing
+  // under it (G-14 item 6) - skip the whole .card-field instead of emitting an empty value.
+  const affectedObjectHtml = check.affectedObject
+    ? '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value" dir="auto">' + esc(check.affectedObject) + '</span></div>'
+    : '';
+  // fmtFinding() can return block content (<div class="finding-policy">, <ul>) for
+  // multi-line/multi-policy findings, so this needs a block container too, not the
+  // <span> every purely-textual field-value uses - a <span> around block content is a
+  // parse-tree hazard browsers silently repair (same fix as the coverage table below,
+  // G-14 item 7).
+  const findingValueHtml = fmtFinding(check.finding);
+  const findingHtml = findingValueHtml
+    ? '<div class="card-field"><span class="field-label">Finding</span><div class="field-value" dir="auto">' + findingValueHtml + '</div></div>'
+    : '';
+  // A <table> (coverageHtml) needs a block container, not the <span> every other field-value
+  // uses - a <span> around block content is a parse-tree hazard browsers silently repair
+  // (G-14 item 7).
+  const coverageFieldHtml = coverageHtml
+    ? '<div class="card-field"><span class="field-label">Effective Policy Coverage</span><div class="field-value field-value--wide" dir="auto">' + coverageHtml + '</div></div>'
+    : '';
+
   card.innerHTML =
     '<div class="card-header" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
-      '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
+      '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + (isPass ? ' is-pass' : '') + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '<span class="card-cat-chip cat-' + slug(check.category) + '">' + esc(check.category) + '</span>' +
       '<span class="card-id">' + esc(check.checkId) + '</span>' +
-      '<span class="card-name">' + esc(check.name) + '</span>' +
+      '<span class="card-name" dir="auto">' + esc(check.name || check.checkId) + '</span>' +
       '<span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span>' +
       '<span class="card-chevron' + (startOpen ? ' open' : '') + '">&#x25BC;</span>' +
     '</div>' +
     '<div class="card-body' + bodyOpen + '">' +
-      '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value">' + esc(check.affectedObject) + '</span></div>' +
-      '<div class="card-field"><span class="field-label">Finding</span><span class="field-value">' + fmtFinding(check.finding) + '</span></div>' +
-      (coverageHtml ? '<div class="card-field"><span class="field-label">Effective Policy Coverage</span><span class="field-value">' + coverageHtml + '</span></div>' : '') +
+      affectedObjectHtml +
+      findingHtml +
+      coverageFieldHtml +
       fixHtml +
       '<div class="card-actions">' + actionsHtml + '</div>' +
     '</div>';
@@ -1464,7 +1708,7 @@ function createCard(check) {
   return card;
 }
 
-// ── Render all cards ─────────────────────────────────────────────
+// ── Render all cards, grouped by result (G-13 item 3) ─────────────
 const container = document.getElementById('cards-container');
 
 const sortedChecks = CHECKS.slice().sort(function(a,b) {
@@ -1477,52 +1721,174 @@ const sortedChecks = CHECKS.slice().sort(function(a,b) {
   return a.checkId.localeCompare(b.checkId);
 });
 
+// One group per possible card.dataset.group value (see createCard()) - the underlying
+// Result, Error included, NOT Accepted (accepted cards stay grouped by their original
+// Result for the reasons explained at card.dataset.group's assignment in createCard()).
+// Built once up front in a fixed, sensible order; a group with zero current members is
+// hidden entirely by updateGroupHeaders(), never shown as e.g. "PASS · 0" noise.
+const GROUP_ORDER  = ['Fail','Warning','Error','Pass','Info','NotApplicable'];
+const GROUP_LABELS = {
+  Fail: 'Fail', Warning: 'Warning', Error: 'Error', Pass: 'Pass',
+  Info: 'Info', NotApplicable: 'Not Applicable'
+};
+const groupEls = {};
+function toggleGroup(g) {
+  const state = groupEls[g];
+  if (!state) return;
+  state.collapsed = !state.collapsed;
+  state.body.classList.toggle('collapsed', state.collapsed);
+  state.chevron.classList.toggle('open', !state.collapsed);
+  state.header.setAttribute('aria-expanded', state.collapsed ? 'false' : 'true');
+}
+function ensureGroupExpanded(card) {
+  const g = card && card.dataset.group;
+  if (g && groupEls[g] && groupEls[g].collapsed) toggleGroup(g);
+}
+GROUP_ORDER.forEach(function(g) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card-group';
+  wrap.dataset.group = g;
+
+  const header = document.createElement('div');
+  header.className = 'card-group-header';
+  header.setAttribute('role', 'button');
+  header.setAttribute('tabindex', '0');
+  header.setAttribute('aria-expanded', 'true');
+  header.innerHTML =
+    '<span class="card-group-title">' + esc(GROUP_LABELS[g].toUpperCase()) +
+    ' <span class="card-group-count">0</span></span>' +
+    '<span class="card-group-chevron open">&#x25BC;</span>';
+  header.addEventListener('click', function() { toggleGroup(g); });
+  header.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(g); }
+  });
+
+  const body = document.createElement('div');
+  body.className = 'card-group-body';
+
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  container.appendChild(wrap);
+
+  groupEls[g] = {
+    wrap: wrap, header: header, body: body,
+    countEl: header.querySelector('.card-group-count'),
+    chevron: header.querySelector('.card-group-chevron'),
+    collapsed: false
+  };
+});
+
 const cardMap = {};
 sortedChecks.forEach(function(check) {
   const card = createCard(check);
-  container.appendChild(card);
+  const group = groupEls[card.dataset.group] || groupEls.Info;
+  group.body.appendChild(card);
   cardMap[resultKey(check)] = card;
 });
 
+// Recomputes each group's visible-card count from the cards currently shown, and hides a
+// group entirely when nothing in it matches the active tab/search/filters - called from
+// applyFilters() below so grouping never drifts out of sync with what filtering shows.
+function updateGroupHeaders(groupVisibleCounts) {
+  GROUP_ORDER.forEach(function(g) {
+    const state = groupEls[g];
+    if (!state) return;
+    const count = groupVisibleCounts[g] || 0;
+    state.countEl.textContent = count;
+    state.wrap.classList.toggle('empty', count === 0);
+  });
+}
+
 // ── Top 5 ────────────────────────────────────────────────────────
 function renderTop5() {
-  const actionable = CHECKS.filter(function(c){ return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)); });
-  const resOrder   = {Fail:0, Warning:1};
-  const top5 = actionable.slice().sort(function(a,b) {
-    const rDiff = (resOrder[a.result] ?? 9) - (resOrder[b.result] ?? 9);
-    if (rDiff !== 0) return rDiff;
-    return (SEV_WEIGHT[b.severity]||0) - (SEV_WEIGHT[a.severity]||0);
-  }).slice(0,5);
+  // G-5: group actionable results by CheckId and rank by summed severity weight, per
+  // CLAUDE.md's "Severity weight × number of Fail results sharing the same remediation
+  // category." A check whose Error field is populated couldn't be assessed at all, so it
+  // is excluded before grouping - it does not belong in a remediation list.
+  const actionable = CHECKS.filter(function(c) {
+    return ['Fail','Warning'].includes(c.result) && !isAccepted(resultKey(c)) && !c.error;
+  });
+
+  // A single CheckId can emit members with different Result/Severity/Finding (e.g.
+  // MET-MDO010's High Fail for the toggle vs. its Medium Warning for tagging) - the
+  // group's displayed name/result/severity/finding/primaryKey must come from the
+  // single highest-priority member, not whichever happens to be first in iteration
+  // order. Same result-then-severity-weight ranking used for card sorting above
+  // (Fail before Warning, then higher SEV_WEIGHT first).
+  const TOP5_RESULT_RANK = {Fail:0, Warning:1};
+  const groupOrder = [];
+  const groups = {};
+  actionable.forEach(function(c) {
+    let group = groups[c.checkId];
+    if (!group) {
+      group = { checkId: c.checkId, name: c.name, result: c.result, severity: c.severity, finding: c.finding, primaryKey: resultKey(c), weight: 0, keys: [] };
+      groups[c.checkId] = group;
+      groupOrder.push(c.checkId);
+    } else {
+      const curRank = TOP5_RESULT_RANK[group.result] ?? 9;
+      const newRank = TOP5_RESULT_RANK[c.result] ?? 9;
+      const curWeight = SEV_WEIGHT[group.severity] || 0;
+      const newWeight = SEV_WEIGHT[c.severity] || 0;
+      if (newRank < curRank || (newRank === curRank && newWeight > curWeight)) {
+        group.name = c.name;
+        group.result = c.result;
+        group.severity = c.severity;
+        group.finding = c.finding;
+        group.primaryKey = resultKey(c);
+      }
+    }
+    group.weight += (SEV_WEIGHT[c.severity] || 0);
+    group.keys.push(resultKey(c));
+  });
+
+  const top5 = groupOrder.map(function(id) { return groups[id]; })
+    .sort(function(a, b) { return b.weight - a.weight; })
+    .slice(0, 5);
 
   const body = document.getElementById('top5-body');
   body.innerHTML = '';
   if (!top5.length) {
     const p = document.createElement('div');
-    p.style.cssText = 'padding:16px;color:var(--text2);font-size:13px';
-    p.textContent = 'No failing or warning checks.';
+    p.style.cssText = 'padding:16px;color:var(--text2);font-size:var(--fs-xs)';
+    // An empty report ran no checks at all - "No failing or warning checks" implies a
+    // clean assessment, which contradicts the "No data" state shown in the score banner.
+    p.textContent = IS_EMPTY_REPORT ? 'No check results in this report.' : 'No failing or warning checks.';
     body.appendChild(p);
     return;
   }
-  top5.forEach(function(check, i) {
-    const key = resultKey(check);
-    const rbClass = 'rb-' + slug(check.result);
+  top5.forEach(function(group, i) {
+    const primaryKey = group.primaryKey;
+    const count = group.keys.length;
+    // Same CheckId fallback used for the card title (G-14 item 6) - a check with no
+    // usable Name must not render a blank Top 5 row.
+    const nameText = (group.name || group.checkId) + (count > 1 ? ' (' + count + ' ' + getAggregationNoun(group.checkId) + ')' : '');
     const row = document.createElement('div');
     row.className = 'top5-row';
-    row.dataset.resultKey = key;
+    row.dataset.resultKey = primaryKey;
+    // Keyboard-reachable click target, same role/tabindex/keydown pattern already used
+    // for .card-header and the tabs elsewhere in this file.
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.setAttribute('aria-label', 'Jump to check ' + group.checkId);
+    // G-13 item 8: no result badge here - every row is already a Fail or a Warning by
+    // construction (see the `actionable` filter above), so a second badge repeating that
+    // is pure noise in a remediation list. One severity chip is enough.
     row.innerHTML =
       '<div class="top5-rank">' + (i+1) + '</div>' +
       '<div>' +
-        '<div class="top5-id">' + esc(check.checkId) + '</div>' +
-        '<div class="top5-name">' + esc(check.name) + '</div>' +
+        '<div class="top5-id">' + esc(group.checkId) + '</div>' +
+        '<div class="top5-name">' + esc(nameText) + '</div>' +
       '</div>' +
-      '<div class="top5-finding">' + fmtFinding(check.finding) + '</div>' +
-      '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
-        '<span class="result-badge ' + rbClass + '">' + esc(check.result.toUpperCase()) + '</span>' +
-        '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
-      '</div>';
-    row.addEventListener('click', function() {
-      const card = cardMap[key];
+      '<div class="top5-finding" dir="auto">' + fmtFinding(group.finding) + '</div>' +
+      '<span class="sev-pill sev-' + slug(sevOf(group.severity)) + '">' + esc(sevOf(group.severity).toUpperCase()) + '</span>';
+    // The Top 5 tab hides #cards-container in applyFilters(), so scrollIntoView() on a
+    // display:none card can't reach or expand it - switch to the All tab first, same as
+    // the Controls-row jump handler in renderControlsRef() already does.
+    const jumpToCard = function() {
+      switchToTab('All');
+      const card = cardMap[primaryKey];
       if (!card) return;
+      ensureGroupExpanded(card);
       const body = card.querySelector('.card-body');
       const chev = card.querySelector('.card-chevron');
       if (!body.classList.contains('open')) {
@@ -1530,6 +1896,10 @@ function renderTop5() {
         chev.classList.add('open');
       }
       card.scrollIntoView({behavior:'smooth', block:'center'});
+    };
+    row.addEventListener('click', jumpToCard);
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToCard(); }
     });
     body.appendChild(row);
   });
@@ -1576,7 +1946,10 @@ function renderControlsRef() {
       const resultDisplay = hasError ? 'Error' : (accepted ? 'Accepted' : c.result);
       const rbClass = 'rb-' + (hasError ? 'error' : (accepted ? 'accepted' : slug(c.result)));
       const desc = CONTROLS_META[c.checkId] || c.name;
-      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card">';
+      // role="button"/tabindex on a <tr> keeps this row a valid table row while making
+      // it a keyboard-reachable click target - same reasoning as .top5-row above; a
+      // wrapping focusable element would break the existing table cell layout.
+      html += '<tr class="ctrl-row" data-checkid="' + esc(c.checkId) + '" data-result-key="' + esc(key) + '" title="Click to jump to check card" role="button" tabindex="0" aria-label="Jump to check ' + esc(c.checkId) + '">';
       html += '<td class="ctrl-id">' + esc(c.checkId) + '</td>';
       html += '<td class="ctrl-name">' + esc(c.name) + '</td>';
       html += '<td><span class="sev-pill sev-' + slug(sevOf(c.severity)) + '">' + esc(sevOf(c.severity).toUpperCase()) + '</span></td>';
@@ -1595,11 +1968,18 @@ function renderControlsRef() {
   });
 
   el.querySelectorAll('.ctrl-row').forEach(function(row) {
-    row.addEventListener('click', function() {
-      const key = this.dataset.resultKey;
+    const jumpToCard = function() {
+      const key = row.dataset.resultKey;
       switchToTab('All');
       const card = cardMap[key];
-      if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      if (card) {
+        ensureGroupExpanded(card);
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+    row.addEventListener('click', jumpToCard);
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToCard(); }
     });
   });
 }
@@ -1643,7 +2023,14 @@ function applyFilters() {
 
   if (isControls) {
     ctrlRef.classList.add('visible');
-    document.getElementById('result-count').textContent = CHECKS.length + ' controls';
+    // #result-count lives inside .filters, which is hidden on this tab (no search/severity/
+    // result filtering applies to the fixed reference table) - writing "N controls" into it
+    // here was dead output, invisible to sighted users and absent from the accessibility
+    // tree alike. Clear it instead of leaving whatever the previously active tab wrote, so a
+    // future unhide of .filters can never surface a stale count. The total is already
+    // visible and announced via the "All Controls" tab's own tc-controls badge, updated
+    // below (G-14 item 4).
+    document.getElementById('result-count').textContent = '';
     updateTabCounts();
     return;
   }
@@ -1661,13 +2048,10 @@ function applyFilters() {
   }
 
   let visible = 0, inScopeTotal = 0;
+  const groupVisibleCounts = {};
   allCards.forEach(function(card) {
-    const cat      = card.dataset.category;
-    const result   = card.dataset.result;
-    const isErr    = card.dataset.error === '1';
-    const sev      = card.dataset.sev;
-    const sText    = card.dataset.search || '';
-    const isAcc    = card.dataset.accepted === '1';
+    const cat   = card.dataset.category;
+    const isAcc = card.dataset.accepted === '1';
 
     // Accepted cards move out of All/MDO/EXO/Teams and into the Accepted tab.
     let inScope;
@@ -1681,25 +2065,47 @@ function applyFilters() {
     }
     if (inScope) inScopeTotal++;
 
-    let show = inScope;
-    if (show && sevFilter) show = sev === sevFilter;
-    // Error is its own bucket, mutually exclusive with every Result-based option, matching the
-    // ERROR badge on the card itself and the summary/donut counts above.
-    if (show && resFilter) show = resFilter === 'Error' ? isErr : (result === resFilter && !isErr);
-    if (show && search)    show = sText.includes(search);
-
+    const show = inScope && cardMatchesFilters(card, search, sevFilter, resFilter);
     card.style.display = show ? '' : 'none';
-    if (show) visible++;
+    if (show) {
+      visible++;
+      const g = card.dataset.group;
+      groupVisibleCounts[g] = (groupVisibleCounts[g] || 0) + 1;
+    }
   });
+  updateGroupHeaders(groupVisibleCounts);
 
   document.getElementById('no-results').style.display = visible === 0 ? '' : 'none';
   document.getElementById('result-count').textContent = 'Showing ' + visible + ' of ' + inScopeTotal + ' checks';
   updateTabCounts();
 }
 
+// Whether a card matches the current search/severity/result filters, independent of which
+// tab is active - shared by applyFilters (per-tab visibility) and updateTabCounts (per-category
+// badges), so the two can never disagree about what "currently matching" means.
+function cardMatchesFilters(card, search, sevFilter, resFilter) {
+  const result = card.dataset.result;
+  const isErr  = card.dataset.error === '1';
+  const sev    = card.dataset.sev;
+  const sText  = card.dataset.search || '';
+
+  let match = true;
+  if (sevFilter) match = sev === sevFilter;
+  // Error is its own bucket, mutually exclusive with every Result-based option, matching the
+  // ERROR badge on the card itself and the summary/donut counts above.
+  if (match && resFilter) match = resFilter === 'Error' ? isErr : (result === resFilter && !isErr);
+  if (match && search)    match = sText.includes(search);
+  return match;
+}
+
 function updateTabCounts() {
+  const search    = document.getElementById('search').value.toLowerCase();
+  const sevFilter = document.getElementById('sev-filter').value;
+  const resFilter = document.getElementById('result-filter').value;
+
   const counts = {All:0, MDO:0, EXO:0, Teams:0, Accepted:0};
   allCards.forEach(function(card) {
+    if (!cardMatchesFilters(card, search, sevFilter, resFilter)) return;
     if (card.dataset.accepted === '1') { counts.Accepted++; return; }
     counts.All++;
     counts[card.dataset.category] = (counts[card.dataset.category] || 0) + 1;
@@ -1825,7 +2231,8 @@ document.getElementById('modal-cancel').addEventListener('click', function() {
 
 document.getElementById('modal-confirm').addEventListener('click', function() {
   if (!pendingKey) return;
-  const just = document.getElementById('modal-text').value.trim();
+  let just = document.getElementById('modal-text').value.trim();
+  if (just.length > JUSTIFICATION_MAX_LENGTH) just = just.slice(0, JUSTIFICATION_MAX_LENGTH);
   const key = pendingKey;
   setAccepted(key, just);
   rebuildCard(key);
@@ -1866,27 +2273,65 @@ function rebuildCard(key) {
   const oldCard = cardMap[key];
   if (!oldCard) return;
   const newCard = createCard(check);
+  // card.dataset.group is the underlying Result, unaffected by accept/undo (see its
+  // assignment in createCard()), so the rebuilt card always belongs in the exact DOM
+  // position (same card-group-body) the old one did - replaceChild is sufficient, with
+  // no re-parenting into a different group needed.
   oldCard.parentNode.replaceChild(newCard, oldCard);
   cardMap[key] = newCard;
   const idx = allCards.indexOf(oldCard);
   if (idx !== -1) allCards[idx] = newCard;
 }
 
+// ── Sticky toolbar-height sync ──────────────────────────────────────
+// .card-group-header's sticky offset (--toolbar-h) must track the toolbar's real
+// rendered height, not a hardcoded value - the toolbar wraps to two rows at narrow
+// widths (the report's documented 1024px minimum), and a stale offset lets the
+// taller wrapped toolbar cover the sticky group header instead of sitting above it.
+(function() {
+  const toolbarEl = document.querySelector('.toolbar');
+  if (!toolbarEl) return;
+  const syncToolbarHeight = function() {
+    document.documentElement.style.setProperty('--toolbar-h', toolbarEl.offsetHeight + 'px');
+  };
+  syncToolbarHeight();
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncToolbarHeight).observe(toolbarEl);
+  } else {
+    window.addEventListener('resize', syncToolbarHeight);
+  }
+})();
+
 // ── Init ─────────────────────────────────────────────────────────
 (function() {
   const LS_SCORE_KEY = 'MET_score_' + TENANT_ID;
-  const prev = lsGet(LS_SCORE_KEY);
-  if (prev !== null) {
-    const delta = INITIAL_SCORE - parseInt(prev, 10);
-    if (delta !== 0) {
-      const el = document.getElementById('score-delta');
-      if (el) {
-        el.textContent = (delta > 0 ? '+' : '') + delta;
-        el.className = 'score-delta ' + (delta > 0 ? 'delta-up' : 'delta-down');
+  // G-copilot item 3: an empty report's INITIAL_SCORE is a placeholder (0), not an
+  // observed score - comparing it against a real cached score would produce a
+  // misleading delta next to the "No data" banner, and caching it would poison the
+  // comparison for the next real run. Skip the cache read/write entirely.
+  if (!IS_EMPTY_REPORT) {
+    const prev = lsGet(LS_SCORE_KEY);
+    // Number(...) is strict - Number("40garbage") is NaN - unlike parseInt, which
+    // would parse "40garbage" as 40 and treat a corrupted cache value as valid.
+    const prevScore = prev !== null ? Number(prev) : NaN;
+    if (Number.isFinite(prevScore) && prevScore >= 0 && prevScore <= 100) {
+      const delta = INITIAL_SCORE - prevScore;
+      if (delta !== 0) {
+        const el = document.getElementById('score-delta');
+        if (el) {
+          el.textContent = (delta > 0 ? '+' : '') + delta;
+          el.className = 'score-delta ' + (delta > 0 ? 'delta-up' : 'delta-down');
+        }
+        // G-13 item 7: the delta previously appeared with no stated baseline. Labelled here,
+        // not dropped, since "vs. last viewed run" is literally what INITIAL_SCORE is being
+        // compared against - the score cached in this browser's localStorage the last time a
+        // report for this tenant was opened.
+        const captionEl = document.getElementById('score-delta-caption');
+        if (captionEl) captionEl.style.display = '';
       }
     }
+    lsSet(LS_SCORE_KEY, INITIAL_SCORE);
   }
-  lsSet(LS_SCORE_KEY, INITIAL_SCORE);
 })();
 renderTop5();
 renderControlsRef();

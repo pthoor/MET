@@ -75,7 +75,10 @@ test.describe('tabs', () => {
     await expect(page.locator('#ctrl-ref')).toHaveClass(/visible/);
     await expect(page.locator('#cards-container')).toBeHidden();
     await expect(page.locator('#ctrl-ref .ctrl-row')).toHaveCount(FIXTURE.total);
-    await expect(page.locator('#result-count')).toHaveText(`${FIXTURE.total} controls`);
+    // #result-count sits inside .filters, hidden on this tab (no search/severity/result
+    // filtering applies to the fixed reference table) - writing a count into it was dead
+    // output (G-14 item 4); the total is instead visible and announced via #tc-controls.
+    await expect(page.locator('#result-count')).toHaveText('');
   });
 });
 

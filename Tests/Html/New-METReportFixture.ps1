@@ -33,6 +33,37 @@
                        browser leaves nothing scorable, which is the live client-side path
                        (recalcScore/bandOf) that produced a false Critical band before the
                        'None' band existed on that side too.
+    LongFinding    - one Fail with a short Finding and one Fail with a 1600+ character
+                       Finding. Regression fixture for G-6: the Top 5 row for the long
+                       Finding must stay clamped to roughly the short row's height instead
+                       of expanding to fit the whole text.
+    RankingBySum   - three MET-EXO004 Medium-severity Fails (weight 10 each, summing to 30)
+                       plus a single MET-MDO001 High-severity Fail (weight 20). Regression
+                       fixture for G-5: proves Top 5 ranks groups by the SUM of member
+                       severity weights, not by the single highest per-item severity in a
+                       group (which would rank the Medium group below the lone High result).
+    DesignHierarchy - regression fixture for G-13 item 2/9 (result, not severity, drives a
+                       card's visual weight): a Pass at Critical severity, a Fail at
+                       Informational severity, and a NotApplicable-with-Error at Critical
+                       severity - the combinations that would be indistinguishable, or
+                       actively misleading, under the old severity-driven left border.
+    UnknownCategory  - one MDO check plus one check carrying a Category outside MDO/EXO/Teams.
+                       Regression fixture for G-14 item 3: the All Controls table and its
+                       tc-controls tab badge must agree on the total even when a category
+                       isn't one of the three MET ships today.
+    NullFields       - a check with null Name, AffectedObject and Finding. Regression fixture
+                       for G-14 item 6: a null field must not render a labelled .card-field
+                       with nothing under it, and a null Name must fall back to the CheckId
+                       as the card title.
+    CoverageTable    - a check carrying EffectivePolicyCoverage Metadata, the same shape
+                       New-METEffectivePolicyCoverageResult emits. Regression fixture for
+                       G-14 item 7: the coverage table must render inside a block container,
+                       not nested inside a <span class="field-value">.
+    MixedSeverityGroup - one CheckId (MET-MDO010, mirroring its real two-Name shape) emitting
+                       both a High Fail and a Medium Warning. Regression fixture for the
+                       Top 5 grouping fix: the group's displayed severity/finding/name must
+                       come from the higher-priority (Fail, then higher severity weight)
+                       member, not whichever result happens to be first in iteration order.
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +71,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable', 'MixedSeverityGroup')]
     [string] $Scenario = 'Rich'
 )
 
@@ -52,7 +83,8 @@ function New-FixtureResult {
     param(
         [string] $CheckId, [string] $Category, [string] $Name, [string] $Result,
         [string] $Severity, [object] $Score, [string] $AffectedObject, [string] $Finding,
-        [string] $Recommendation = '', [string] $ReferenceUrl = '', [string] $ErrorText = $null
+        [string] $Recommendation = '', [string] $ReferenceUrl = '', [string] $ErrorText = $null,
+        [object] $Metadata = $null
     )
     [PSCustomObject]@{
         CheckId        = $CheckId
@@ -67,7 +99,7 @@ function New-FixtureResult {
         ReferenceUrl   = $ReferenceUrl
         Timestamp      = [datetime]::new(2026, 6, 1, 14, 32, 0, [System.DateTimeKind]::Utc)
         Error          = $ErrorText
-        Metadata       = $null
+        Metadata       = $Metadata
     }
 }
 
@@ -244,6 +276,148 @@ $fixtures = switch ($Scenario) {
             New-FixtureResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
                 -Severity 'Informational' -Score $null -AffectedObject 'Tenant' `
                 -Finding 'No trusted sealers configured'
+        )
+    }
+
+    'RankingBySum' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy A' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy B' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-EXO004' -Category 'EXO' -Name 'Quarantine Policies' -Result 'Fail' `
+                -Severity 'Medium' -Score 0 -AffectedObject 'Policy C' `
+                -Finding 'ESNEnabled is false but end users have release permission' `
+                -Recommendation 'Enable end-user spam notifications or remove the release permission.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/quarantine-policies'
+
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+        )
+    }
+
+    'LongFinding' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email.' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+
+            New-FixtureResult -CheckId 'MET-EXO001' -Category 'EXO' -Name 'DMARC Record' -Result 'Fail' `
+                -Severity 'Critical' -Score 0 -AffectedObject 'contoso.com' `
+                -Finding (('DMARC policy is set to none, which means no enforcement action is taken against spoofed mail failing authentication checks. ' * 20).Trim()) `
+                -Recommendation 'Publish a DMARC record with p=quarantine.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure'
+        )
+    }
+
+    'DesignHierarchy' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO009' -Category 'MDO' -Name 'Zero-Hour Auto Purge' -Result 'Pass' `
+                -Severity 'Critical' -Score 100 -AffectedObject 'All anti-spam policies' `
+                -Finding 'Auto purge of delivered mail is enabled everywhere' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/zero-hour-auto-purge'
+
+            New-FixtureResult -CheckId 'MET-EXO007' -Category 'EXO' -Name 'Transport Rule Audit' -Result 'Fail' `
+                -Severity 'Informational' -Score 0 -AffectedObject 'Mail flow rules' `
+                -Finding 'Two rules bypass spam filtering' `
+                -Recommendation 'Review the two rules that set SCL to -1.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/anti-spam-policies-configure'
+
+            New-FixtureResult -CheckId 'MET-Teams014' -Category 'Teams' -Name 'Cross-Tenant Access' -Result 'NotApplicable' `
+                -Severity 'Critical' -Score $null -AffectedObject 'Cross-tenant access policy' `
+                -Finding 'Microsoft Graph is not connected' `
+                -ErrorText 'Authentication needed. Please call Connect-MgGraph.'
+        )
+    }
+
+    'UnknownCategory' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+
+            New-FixtureResult -CheckId 'MET-XYZ001' -Category 'Compliance' -Name 'Retention Label Coverage' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Tenant' `
+                -Finding 'Not every mailbox has a retention label applied'
+        )
+    }
+
+    # A null Name/AffectedObject/Finding must not render a labelled field with nothing under
+    # it, and a null Name must fall back to the CheckId as the card title (G-14 item 6).
+    'NullFields' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO099' -Category 'EXO' -Name $null -Result 'Warning' `
+                -Severity 'Low' -Score 50 -AffectedObject $null -Finding $null `
+                -Recommendation 'Investigate why this check returned no descriptive fields.'
+        )
+    }
+
+    # Metadata shape mirrors New-METEffectivePolicyCoverageResult - the coverage table must
+    # render inside a block container, not a <span class="field-value"> (G-14 item 7).
+    'CoverageTable' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Effective Coverage' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Tenant (2 mailboxes)' `
+                -Finding "1 of 2 mailboxes meet the Safe Links baseline; 1 receives an effective policy below baseline.`nPolicy coverage:`nDefault Policy | Type: Custom | Scope: All recipients | Effective subjects: 1 of 2 | Configuration: Below baseline | Impact: Affects 1 subject(s)" `
+                -Recommendation 'Enable Safe Links on the effective policy for the affected mailbox.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about' `
+                -Metadata @{
+                    DetailType              = 'EffectivePolicyCoverage'
+                    ProtectionType          = 'Safe Links'
+                    TotalRecipients         = 2
+                    CompliantRecipients     = 1
+                    CoverageRecommendations = @('Enable Safe Links on Default Policy.')
+                    Policies                = @(
+                        @{
+                            PolicyName              = 'Default Policy'
+                            PolicyType              = 'Custom'
+                            State                    = 'Enabled'
+                            Priority                 = 0
+                            Scope                    = 'All recipients'
+                            EffectiveRecipientCount = 1
+                            ConfigurationStatus     = 'Below baseline'
+                            CurrentImpact           = 'Affects 1 subject(s)'
+                            OrderingObservations    = @()
+                            Issues                   = @('Safe Links is disabled for email')
+                        }
+                    )
+                }
+        )
+    }
+
+    # A single CheckId with members at different Result/Severity, mirroring MET-MDO010's
+    # real two-Name shape (High Fail for the toggle, Medium Warning for tagging). The worse
+    # member (High Fail) is listed second, on purpose - proves the Top 5 group picks the
+    # highest-priority member deterministically rather than whichever is first in iteration
+    # order.
+    'MixedSeverityGroup' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO010' -Category 'MDO' -Name 'Priority Account Tagging' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Tenant' `
+                -Finding 'No priority account tags are applied to a differentiated protection policy' `
+                -Recommendation 'Apply priority account tags to a Strict or Standard preset policy.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/priority-accounts-turn-on-protection'
+
+            New-FixtureResult -CheckId 'MET-MDO010' -Category 'MDO' -Name 'Priority Account Protection Toggle' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Tenant' `
+                -Finding 'Priority account protection is disabled tenant-wide' `
+                -Recommendation 'Enable the priority account protection toggle.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/priority-accounts-turn-on-protection'
         )
     }
 

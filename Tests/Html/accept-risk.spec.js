@@ -40,11 +40,15 @@ test.describe('risk acceptance keyed per result', () => {
     await expect(cardsAfterReload.nth(2)).not.toContainText('ACCEPTED');
   });
 
-  test('a Top 5 row scrolls to its own card, not a same-CheckId sibling', async ({ page }) => {
+  // G-5: Top 5 now groups all results sharing a CheckId into a single row, so the three
+  // MET-EXO004 results collapse to one row instead of three. Clicking it scrolls to and
+  // expands the group's first underlying card.
+  test('a grouped Top 5 row scrolls to its first underlying card', async ({ page }) => {
     const rows = page.locator('.top5-row');
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(1);
 
-    const targetRow = rows.nth(1);
+    const targetRow = rows.first();
+    await expect(targetRow.locator('.top5-id')).toHaveText('MET-EXO004');
     const targetKey = await targetRow.getAttribute('data-result-key');
     expect(targetKey).toBeTruthy();
 
@@ -53,6 +57,9 @@ test.describe('risk acceptance keyed per result', () => {
     const targetCard = page.locator(`.card[data-result-key="${targetKey}"]`);
     await expect(targetCard).toBeInViewport();
     await expect(targetCard.locator('.card-body')).toHaveClass(/open/);
+
+    const cards = page.locator('[data-check-id="MET-EXO004"]');
+    await expect(cards.first()).toHaveAttribute('data-result-key', targetKey);
   });
 
   test('an All-Controls row jumps to its own card', async ({ page }) => {

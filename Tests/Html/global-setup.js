@@ -17,6 +17,13 @@ const SCENARIOS = [
   { scenario: 'ErrorWithRecommendation', file: 'report-error-with-recommendation.html' },
   { scenario: 'InfoOnly', file: 'report-info-only.html' },
   { scenario: 'FailPlusInfo', file: 'report-fail-plus-info.html' },
+  { scenario: 'LongFinding', file: 'report-long-finding.html' },
+  { scenario: 'RankingBySum', file: 'report-ranking-by-sum.html' },
+  { scenario: 'DesignHierarchy', file: 'report-design-hierarchy.html' },
+  { scenario: 'UnknownCategory', file: 'report-unknown-category.html' },
+  { scenario: 'NullFields', file: 'report-null-fields.html' },
+  { scenario: 'CoverageTable', file: 'report-coverage-table.html' },
+  { scenario: 'MixedSeverityGroup', file: 'report-mixed-severity-group.html' },
 ];
 
 function pwshExecutable() {
