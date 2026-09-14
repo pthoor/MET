@@ -689,14 +689,14 @@ function Get-METReport {
   --text: #201f1e;
   --text2: #605e5c;
   /* #6b6968 on #ffffff = 5.46:1 (was #a19f9d at 2.64:1 - G-11). Used only as text/borders
-     directly on the page surface - see --chip-*/--result-* below for the separate "opaque
-     fill behind white text" role, which does not depend on this token or on theme. */
+     directly on the page surface - see --chip-* and --result-* below for the separate
+     "opaque fill behind white text" role, which does not depend on this token or on theme. */
   --text3: #6b6968;
   /* "Surface accent" role: text, links, borders and outline-chip color read directly
      against --surface/--surface2. Lightened ~15-20% and desaturated for dark mode in the
      media query below (G-13 item 4) because a dark background changes what these need to
-     look legible - unlike --chip-*/--result-* below, which are opaque fills behind a fixed
-     white overlay and so need no theme-dependent adjustment at all. */
+     look legible - unlike --chip-* and --result-* below, which are opaque fills behind a
+     fixed white overlay and so need no theme-dependent adjustment at all. */
   --accent-mdo: #0078d4;
   --accent-exo: #008272;
   --accent-teams: #7719aa;
@@ -828,6 +828,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .cat-mdo{background:var(--chip-mdo)}
 .cat-exo{background:var(--chip-exo)}
 .cat-teams{background:var(--chip-teams)}
+/* Fallback for a category outside MDO/EXO/Teams (G-14 item 3) - same neutral fill as an
+   unrecognised .card-cat-chip, so the All Controls section header for it doesn't go unstyled. */
+.cat-other{background:var(--chip-neutral)}
 /* Category meters at 2x: 6px tracks -> 12px, 12px labels -> the scale's 13px, filling the
    width the enlarged score/band freed up instead of leaving it empty. */
 .cat-meters{display:flex;flex-direction:column;gap:10px;min-width:240px;max-width:340px;justify-content:center}
@@ -894,6 +897,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .code-block{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--fs-xs);background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:5px 10px;margin-top:6px;word-break:break-all;display:block;color:var(--text)}
 .finding-code{margin-left:12px}
 .inline-code{font-family:'Cascadia Code','Consolas',monospace;font-size:var(--fs-xs);background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;color:var(--text);word-break:break-word}
+/* codifyQuotes applies this instead of the 5px default right padding when the chip is
+   immediately followed by punctuation with no space (e.g. "...p=quarantine.") - the full
+   padding plus the chip's border otherwise reads as a stray space before the punctuation
+   (G-14 item 2). */
+.inline-code--tight{padding-right:1px}
 .coverage-wrap{margin-top:8px;overflow-x:auto}
 .coverage-summary{font-size:var(--fs-xs);color:var(--text2);margin-bottom:8px}
 .coverage-table{width:100%;border-collapse:collapse;font-size:var(--fs-xs)}
@@ -948,7 +956,10 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .card[data-error="1"]::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background-image:repeating-linear-gradient(135deg,var(--result-error) 0 3px,transparent 3px 6px)}
 .card-header{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;user-select:none;min-height:36px}
 .card-header:hover{background:var(--surface2)}
-.card-header:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
+/* One rule for every interactive element on the page (G-14 item 9) - native <button>/<a>/
+   <input>/<select> got the UA default ring, .card-header had its own explicit ring, and
+   .fix-toggle (a div[role=button][tabindex=0]) had none at all. */
+.card-header:focus-visible,.fix-toggle:focus-visible,.tab:focus-visible,.band-info-icon:focus-visible,button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent-mdo);outline-offset:-2px}
 /* Low-chroma outlined chip: severity describes the control, not this run's finding, so it
    no longer competes with the result badge for the reader's attention (G-13 item 2). */
 .sev-pill{font-size:var(--fs-2xs);font-weight:700;padding:1px 7px;border-radius:8px;white-space:nowrap;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
@@ -985,7 +996,10 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .fix-toggle{display:flex;align-items:center;gap:6px;font-size:var(--fs-xs);font-weight:500;cursor:pointer;color:var(--accent-mdo);padding:2px 0}
 .fix-toggle:hover{text-decoration:underline}
 .fix-chevron{font-size:var(--fs-2xs);transition:transform .2s}
-.fix-chevron.open{transform:rotate(180deg)}
+/* &#x25BA; (right-pointing triangle) rotated a further 90deg points down when the
+   section is open - the same "collapsed points at the content, open points down"
+   convention as .card-chevron. 180deg previously rotated it to point left (G-14 item 1). */
+.fix-chevron.open{transform:rotate(90deg)}
 .fix-content{display:none;margin-top:8px;font-size:var(--fs-xs);color:var(--text);line-height:1.5;max-width:78ch}
 .fix-content.open{display:block}
 .fix-content ol{padding-left:18px;display:flex;flex-direction:column;gap:4px}
@@ -1120,16 +1134,16 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="tab" data-tab="Controls" role="tab" tabindex="-1" aria-selected="false" aria-controls="ctrl-ref">All Controls <span class="tab-count" id="tc-controls">0</span></div>
   </div>
   <div class="filters">
-    <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search...">
-    <select class="filter-select" id="sev-filter">
+    <input type="text" class="search-box" id="search" placeholder="&#x1F50D; Search..." aria-label="Search checks">
+    <select class="filter-select" id="sev-filter" aria-label="Filter by severity">
       <option value="">All Severities</option>
       <option>Critical</option><option>High</option><option>Medium</option><option>Low</option><option>Informational</option>
     </select>
-    <select class="filter-select" id="result-filter">
+    <select class="filter-select" id="result-filter" aria-label="Filter by result">
       <option value="">All Results</option>
       <option>Fail</option><option>Warning</option><option>Pass</option><option>NotApplicable</option><option>Info</option><option>Error</option>
     </select>
-    <span class="result-count" id="result-count"></span>
+    <span class="result-count" id="result-count" aria-live="polite"></span>
     <button class="btn-collapse" id="btn-collapse-all" title="Collapse or expand all visible cards">Collapse All</button>
   </div>
 </div>
@@ -1192,11 +1206,31 @@ const CONTROLS_META = {
 $controlsMetaEntries
 };
 
-const CONTROLS_CATEGORIES = [
-  { id: 'MDO',   label: 'Microsoft Defender for Office 365', cls: 'cat-mdo'   },
-  { id: 'EXO',   label: 'Exchange Online / Email Authentication', cls: 'cat-exo'   },
-  { id: 'Teams', label: 'Microsoft Teams Protection',         cls: 'cat-teams' }
-];
+// Renders every category actually present in CHECKS, not just the three MET ships today
+// (see CLAUDE.md) - a hardcoded 3-entry list would let a typo'd or future category vanish
+// from the All Controls table while #tc-controls (derived from CHECKS.length) kept counting
+// it, so the tab badge and the visible table disagreed (G-14 item 3).
+const CONTROLS_CATEGORY_META = {
+  MDO:   { label: 'Microsoft Defender for Office 365',      cls: 'cat-mdo'   },
+  EXO:   { label: 'Exchange Online / Email Authentication',  cls: 'cat-exo'   },
+  Teams: { label: 'Microsoft Teams Protection',              cls: 'cat-teams' }
+};
+const CONTROLS_CATEGORIES = (function() {
+  const knownOrder = ['MDO', 'EXO', 'Teams'];
+  const seen = {};
+  const list = knownOrder.map(function(id) {
+    seen[id] = true;
+    return { id: id, label: CONTROLS_CATEGORY_META[id].label, cls: CONTROLS_CATEGORY_META[id].cls };
+  });
+  CHECKS.forEach(function(c) {
+    const id = c.category;
+    if (id && !seen[id]) {
+      seen[id] = true;
+      list.push({ id: id, label: id, cls: 'cat-other' });
+    }
+  });
+  return list;
+})();
 
 // ── Result identity ──────────────────────────────────────────────
 // Invoke-METAssessment -Detailed routinely emits several results sharing one CheckId (one per
@@ -1481,10 +1515,15 @@ function codifyQuotes(s) {
   let out = '', lastIndex = 0, m;
   while ((m = re.exec(s)) !== null) {
     out += esc(s.slice(lastIndex, m.index));
+    // A chip immediately followed by punctuation with no space in between (e.g.
+    // "p=quarantine.") gets the tighter right padding so the chip's own box doesn't read
+    // as a stray space before that punctuation (G-14 item 2).
+    const nextChar = s.charAt(re.lastIndex);
+    const cls = nextChar && /[.,;:!?)\]}]/.test(nextChar) ? 'inline-code inline-code--tight' : 'inline-code';
     if (m[1] !== undefined) {
-      out += '<code class="inline-code">' + esc(m[1]) + '</code>';
+      out += '<code class="' + cls + '">' + esc(m[1]) + '</code>';
     } else {
-      out += esc(m[2]) + '<code class="inline-code">' + esc(m[3]) + '</code>';
+      out += esc(m[2]) + '<code class="' + cls + '">' + esc(m[3]) + '</code>';
     }
     lastIndex = re.lastIndex;
   }
@@ -1586,19 +1625,35 @@ function createCard(check) {
     '</div></div>'
   ) : '';
 
+  // A property the check never populated must not render as a labelled field with nothing
+  // under it (G-14 item 6) - skip the whole .card-field instead of emitting an empty value.
+  const affectedObjectHtml = check.affectedObject
+    ? '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value" dir="auto">' + esc(check.affectedObject) + '</span></div>'
+    : '';
+  const findingValueHtml = fmtFinding(check.finding);
+  const findingHtml = findingValueHtml
+    ? '<div class="card-field"><span class="field-label">Finding</span><span class="field-value" dir="auto">' + findingValueHtml + '</span></div>'
+    : '';
+  // A <table> (coverageHtml) needs a block container, not the <span> every other field-value
+  // uses - a <span> around block content is a parse-tree hazard browsers silently repair
+  // (G-14 item 7).
+  const coverageFieldHtml = coverageHtml
+    ? '<div class="card-field"><span class="field-label">Effective Policy Coverage</span><div class="field-value field-value--wide" dir="auto">' + coverageHtml + '</div></div>'
+    : '';
+
   card.innerHTML =
     '<div class="card-header" role="button" tabindex="0" aria-expanded="' + (startOpen ? 'true' : 'false') + '">' +
       '<span class="sev-pill sev-' + slug(sevOf(check.severity)) + (isPass ? ' is-pass' : '') + '">' + esc(sevOf(check.severity).toUpperCase()) + '</span>' +
       '<span class="card-cat-chip cat-' + slug(check.category) + '">' + esc(check.category) + '</span>' +
       '<span class="card-id">' + esc(check.checkId) + '</span>' +
-      '<span class="card-name">' + esc(check.name) + '</span>' +
+      '<span class="card-name" dir="auto">' + esc(check.name || check.checkId) + '</span>' +
       '<span class="result-badge ' + rbClass + '">' + esc(resultDisplay.toUpperCase()) + '</span>' +
       '<span class="card-chevron' + (startOpen ? ' open' : '') + '">&#x25BC;</span>' +
     '</div>' +
     '<div class="card-body' + bodyOpen + '">' +
-      '<div class="card-field"><span class="field-label">Affected Object</span><span class="field-value">' + esc(check.affectedObject) + '</span></div>' +
-      '<div class="card-field"><span class="field-label">Finding</span><span class="field-value">' + fmtFinding(check.finding) + '</span></div>' +
-      (coverageHtml ? '<div class="card-field"><span class="field-label">Effective Policy Coverage</span><span class="field-value field-value--wide">' + coverageHtml + '</span></div>' : '') +
+      affectedObjectHtml +
+      findingHtml +
+      coverageFieldHtml +
       fixHtml +
       '<div class="card-actions">' + actionsHtml + '</div>' +
     '</div>';
@@ -1786,7 +1841,7 @@ function renderTop5() {
         '<div class="top5-id">' + esc(group.checkId) + '</div>' +
         '<div class="top5-name">' + esc(nameText) + '</div>' +
       '</div>' +
-      '<div class="top5-finding">' + fmtFinding(group.finding) + '</div>' +
+      '<div class="top5-finding" dir="auto">' + fmtFinding(group.finding) + '</div>' +
       '<span class="sev-pill sev-' + slug(sevOf(group.severity)) + '">' + esc(sevOf(group.severity).toUpperCase()) + '</span>';
     row.addEventListener('click', function() {
       const card = cardMap[primaryKey];
@@ -1915,7 +1970,14 @@ function applyFilters() {
 
   if (isControls) {
     ctrlRef.classList.add('visible');
-    document.getElementById('result-count').textContent = CHECKS.length + ' controls';
+    // #result-count lives inside .filters, which is hidden on this tab (no search/severity/
+    // result filtering applies to the fixed reference table) - writing "N controls" into it
+    // here was dead output, invisible to sighted users and absent from the accessibility
+    // tree alike. Clear it instead of leaving whatever the previously active tab wrote, so a
+    // future unhide of .filters can never surface a stale count. The total is already
+    // visible and announced via the "All Controls" tab's own tc-controls badge, updated
+    // below (G-14 item 4).
+    document.getElementById('result-count').textContent = '';
     updateTabCounts();
     return;
   }

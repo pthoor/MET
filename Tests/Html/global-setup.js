@@ -20,6 +20,9 @@ const SCENARIOS = [
   { scenario: 'LongFinding', file: 'report-long-finding.html' },
   { scenario: 'RankingBySum', file: 'report-ranking-by-sum.html' },
   { scenario: 'DesignHierarchy', file: 'report-design-hierarchy.html' },
+  { scenario: 'UnknownCategory', file: 'report-unknown-category.html' },
+  { scenario: 'NullFields', file: 'report-null-fields.html' },
+  { scenario: 'CoverageTable', file: 'report-coverage-table.html' },
 ];
 
 function pwshExecutable() {

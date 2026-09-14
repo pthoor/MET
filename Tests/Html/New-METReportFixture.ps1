@@ -47,6 +47,18 @@
                        Informational severity, and a NotApplicable-with-Error at Critical
                        severity - the combinations that would be indistinguishable, or
                        actively misleading, under the old severity-driven left border.
+    UnknownCategory  - one MDO check plus one check carrying a Category outside MDO/EXO/Teams.
+                       Regression fixture for G-14 item 3: the All Controls table and its
+                       tc-controls tab badge must agree on the total even when a category
+                       isn't one of the three MET ships today.
+    NullFields       - a check with null Name, AffectedObject and Finding. Regression fixture
+                       for G-14 item 6: a null field must not render a labelled .card-field
+                       with nothing under it, and a null Name must fall back to the CheckId
+                       as the card title.
+    CoverageTable    - a check carrying EffectivePolicyCoverage Metadata, the same shape
+                       New-METEffectivePolicyCoverageResult emits. Regression fixture for
+                       G-14 item 7: the coverage table must render inside a block container,
+                       not nested inside a <span class="field-value">.
 #>
 [CmdletBinding()]
 param(
@@ -54,7 +66,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable')]
     [string] $Scenario = 'Rich'
 )
 
@@ -66,7 +78,8 @@ function New-FixtureResult {
     param(
         [string] $CheckId, [string] $Category, [string] $Name, [string] $Result,
         [string] $Severity, [object] $Score, [string] $AffectedObject, [string] $Finding,
-        [string] $Recommendation = '', [string] $ReferenceUrl = '', [string] $ErrorText = $null
+        [string] $Recommendation = '', [string] $ReferenceUrl = '', [string] $ErrorText = $null,
+        [object] $Metadata = $null
     )
     [PSCustomObject]@{
         CheckId        = $CheckId
@@ -81,7 +94,7 @@ function New-FixtureResult {
         ReferenceUrl   = $ReferenceUrl
         Timestamp      = [datetime]::new(2026, 6, 1, 14, 32, 0, [System.DateTimeKind]::Utc)
         Error          = $ErrorText
-        Metadata       = $null
+        Metadata       = $Metadata
     }
 }
 
@@ -322,6 +335,63 @@ $fixtures = switch ($Scenario) {
                 -Severity 'Critical' -Score $null -AffectedObject 'Cross-tenant access policy' `
                 -Finding 'Microsoft Graph is not connected' `
                 -ErrorText 'Authentication needed. Please call Connect-MgGraph.'
+        )
+    }
+
+    'UnknownCategory' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Policy' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Default Safe Links Policy' `
+                -Finding 'Safe Links is disabled for email' `
+                -Recommendation 'Enable Safe Links for email.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about'
+
+            New-FixtureResult -CheckId 'MET-XYZ001' -Category 'Compliance' -Name 'Retention Label Coverage' -Result 'Warning' `
+                -Severity 'Medium' -Score 50 -AffectedObject 'Tenant' `
+                -Finding 'Not every mailbox has a retention label applied'
+        )
+    }
+
+    # A null Name/AffectedObject/Finding must not render a labelled field with nothing under
+    # it, and a null Name must fall back to the CheckId as the card title (G-14 item 6).
+    'NullFields' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO099' -Category 'EXO' -Name $null -Result 'Warning' `
+                -Severity 'Low' -Score 50 -AffectedObject $null -Finding $null `
+                -Recommendation 'Investigate why this check returned no descriptive fields.'
+        )
+    }
+
+    # Metadata shape mirrors New-METEffectivePolicyCoverageResult - the coverage table must
+    # render inside a block container, not a <span class="field-value"> (G-14 item 7).
+    'CoverageTable' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO001' -Category 'MDO' -Name 'Safe Links Effective Coverage' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Tenant (2 mailboxes)' `
+                -Finding "1 of 2 mailboxes meet the Safe Links baseline; 1 receives an effective policy below baseline.`nPolicy coverage:`nDefault Policy | Type: Custom | Scope: All recipients | Effective subjects: 1 of 2 | Configuration: Below baseline | Impact: Affects 1 subject(s)" `
+                -Recommendation 'Enable Safe Links on the effective policy for the affected mailbox.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/safe-links-about' `
+                -Metadata @{
+                    DetailType              = 'EffectivePolicyCoverage'
+                    ProtectionType          = 'Safe Links'
+                    TotalRecipients         = 2
+                    CompliantRecipients     = 1
+                    CoverageRecommendations = @('Enable Safe Links on Default Policy.')
+                    Policies                = @(
+                        @{
+                            PolicyName              = 'Default Policy'
+                            PolicyType              = 'Custom'
+                            State                    = 'Enabled'
+                            Priority                 = 0
+                            Scope                    = 'All recipients'
+                            EffectiveRecipientCount = 1
+                            ConfigurationStatus     = 'Below baseline'
+                            CurrentImpact           = 'Affects 1 subject(s)'
+                            OrderingObservations    = @()
+                            Issues                   = @('Safe Links is disabled for email')
+                        }
+                    )
+                }
         )
     }
 
