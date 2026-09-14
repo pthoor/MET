@@ -13,8 +13,9 @@ The workflow requests the API key only in the protected publish job. GitHub's bu
 ## Release procedure
 
 1. Update `ModuleVersion` and `ReleaseNotes` in `MET.psd1` on a branch.
-2. Merge the version change to `main` after CI succeeds.
-3. Create an annotated tag that exactly matches `v<ModuleVersion>`, then push it:
+2. Add a matching `## [X.Y.Z] - <headline>` entry to `CHANGELOG.md` in the same branch, describing the same changes as `ReleaseNotes`. `CHANGELOG.md` ships inside the published module (staged and zipped alongside `MET.psd1`), so it must stay in sync with every release.
+3. Merge the version change to `main` after CI succeeds.
+4. Create an annotated tag that exactly matches `v<ModuleVersion>`, then push it:
 
    ```bash
    git switch main
@@ -24,8 +25,8 @@ The workflow requests the API key only in the protected publish job. GitHub's bu
    git push origin "v${version}"
    ```
 
-4. Approve the `production` deployment, if the environment requires approval.
-5. Confirm that the workflow validation (lint, unit tests, integration tests, and HTML report browser tests), PowerShell Gallery publication, build-provenance attestation, and GitHub release creation all complete successfully.
+5. Approve the `production` deployment, if the environment requires approval.
+6. Confirm that the workflow validation (lint, unit tests, integration tests, and HTML report browser tests), PowerShell Gallery publication, build-provenance attestation, and GitHub release creation all complete successfully.
 
 If a tag-triggered run fails before PowerShell Gallery accepts the package, merge the workflow fix to `main` and use **Run workflow** with the existing tag. The manual run checks out and validates that tag; do not move the tag. Once PowerShell Gallery has accepted a version, it cannot be overwritten or published again.
 
