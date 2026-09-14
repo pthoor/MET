@@ -19,6 +19,7 @@ const SCENARIOS = [
   { scenario: 'FailPlusInfo', file: 'report-fail-plus-info.html' },
   { scenario: 'LongFinding', file: 'report-long-finding.html' },
   { scenario: 'RankingBySum', file: 'report-ranking-by-sum.html' },
+  { scenario: 'DesignHierarchy', file: 'report-design-hierarchy.html' },
 ];
 
 function pwshExecutable() {

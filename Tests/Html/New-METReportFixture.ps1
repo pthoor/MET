@@ -42,6 +42,11 @@
                        fixture for G-5: proves Top 5 ranks groups by the SUM of member
                        severity weights, not by the single highest per-item severity in a
                        group (which would rank the Medium group below the lone High result).
+    DesignHierarchy - regression fixture for G-13 item 2/9 (result, not severity, drives a
+                       card's visual weight): a Pass at Critical severity, a Fail at
+                       Informational severity, and a NotApplicable-with-Error at Critical
+                       severity - the combinations that would be indistinguishable, or
+                       actively misleading, under the old severity-driven left border.
 #>
 [CmdletBinding()]
 param(
@@ -49,7 +54,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy')]
     [string] $Scenario = 'Rich'
 )
 
@@ -297,6 +302,26 @@ $fixtures = switch ($Scenario) {
                 -Finding (('DMARC policy is set to none, which means no enforcement action is taken against spoofed mail failing authentication checks. ' * 20).Trim()) `
                 -Recommendation 'Publish a DMARC record with p=quarantine.' `
                 -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/email-authentication-dmarc-configure'
+        )
+    }
+
+    'DesignHierarchy' {
+        @(
+            New-FixtureResult -CheckId 'MET-MDO009' -Category 'MDO' -Name 'Zero-Hour Auto Purge' -Result 'Pass' `
+                -Severity 'Critical' -Score 100 -AffectedObject 'All anti-spam policies' `
+                -Finding 'Auto purge of delivered mail is enabled everywhere' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/zero-hour-auto-purge'
+
+            New-FixtureResult -CheckId 'MET-EXO007' -Category 'EXO' -Name 'Transport Rule Audit' -Result 'Fail' `
+                -Severity 'Informational' -Score 0 -AffectedObject 'Mail flow rules' `
+                -Finding 'Two rules bypass spam filtering' `
+                -Recommendation 'Review the two rules that set SCL to -1.' `
+                -ReferenceUrl 'https://learn.microsoft.com/defender-office-365/anti-spam-policies-configure'
+
+            New-FixtureResult -CheckId 'MET-Teams014' -Category 'Teams' -Name 'Cross-Tenant Access' -Result 'NotApplicable' `
+                -Severity 'Critical' -Score $null -AffectedObject 'Cross-tenant access policy' `
+                -Finding 'Microsoft Graph is not connected' `
+                -ErrorText 'Authentication needed. Please call Connect-MgGraph.'
         )
     }
 
