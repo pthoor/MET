@@ -11,6 +11,7 @@ $METCheckInfo = @{
 
 $issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
+$subdomainCoverageUnassessed = $false
 
 # Check Teams federation (external access) allow-list scope
 try {
@@ -48,10 +49,13 @@ try {
         $issues.Add('No explicit BlockedDomains deny-list is configured - there is no domain-level backstop in place as a defense-in-depth measure if the allow-list scope is ever widened')
     }
 
-    if ($config.AllowFederatedUsers -eq $true -and $config.BlockedDomains) {
+    # BlockedDomains is only consulted when AllowedDomains is AllowAllKnownDomains - under a
+    # specific-domain allow-list only allow-listed domains can communicate, so subdomain
+    # coverage of a dormant deny-list is not a current exposure.
+    if ($config.AllowFederatedUsers -eq $true -and $isAllowAllKnownDomains -and $config.BlockedDomains) {
         $blockSubdomainsProperty = $config.PSObject.Properties['BlockAllSubdomains']
         if (-not $blockSubdomainsProperty -or $null -eq $blockSubdomainsProperty.Value) {
-            $issues.Add('The BlockAllSubdomains property was not returned, so whether subdomains of the BlockedDomains entries are also blocked was not established - by default blocking contoso.com does not block marketing.contoso.com, so an unconfirmed state is reported as a gap rather than a pass')
+            $subdomainCoverageUnassessed = $true
         }
         elseif ($blockSubdomainsProperty.Value -ne $true) {
             $issues.Add('BlockAllSubdomains is disabled, so the BlockedDomains deny-list matches exact domains only - blocking contoso.com does not block marketing.contoso.com, and an attacker who controls a blocked domain can keep reaching your users from any subdomain of it')
@@ -85,4 +89,13 @@ else {
         -Result Pass -Severity High -AffectedObject 'Teams External Access Configuration' `
         -Finding 'Teams external access (federation) is appropriately scoped' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration'
+}
+
+if ($subdomainCoverageUnassessed) {
+    New-METCheckResult -CheckId 'MET-Teams006' -Category Teams -Name 'Blocked Domain Subdomain Coverage' `
+        -Result NotApplicable -Severity High -AffectedObject 'Teams External Access Configuration' `
+        -Finding 'The BlockAllSubdomains property was not returned, so whether subdomains of the BlockedDomains entries are also blocked was not established. By default blocking contoso.com does not block marketing.contoso.com, so an unconfirmed state is reported as unassessed rather than a pass.' `
+        -Recommendation 'Confirm directly: Get-CsTenantFederationConfiguration | Format-List BlockedDomains, BlockAllSubdomains. If the property is absent there too, update the MicrosoftTeams module and re-run this check; to cover subdomains run Set-CsTenantFederationConfiguration -BlockAllSubdomains $true.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration' `
+        -ErrorMessage 'The BlockAllSubdomains property was not returned by Get-CsTenantFederationConfiguration - the installed MicrosoftTeams module version may not expose it.'
 }

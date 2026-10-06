@@ -21,12 +21,16 @@ through v0.7.0, see `ROADMAP.md`.
   Office 365 licence.
 - MET-MDO015 (Intra-Organization Spam Filtering) reads `IntraOrgFilterState`
   on the default and enabled custom anti-spam policies and fails a policy
-  that acts on no verdict at all for mail between internal users.
+  that acts on no verdict at all for mail between internal users - including
+  `Default` on a GCC High/DoD Exchange Online endpoint, where it behaves as
+  `None`.
 - MET-Teams012 now also emits a `PSTN Call Spam Filtering` result from
   `SpamFilteringEnabledType` on every Teams calling policy.
-- MET-Teams006 now flags a populated `BlockedDomains` deny-list when
-  `BlockAllSubdomains` is off or not returned, since blocking a domain does
-  not block its subdomains by default.
+- MET-Teams006 now flags a populated `BlockedDomains` deny-list under open
+  federation when `BlockAllSubdomains` is off (or reports it as unassessed
+  when not returned), since blocking a domain does not block its subdomains
+  by default. Under a specific-domain allow-list the deny-list is inactive
+  and is not assessed.
 - MET-Teams010 now flags non-Global external access policies that turn on
   `EnableTeamsConsumerAccess` or `EnableTeamsConsumerInbound` when the
   Global policy turns them off.
