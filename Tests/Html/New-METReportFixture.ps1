@@ -64,6 +64,11 @@
                        Top 5 grouping fix: the group's displayed severity/finding/name must
                        come from the higher-priority (Fail, then higher severity weight)
                        member, not whichever result happens to be first in iteration order.
+    KnownTokens      - one Fail whose Finding carries a bare check-derived identifier
+                       (RejectDirectSend - matched only through KNOWN_TOKENS, generated from
+                       the check ASTs by Get-METReportGlossaryTerms), a bare $true and a
+                       CIDR value, none of them quoted. Exercises codifyQuotes' newer
+                       alternatives in a real browser rather than as generated script text.
 #>
 [CmdletBinding()]
 param(
@@ -71,7 +76,7 @@ param(
     [string] $OutputFile,
 
     [Parameter()]
-    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable', 'MixedSeverityGroup')]
+    [ValidateSet('Rich', 'Single', 'Empty', 'Hostile', 'RepeatedCheckId', 'SameAffectedObject', 'ErrorBuckets', 'ErrorWithRecommendation', 'InfoOnly', 'FailPlusInfo', 'LongFinding', 'RankingBySum', 'DesignHierarchy', 'UnknownCategory', 'NullFields', 'CoverageTable', 'MixedSeverityGroup', 'KnownTokens')]
     [string] $Scenario = 'Rich'
 )
 
@@ -276,6 +281,16 @@ $fixtures = switch ($Scenario) {
             New-FixtureResult -CheckId 'MET-EXO016' -Category 'EXO' -Name 'ARC Trusted Sealers' -Result 'Info' `
                 -Severity 'Informational' -Score $null -AffectedObject 'Tenant' `
                 -Finding 'No trusted sealers configured'
+        )
+    }
+
+    'KnownTokens' {
+        @(
+            New-FixtureResult -CheckId 'MET-EXO010' -Category 'EXO' -Name 'Direct Send Protection' -Result 'Fail' `
+                -Severity 'High' -Score 0 -AffectedObject 'Organization Config' `
+                -Finding 'RejectDirectSend is disabled while EnableSafeList is $true and the IP allow list contains 10.0.0.0/8' `
+                -Recommendation 'Turn on direct send rejection.' `
+                -ReferenceUrl 'https://learn.microsoft.com/exchange/mail-flow-best-practices/how-to-set-up-a-multifunction-device-or-application-to-send-email-using-microsoft-365-or-office-365'
         )
     }
 

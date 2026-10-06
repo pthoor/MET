@@ -47,4 +47,24 @@ Describe 'Get-METReport writes reports owner-only' {
         }
         $unexpected | Should -BeNullOrEmpty
     }
+
+    # Set-Acl raises a non-terminating error by default (seen live as "does not possess the
+    # 'SeSecurityPrivilege' privilege" on some drives without an elevated process) - without
+    # -ErrorAction Stop on the Set-Acl call inside New-METRestrictedFile, its catch block never
+    # fires and the raw ACL error leaks to the console instead of the friendly warning.
+    It 'Warns instead of leaking a raw ACL error when Set-Acl fails non-terminating' -Skip:(-not $IsWindows) {
+        Mock -ModuleName MET Set-Acl {
+            Write-Error "The process does not possess the 'SeSecurityPrivilege' privilege which is required for this operation."
+        }
+
+        # Called directly, not inside a `{ } | Should -Not -Throw` scriptblock: that scriptblock
+        # runs in a child scope, so -WarningVariable would populate a $warnings the assertion
+        # below never sees. An unexpected throw still fails this It.
+        $warnings = $null
+        $script:sample | Get-METReport -Format JSON -OutputPath $script:outDir -TenantName 'contoso.com' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+        $file = Get-ChildItem -Path $script:outDir -Recurse -Filter '*.json' | Select-Object -First 1
+        $file | Should -Not -BeNullOrEmpty
+        ($warnings -join "`n") | Should -Match "Could not restrict permissions"
+    }
 }

@@ -26,6 +26,12 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# graphify knowledge-graph tool output (local dev aid, not project source)
+graphify-out/
+
+# Stray local bundles/exports
+*-combined.zip
+
 # Editor
 .vscode/
 *.log

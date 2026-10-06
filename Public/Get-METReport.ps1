@@ -651,6 +651,20 @@ function Get-METReport {
             $tenantIdJson  = $tenantIdJson  -replace '<', '\u003C'
             $checksJson    = $checksJson    -replace '<', '\u003C'
 
+            # Cmdlet/property/value identifiers actually referenced by the check scripts
+            # (RejectDirectSend, SmtpClientAuthenticationDisabled, Get-EXOMailbox, ...) -
+            # rendered as inline code in Finding/Recommendation text wherever they appear,
+            # the same way DMARC/SPF records already get code styling. Generated from the
+            # checks' own AST rather than a hand-maintained list so a new check's properties
+            # are picked up automatically; see Get-METReportGlossaryTerms.
+            $knownTokens = @(Get-METReportGlossaryTerms)
+            $knownTokensJson = if ($knownTokens.Count -eq 0) {
+                '[]'
+            } else {
+                $knownTokens | ConvertTo-Json -Depth 1 -Compress -AsArray
+            }
+            $knownTokensJson = $knownTokensJson -replace '<', '\u003C'
+
             # CONTROLS_META used to be 51 descriptions hand-maintained inside the client
             # script below - a second copy of facts the check scripts already state, which
             # had drifted for two checks. Generated here from each check's own
@@ -1183,6 +1197,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 'use strict';
 
 const CHECKS = $checksJson;
+const KNOWN_TOKENS = $knownTokensJson;
 const IS_EMPTY_REPORT = CHECKS.length === 0;
 const TENANT_ID = $tenantIdJson;
 const INITIAL_SCORE = $overallScore;
@@ -1513,24 +1528,44 @@ function safeHref(url) {
 // ── Inline-code formatting for finding/recommendation text ────────
 // 'quoted' technical values (setting names, DNS records), bare SPF
 // qualifier tokens (+all, -all, ~all, ?mx, ...), bare key=value tokens
-// (p=none, p=quarantine, rua=mailto:...), and the command portion of a
-// "Run: <cmdlet>" instruction are all rendered as inline code.
+// (p=none, p=quarantine, rua=mailto:...), $true/$false/$null, IPv4/CIDR
+// values, and known cmdlet/property/value identifiers (KNOWN_TOKENS,
+// generated server-side from the check scripts' own AST - see
+// Get-METReportGlossaryTerms) are all rendered as inline code, wherever
+// in the sentence they appear, not just after a "Run:" prefix.
+function escapeRegExpLiteral(s) {
+  return s.replace(/[.*+?^`${}()|[\]\\]/g, '\\$&');
+}
+const KNOWN_TOKENS_PATTERN = KNOWN_TOKENS.length
+  ? '\\b(?:' + KNOWN_TOKENS.map(escapeRegExpLiteral).join('|') + ')\\b'
+  : '';
+const CODIFY_RE = new RegExp(
+  "'([^']+)'" +
+  '|(^|[\\s(])([+\\-~?](?:all|mx|a|ip4|ip6|include|exists|ptr|redirect)\\b|[a-zA-Z][\\w-]*=[^\\s,;()]*[^\\s,;().])' +
+  '|(\\`$(?:true|false|null)\\b)' +
+  '|(\\b(?:\\d{1,3}\\.){3}\\d{1,3}(?:\\/\\d{1,2})?\\b)' +
+  (KNOWN_TOKENS_PATTERN ? '|(' + KNOWN_TOKENS_PATTERN + ')' : ''),
+  'g'
+);
 function codifyQuotes(s) {
-  const re = /'([^']+)'|(^|[\s(])([+\-~?](?:all|mx|a|ip4|ip6|include|exists|ptr|redirect)\b|[a-zA-Z][\w-]*=[^\s,;()]*[^\s,;().])/g;
+  CODIFY_RE.lastIndex = 0;
   let out = '', lastIndex = 0, m;
-  while ((m = re.exec(s)) !== null) {
+  while ((m = CODIFY_RE.exec(s)) !== null) {
     out += esc(s.slice(lastIndex, m.index));
     // A chip immediately followed by punctuation with no space in between (e.g.
     // "p=quarantine.") gets the tighter right padding so the chip's own box doesn't read
     // as a stray space before that punctuation (G-14 item 2).
-    const nextChar = s.charAt(re.lastIndex);
+    const nextChar = s.charAt(CODIFY_RE.lastIndex);
     const cls = nextChar && /[.,;:!?)\]}]/.test(nextChar) ? 'inline-code inline-code--tight' : 'inline-code';
     if (m[1] !== undefined) {
       out += '<code class="' + cls + '">' + esc(m[1]) + '</code>';
-    } else {
+    } else if (m[2] !== undefined) {
       out += esc(m[2]) + '<code class="' + cls + '">' + esc(m[3]) + '</code>';
+    } else {
+      const token = m[4] !== undefined ? m[4] : (m[5] !== undefined ? m[5] : m[6]);
+      out += '<code class="' + cls + '">' + esc(token) + '</code>';
     }
-    lastIndex = re.lastIndex;
+    lastIndex = CODIFY_RE.lastIndex;
   }
   out += esc(s.slice(lastIndex));
   return out;
