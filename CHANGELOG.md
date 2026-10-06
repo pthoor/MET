@@ -10,6 +10,24 @@ v0.8.0 through v0.11.1. Release dates were not tracked at the time and are
 not fabricated here. For the fuller version history, including v0.1.0
 through v0.7.0, see `ROADMAP.md`.
 
+## [Unreleased]
+
+### Added
+
+- MET-Teams016 (Teams Messaging Safety) reads `FileTypeCheck`,
+  `UrlReputationCheck` and `ReportIncorrectSecurityDetections` from
+  `Get-CsTeamsMessagingConfiguration`: Teams' built-in weaponizable file
+  blocking and malicious URL warnings, which work without a Defender for
+  Office 365 licence.
+- MET-MDO015 (Intra-Organization Spam Filtering) reads `IntraOrgFilterState`
+  on the default and enabled custom anti-spam policies and fails a policy
+  that acts on no verdict at all for mail between internal users.
+- MET-Teams012 now also emits a `PSTN Call Spam Filtering` result from
+  `SpamFilteringEnabledType` on every Teams calling policy.
+- MET-Teams006 now flags a populated `BlockedDomains` deny-list when
+  `BlockAllSubdomains` is off or not returned, since blocking a domain does
+  not block its subdomains by default.
+
 ## [0.11.1] - Security and scoring correctness
 
 ### Security

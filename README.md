@@ -10,7 +10,7 @@
 
 <p align="center">Open-source PowerShell module for assessing the security posture of a Microsoft 365 tenant across Microsoft Defender for Office 365 (MDO), Exchange Online Protection (EOP), and Microsoft Teams threat protection.</p>
 
-MET runs 51 read-only security posture checks across Microsoft Defender for Office 365, Exchange Online Protection, and Microsoft Teams.
+MET runs 53 read-only security posture checks across Microsoft Defender for Office 365, Exchange Online Protection, and Microsoft Teams.
 
 ## Quick start
 
@@ -32,7 +32,7 @@ $results | Get-METReport -Format HTML -OutputPath ./assessments
 |---|---|
 | **Minimum** | PowerShell **7.4** |
 | **Tested on** | PowerShell **7.4**, **7.6** |
-| **Platform** | All 51 checks run on Windows, Linux, and macOS. EXO001 and EXO003 use `Resolve-DnsName` on Windows, then `dig`, `nslookup`, and configurable DNS-over-HTTPS elsewhere. DNS-over-HTTPS discloses queried domains to its resolver and can be disabled with `MET_DOH_RESOLVER=none`. `Connect-METSession` applies `-DisableWAM` automatically off-Windows, which is sufficient on a normal Linux/macOS desktop or a Codespace with a reachable browser tab - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). Device-code auth (`-UseDeviceAuthentication`) is only needed on a genuinely headless host with no browser reachable at all, and is a documented phishing vector otherwise - see the troubleshooting section below before using it. |
+| **Platform** | All 53 checks run on Windows, Linux, and macOS. EXO001 and EXO003 use `Resolve-DnsName` on Windows, then `dig`, `nslookup`, and configurable DNS-over-HTTPS elsewhere. DNS-over-HTTPS discloses queried domains to its resolver and can be disabled with `MET_DOH_RESOLVER=none`. `Connect-METSession` applies `-DisableWAM` automatically off-Windows, which is sufficient on a normal Linux/macOS desktop or a Codespace with a reachable browser tab - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). Device-code auth (`-UseDeviceAuthentication`) is only needed on a genuinely headless host with no browser reachable at all, and is a documented phishing vector otherwise - see the troubleshooting section below before using it. |
 
 ### Required modules
 
@@ -313,6 +313,7 @@ MET is assessment-only and never changes tenant configuration. The separate [Pro
 | MET-MDO012 | [Safe Documents](docs/checks/MET-MDO012-SafeDocuments.md) | Medium | EnableSafeDocs enabled; AllowSafeDocsOpen disabled |
 | MET-MDO013 | [Policy Precedence Conflicts](docs/checks/MET-MDO013-PolicyPrecedenceConflicts.md) | High | Custom rules targeting recipients already covered by a Standard/Strict preset |
 | MET-MDO014 | [Group Reference Audit](docs/checks/MET-MDO014-GroupReferenceAudit.md) | High | Groups referenced by policy rules (SentToMemberOf) that are empty or cannot be resolved |
+| MET-MDO015 | [Intra-Organization Spam Filtering](docs/checks/MET-MDO015-IntraOrgSpamFiltering.md) | Medium | IntraOrgFilterState - whether spam and phishing verdicts are acted on for mail between internal users, the path a compromised account uses to phish colleagues |
 
 ### EXO - Exchange Online / Email Authentication
 
@@ -351,15 +352,16 @@ MET is assessment-only and never changes tenant configuration. The separate [Pro
 | MET-Teams003 | [Meeting Protection](docs/checks/MET-Teams003-MeetingProtection.md) | Medium | Anonymous join, lobby bypass (AutoAdmittedUsers, AllowPSTNUsersToBypassLobby), federation - across all meeting policies |
 | MET-Teams004 | [ZAP for Teams](docs/checks/MET-Teams004-ZAPForTeams.md) | High | TeamsProtectionPolicy ZAP enabled; malware and high-confidence phish quarantine tags set to AdminOnlyAccessPolicy; rule-level exceptions that narrow coverage |
 | MET-Teams005 | [Teams User Reporting](docs/checks/MET-Teams005-TeamsUserReporting.md) | Medium | ReportChatMessageEnabled in report submission policy; AllowSecurityEndUserReporting in Teams messaging policy |
-| MET-Teams006 | [External Access / Federation Allow-List](docs/checks/MET-Teams006-ExternalAccess.md) | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, and an empty BlockedDomains deny-list |
+| MET-Teams006 | [External Access / Federation Allow-List](docs/checks/MET-Teams006-ExternalAccess.md) | High | Open federation (AllowAllKnownDomains), AllowTeamsConsumer/AllowTeamsConsumerInbound, an empty BlockedDomains deny-list, and a deny-list that does not cover subdomains (BlockAllSubdomains) |
 | MET-Teams007 | [Guest Messaging/Calling Configuration](docs/checks/MET-Teams007-GuestConfiguration.md) | Medium | Guest-initiated 1:1 chat and private calling configuration |
 | MET-Teams008 | [App Permission Policy](docs/checks/MET-Teams008-AppPermissionPolicy.md) | Medium | Catalog app types not restricted to an explicit allow/block list (may be inert on ACM-migrated tenants) |
 | MET-Teams009 | [Trial Tenant Federation Exposure](docs/checks/MET-Teams009-TrialTenantFederation.md) | High | ExternalAccessWithTrialTenants allows communication with disposable trial-license tenants |
 | MET-Teams010 | [Per-User External Access Policy Drift](docs/checks/MET-Teams010-ExternalAccessPolicyDrift.md) | Medium | Non-Global CsExternalAccessPolicy instances re-opening federation/public-cloud access for a specific user set |
 | MET-Teams011 | [SecOps Blocklist Authority & Blocked Entities](docs/checks/MET-Teams011-SecOpsBlocklistAuthority.md) | Medium | Whether SecOps can block malicious domains/users from the Defender portal mid-incident, plus what's currently blocked |
-| MET-Teams012 | [Call Reporting](docs/checks/MET-Teams012-CallReporting.md) | Medium | ReportCall in Teams calling policies - the native control against helpdesk-vishing calls |
+| MET-Teams012 | [Call Reporting](docs/checks/MET-Teams012-CallReporting.md) | Medium | ReportCall and PSTN call spam filtering (SpamFilteringEnabledType) in Teams calling policies - the native controls against helpdesk-vishing calls |
 | MET-Teams014 | [Cross-Tenant Guest & External Collaboration Restrictions](docs/checks/MET-Teams014-CrossTenantAccess.md) | Medium | Entra cross-tenant access default policy and guest-invite authorization (Graph, degrades gracefully if unavailable) |
 | MET-Teams015 | [Teams Email Integration](docs/checks/MET-Teams015-EmailIntegration.md) | Medium | AllowEmailIntoChannel - channel email addresses accept external mail that never traverses the mailbox delivery path |
+| MET-Teams016 | [Teams Messaging Safety](docs/checks/MET-Teams016-MessagingSafety.md) | High | FileTypeCheck, UrlReputationCheck, ReportIncorrectSecurityDetections - built-in weaponizable file blocking and malicious URL warnings in Teams chat, no MDO licence needed |
 
 ---
 
