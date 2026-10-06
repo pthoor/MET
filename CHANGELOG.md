@@ -31,6 +31,14 @@ through v0.7.0, see `ROADMAP.md`.
   `EnableTeamsConsumerAccess` or `EnableTeamsConsumerInbound` when the
   Global policy turns them off.
 
+### Fixed
+
+- MET-Teams010 warned that custom external access policies with
+  `EnableFederationAccess` on were undoing a restriction on the Global policy
+  even when the Global policy had federation on too. Federation is now
+  compared with the Global policy, and the retired `EnablePublicCloudAccess`
+  property is no longer read.
+
 ## [0.11.1] - Security and scoring correctness
 
 ### Security

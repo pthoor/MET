@@ -59,36 +59,107 @@ Describe 'MET-Teams010 Per-User External Access Policy Drift' {
         }
     }
 
-    Context 'multiple non-Global policies re-open access' {
+    Context 'multiple non-Global policies re-open federation the Global policy closes' {
         BeforeAll {
             Mock Get-CsExternalAccessPolicy {
                 @(
-                    [PSCustomObject]@{
-                        Identity                   = 'Global'
-                        EnableFederationAccess     = $false
-                        EnablePublicCloudAccess    = $false
-                        EnableTeamsConsumerAccess  = $true
-                        EnableTeamsConsumerInbound = $true
-                    },
-                    [PSCustomObject]@{
-                        Identity                = 'SalesTeam'
-                        EnableFederationAccess   = $true
-                        EnablePublicCloudAccess  = $false
-                    },
-                    [PSCustomObject]@{
-                        Identity                = 'ExecTeam'
-                        EnableFederationAccess   = $false
-                        EnablePublicCloudAccess  = $true
-                    }
+                    [PSCustomObject]@{ Identity = 'Global'; EnableFederationAccess = $false; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'SalesTeam'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'ExecTeam'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
                 )
             }
         }
         It 'Returns one Warning result per flagged policy' {
-            $results = & $checkFile
+            $results = @(& $checkFile)
             $results.Count | Should -Be 2
             $results | ForEach-Object { $_.Result | Should -Be 'Warning' }
             ($results.AffectedObject) | Should -Contain 'SalesTeam'
             ($results.AffectedObject) | Should -Contain 'ExecTeam'
+        }
+    }
+
+    # Regression guard: with Global EnableFederationAccess = $true, custom policies with the
+    # same value used to be warned as "undoing any tenant-wide federation restriction set on
+    # the Global policy" - a restriction that did not exist.
+    Context 'Global leaves federation open and a custom policy matches it' {
+        BeforeAll {
+            Mock Get-CsExternalAccessPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'FederationOnly'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'NoFederation'; EnableFederationAccess = $false; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
+                )
+            }
+        }
+        It 'Returns a single Pass - matching an open baseline is not drift' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'Global closes federation but a custom policy does not return EnableFederationAccess' {
+        BeforeAll {
+            Mock Get-CsExternalAccessPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; EnableFederationAccess = $false; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'Tag:Legacy'; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
+                )
+            }
+        }
+        It 'Returns Warning stating federation drift was not established' {
+            $results = @(& $checkFile)
+            $results[0].Result | Should -Be 'Warning'
+            $results[0].Finding | Should -Match 'EnableFederationAccess'
+            $results[0].Finding | Should -Match 'not established'
+        }
+    }
+
+    Context 'Global does not return EnableFederationAccess while custom policies exist' {
+        BeforeAll {
+            Mock Get-CsExternalAccessPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'Tag:Any'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
+                )
+            }
+        }
+        It 'Reports the federation baseline as NotApplicable rather than passing it' {
+            $na = @(& $checkFile) | Where-Object Result -eq 'NotApplicable'
+            $na.AffectedObject | Should -Be 'Global'
+            $na.Finding | Should -Match 'EnableFederationAccess'
+            $na.Error | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'no Global policy is returned while custom policies exist' {
+        BeforeAll {
+            Mock Get-CsExternalAccessPolicy {
+                @([PSCustomObject]@{ Identity = 'Tag:Any'; EnableFederationAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true })
+            }
+        }
+        It 'Reports the baseline as NotApplicable and never Passes silently' {
+            $results = @(& $checkFile)
+            ($results | Where-Object Result -eq 'NotApplicable').Count | Should -Be 1
+        }
+    }
+
+    # EnablePublicCloudAccess is not on the current Set-CsExternalAccessPolicy syntax and was
+    # not returned by MicrosoftTeams 7.9.0; it is no longer read.
+    Context 'a custom policy carries the retired EnablePublicCloudAccess property' {
+        BeforeAll {
+            Mock Get-CsExternalAccessPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; EnableFederationAccess = $false; EnablePublicCloudAccess = $false; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true },
+                    [PSCustomObject]@{ Identity = 'OldSkype'; EnableFederationAccess = $false; EnablePublicCloudAccess = $true; EnableTeamsConsumerAccess = $true; EnableTeamsConsumerInbound = $true }
+                )
+            }
+        }
+        It 'Does not flag it' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'EnablePublicCloudAccess'
         }
     }
 

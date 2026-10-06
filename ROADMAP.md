@@ -285,6 +285,7 @@ Closes gaps opened by Teams and Defender for Office 365 features that shipped or
 | Teams012 - PSTN call spam filtering | ✅ | Medium | Second result (`PSTN Call Spam Filtering`) from `SpamFilteringEnabledType` on the same calling policies - "Spam Likely" labelling of inbound phone calls, the channel helpdesk-vishing and callback-phishing often arrive on |
 | Teams006 - blocked-domain subdomain coverage | ✅ | High | `BlockAllSubdomains` is off by default, so blocking `contoso.com` leaves `marketing.contoso.com` reachable. Flagged when `BlockedDomains` is populated and the switch is off or not returned |
 | Teams010 - per-user unmanaged-account drift | ✅ | Medium | Flags non-Global external access policies that turn on `EnableTeamsConsumerAccess`/`EnableTeamsConsumerInbound` when the Global policy turns them off. Both default `$true`, so drift is measured against the Global baseline rather than flagged outright. Inbound is ignored when the same policy has access off |
+| Teams010 - federation false positive and retired property | ✅ | Medium | With the Global policy's `EnableFederationAccess` on, custom policies with the same value were warned as "undoing any tenant-wide federation restriction set on the Global policy". Federation drift is now measured against the Global policy like the consumer properties. `EnablePublicCloudAccess` (not on the current cmdlet syntax, not returned by MicrosoftTeams 7.9.0) is no longer read |
 
 ---
 
