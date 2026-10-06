@@ -61,6 +61,15 @@ if (@($inScope | Where-Object { $null -ne $_.State }).Count -eq 0) {
     return
 }
 
+# Microsoft documents that Default behaves as None in U.S. Government clouds. GCC High and DoD
+# connect to their own Exchange endpoints (outlook.office365.us, webmail.apps.mil) and are
+# detectable here; GCC uses the commercial endpoint and is not, so its caveat stays in the Finding.
+$isUsGovernmentCloud = $false
+if (Get-Command -Name 'Get-ConnectionInformation' -ErrorAction SilentlyContinue) {
+    $isUsGovernmentCloud = @(Get-ConnectionInformation -ErrorAction SilentlyContinue |
+            Where-Object { "$($_.ConnectionUri)" -match '^https?://[^/:]+\.(us|mil)(?=[:/]|$)' }).Count -gt 0
+}
+
 $compromiseRisk = 'Internal mail is the route a compromised account uses to phish colleagues, and it arrives from a trusted internal sender.'
 
 foreach ($entry in $inScope) {
@@ -81,13 +90,22 @@ foreach ($entry in $inScope) {
             New-METCheckResult -CheckId 'MET-MDO015' -Category MDO -Name 'Intra-Organization Spam Filtering' `
                 -Result Fail -Severity Medium -AffectedObject $label `
                 -Finding "Intra-organization spam filtering is turned off (IntraOrgFilterState is Disabled) - no spam or phishing verdict, not even high confidence phishing, is acted on for mail sent between internal users. $compromiseRisk" `
-                -Recommendation "Run: Set-HostedContentFilterPolicy -Identity '$($entry.Name)' -IntraOrgFilterState Default (Microsoft's Standard and Strict value, which acts on high confidence phishing). Consider Phish or broader to also act on ordinary phishing between internal users." `
+                -Recommendation "Run: Set-HostedContentFilterPolicy -Identity '$($entry.Name)' -IntraOrgFilterState HighConfidencePhish (equivalent to Default, Microsoft's Standard and Strict value, in commercial clouds - and unlike Default also effective in U.S. Government clouds, where Default behaves as None). Consider Phish or broader to also act on ordinary phishing between internal users." `
                 -ReferenceUrl $referenceUrl
         }
+        { $_ -eq 'Default' -and $isUsGovernmentCloud } {
+            New-METCheckResult -CheckId 'MET-MDO015' -Category MDO -Name 'Intra-Organization Spam Filtering' `
+                -Result Fail -Severity Medium -AffectedObject $label `
+                -Finding "IntraOrgFilterState is Default and this session is connected to a U.S. Government Exchange Online endpoint, where Microsoft documents that Default currently behaves as None - no spam or phishing verdict, not even high confidence phishing, is acted on for mail sent between internal users. $compromiseRisk" `
+                -Recommendation "Run: Set-HostedContentFilterPolicy -Identity '$($entry.Name)' -IntraOrgFilterState HighConfidencePhish. Consider Phish or broader to also act on ordinary phishing between internal users." `
+                -ReferenceUrl $referenceUrl
+            break
+        }
         { $_ -in @('Default', 'HighConfidencePhish') } {
+            $govCaveat = if ($_ -eq 'Default') { ' In Microsoft 365 GCC, GCC High and DoD, Microsoft documents that Default currently behaves as None - a GCC tenant (which shares the commercial Exchange endpoint and so cannot be told apart here) should set HighConfidencePhish or broader explicitly.' } else { '' }
             New-METCheckResult -CheckId 'MET-MDO015' -Category MDO -Name 'Intra-Organization Spam Filtering' `
                 -Result Pass -Severity Medium -AffectedObject $label `
-                -Finding "Intra-organization filtering acts on high confidence phishing between internal users (IntraOrgFilterState is $state), the value Microsoft uses in the Standard and Strict preset policies. In Microsoft 365 GCC, GCC High and DoD, Microsoft documents that Default currently behaves as None - government-cloud tenants should set HighConfidencePhish or broader explicitly." `
+                -Finding "Intra-organization filtering acts on high confidence phishing between internal users (IntraOrgFilterState is $state), the scope Microsoft uses in the Standard and Strict preset policies.$govCaveat" `
                 -ReferenceUrl $referenceUrl
         }
         { $_ -in @('Phish', 'HighConfidenceSpam', 'Spam') } {

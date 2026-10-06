@@ -19,14 +19,14 @@ Reads `IntraOrgFilterState` from `Get-HostedContentFilterPolicy` for the default
 | `Spam` | All spam and phishing verdicts |
 | `Disabled` | None |
 
-Microsoft's Standard and Strict presets both use `Default`, so `Default` passes. **In GCC, GCC High and DoD, Microsoft documents that `Default` currently behaves as `None`.** MET can't tell which cloud a tenant is in, so the Pass finding says so. Government-cloud tenants should set `HighConfidencePhish` or broader explicitly.
+Microsoft's Standard and Strict presets both use `Default`, so `Default` passes in commercial clouds. **In GCC, GCC High and DoD, Microsoft documents that `Default` currently behaves as `None`.** GCC High and DoD connect to their own Exchange Online endpoints (`outlook.office365.us`, `webmail.apps.mil`), so when `Get-ConnectionInformation` shows one of those, `Default` fails. GCC uses the commercial endpoint and can't be told apart, so the Pass finding for `Default` carries the caveat. Government-cloud tenants should set `HighConfidencePhish` or broader explicitly.
 
 ## Pass / Fail / Warning
 
 | Result | Condition |
 |---|---|
-| Pass | `Default`, `HighConfidencePhish`, `Phish`, `HighConfidenceSpam` or `Spam` |
-| Fail | `Disabled` |
+| Pass | `HighConfidencePhish`, `Phish`, `HighConfidenceSpam` or `Spam`; or `Default` outside a detected GCC High/DoD endpoint |
+| Fail | `Disabled`; or `Default` on a GCC High/DoD Exchange Online endpoint, where it behaves as `None` |
 | Warning | An unrecognized value, or the property was absent on this policy while other policies returned it |
 | NotApplicable | The property was absent on every in-scope policy (module or service version doesn't expose it). Reported as unassessed, never Pass |
 | Fail (Error) | Anti-spam policies could not be retrieved |
@@ -34,8 +34,10 @@ Microsoft's Standard and Strict presets both use `Default`, so `Default` passes.
 ## Recommendation
 
 ```powershell
-Set-HostedContentFilterPolicy -Identity '<policy name>' -IntraOrgFilterState Default
+Set-HostedContentFilterPolicy -Identity '<policy name>' -IntraOrgFilterState HighConfidencePhish
 ```
+
+`HighConfidencePhish` matches what `Default` does in commercial clouds and, unlike `Default`, also takes effect in U.S. Government clouds.
 
 Consider `Phish` or broader to also act on ordinary phishing between internal users. Check the effect on internal bulk senders (newsletters, HR mail) before going all the way to `Spam`.
 

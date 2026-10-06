@@ -7,6 +7,7 @@ BeforeAll {
 
     function Get-HostedContentFilterRule { [CmdletBinding()] param() }
     function Get-HostedContentFilterPolicy { [CmdletBinding()] param() }
+    function Get-ConnectionInformation { [CmdletBinding()] param() [PSCustomObject]@{ ConnectionUri = 'https://outlook.office365.com' } }
 
     function New-DefaultPolicy {
         param($State, [switch]$Absent)
@@ -51,6 +52,31 @@ Describe 'MET-MDO015 Intra-Organization Spam Filtering' {
             $results = @(& $checkFile)
             $results[0].Result | Should -Be 'Pass'
             $results[0].Finding | Should -Match 'GCC'
+        }
+    }
+
+    Context 'Default value on a U.S. Government (GCC High / DoD) Exchange endpoint' {
+        BeforeAll {
+            Mock Get-HostedContentFilterRule { @() }
+            Mock Get-HostedContentFilterPolicy { @(New-DefaultPolicy -State 'Default') }
+        }
+
+        It 'Returns a single Fail for <Uri>, because Default behaves as None there' -ForEach @(
+            @{ Uri = 'https://outlook.office365.us' }
+            @{ Uri = 'https://webmail.apps.mil' }
+        ) {
+            Mock Get-ConnectionInformation { [PSCustomObject]@{ ConnectionUri = $Uri } }
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'behaves as None'
+            $results[0].Recommendation | Should -Match '-IntraOrgFilterState HighConfidencePhish'
+        }
+
+        It 'Still passes an explicit HighConfidencePhish on a government endpoint' {
+            Mock Get-ConnectionInformation { [PSCustomObject]@{ ConnectionUri = 'https://outlook.office365.us' } }
+            Mock Get-HostedContentFilterPolicy { @(New-DefaultPolicy -State 'HighConfidencePhish') }
+            (& $checkFile)[0].Result | Should -Be 'Pass'
         }
     }
 
