@@ -397,16 +397,33 @@
         # failure would disappear from the score entirely.
         $worstSeverity = Get-METWorstSeverity -Severity ($noteworthyItems | ForEach-Object { $_.Severity })
 
+        # Name/ReferenceUrl/Recommendation must come from a noteworthy item too, not from
+        # $items[0]. A check that bundles independent sub-controls under one CheckId (e.g.
+        # MET-Teams012's Call Reporting + PSTN Call Spam Filtering) can have the FIRST item
+        # be a passing sub-control and a LATER, differently-named one be the actual failure -
+        # inheriting $items[0]'s Name/ReferenceUrl mislabels the aggregate with the wrong
+        # control, and inheriting its Recommendation silently drops the real fix. Grouping by
+        # Name (not by raw item) keeps this bounded for the common one-name/many-instances
+        # case (MET-EXO001's per-domain results all share one Name) - only one representative
+        # Recommendation per distinct Name is kept, so a many-domain Fail doesn't balloon into
+        # a wall of near-duplicate per-domain text; full per-item detail remains in Finding
+        # (and -Detailed).
+        $representative     = $noteworthyItems[0]
+        $recommendationParts = @($noteworthyItems | Group-Object Name | ForEach-Object {
+                ($_.Group | Select-Object -First 1).Recommendation
+            } | Where-Object { $_ } | Select-Object -Unique)
+        $recommendation = if ($recommendationParts.Count -gt 0) { $recommendationParts -join ' ' } else { $first.Recommendation }
+
         $findingLines = $noteworthyItems | ForEach-Object { "$($_.AffectedObject): $($_.Finding)" }
         $errorMessage = @($errorItems | ForEach-Object Error | Where-Object { $_ }) -join "`n"
 
         $aggregated.Add((New-METCheckResult `
-            -CheckId $first.CheckId -Category $first.Category -Name $first.Name `
+            -CheckId $first.CheckId -Category $first.Category -Name $representative.Name `
             -Result $worstResult -Severity $worstSeverity `
             -AffectedObject "$($noteworthyItems.Count) of $($items.Count) $noun" `
             -Finding ($findingLines -join "`n") `
-            -Recommendation $first.Recommendation `
-            -ReferenceUrl $first.ReferenceUrl `
+            -Recommendation $recommendation `
+            -ReferenceUrl $representative.ReferenceUrl `
             -ErrorMessage $errorMessage `
             -Metadata $first.Metadata))
     }
