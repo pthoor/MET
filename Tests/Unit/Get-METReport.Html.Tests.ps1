@@ -385,3 +385,30 @@ Describe 'Get-METReport HTML degenerate result sets' {
         [regex]::Match($html, 'id="score-band">([^<]*)<').Groups[1].Value | Should -Be 'None'
     }
 }
+
+Describe 'Get-METReport HTML known-token glossary' {
+    BeforeAll {
+        $tokenResult = New-METTestResult -CheckId 'MET-EXO010' -Category 'EXO' -Name 'Direct Send Protection' `
+            -Result 'Fail' -Severity 'High' -Score 0 -AffectedObject 'Tenant' `
+            -Finding 'RejectDirectSend is disabled.'
+        $script:tokenHtml = Get-METTestHtml -Results @($tokenResult) -Folder (Join-Path $TestDrive 'known-tokens')
+    }
+
+    It 'embeds KNOWN_TOKENS as a JS array before the script that reads it' {
+        $script:tokenHtml | Should -Match 'const KNOWN_TOKENS = \['
+    }
+
+    It 'includes a real cmdlet/property identifier actually referenced by a shipped check' {
+        # Sourced from Get-METReportGlossaryTerms's own AST walk over Checks/ - this pins the
+        # wiring between that function and the HTML template, not the extraction rules
+        # themselves (those are covered by Get-METReportGlossaryTerms.Tests.ps1).
+        $script:tokenHtml | Should -Match '"RejectDirectSend"'
+    }
+
+    It 'excludes PowerShell common parameters from the embedded token list' {
+        $tokensJson = [regex]::Match($script:tokenHtml, 'const KNOWN_TOKENS = (\[[^\]]*\]);').Groups[1].Value
+        $tokensJson | Should -Not -BeNullOrEmpty
+        $tokens = ConvertFrom-Json $tokensJson
+        $tokens | Should -Not -Contain 'ErrorAction'
+    }
+}
