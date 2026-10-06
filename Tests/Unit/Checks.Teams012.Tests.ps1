@@ -124,3 +124,116 @@ Describe 'MET-Teams012 Call Reporting' {
         }
     }
 }
+
+Describe 'MET-Teams012 PSTN Call Spam Filtering' {
+    BeforeEach {
+        $checkFile = Join-Path $PSScriptRoot '..' '..' 'Checks' 'Teams' 'MET-Teams012-CallReporting.ps1'
+    }
+
+    Context 'spam filtering is enabled in every policy' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Enabled' },
+                    [PSCustomObject]@{ Identity = 'Tag:Sales'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Enabled' }
+                )
+            }
+        }
+        It 'Emits a separate Pass result after the call reporting result' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 2
+            $results[0].Name | Should -Be 'Call Reporting'
+            $results[1].Name | Should -Be 'PSTN Call Spam Filtering'
+            $results[1].CheckId | Should -Be 'MET-Teams012'
+            $results[1].Result | Should -Be 'Pass'
+            $results[1].Severity | Should -Be 'Medium'
+            $results[1].AffectedObject | Should -Be 'Teams Calling Policies'
+        }
+    }
+
+    Context 'spam filtering is disabled in one policy' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Enabled' },
+                    [PSCustomObject]@{ Identity = 'Tag:NoSpam'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Disabled' }
+                )
+            }
+        }
+        It 'Returns Fail naming only the disabled policy, leaving call reporting at Pass' {
+            $results = @(& $checkFile)
+            $spam = $results | Where-Object Name -eq 'PSTN Call Spam Filtering'
+            $spam.Result | Should -Be 'Fail'
+            $spam.Finding | Should -Match 'Tag:NoSpam'
+            $spam.Finding | Should -Not -Match 'Global'
+            $spam.Recommendation | Should -Match 'Set-CsTeamsCallingPolicy -Identity <name> -SpamFilteringEnabledType Enabled'
+            ($results | Where-Object Name -eq 'Call Reporting').Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'spam filtering carries an unrecognized value' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @([PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Sometimes' })
+            }
+        }
+        It 'Returns Warning naming the value' {
+            $spam = @(& $checkFile) | Where-Object Name -eq 'PSTN Call Spam Filtering'
+            $spam.Result | Should -Be 'Warning'
+            $spam.Finding | Should -Match "'Sometimes'"
+        }
+    }
+
+    Context 'spam filtering is absent from every policy' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @([PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled' })
+            }
+        }
+        It 'Returns NotApplicable with the reason recorded, never Pass' {
+            $spam = @(& $checkFile) | Where-Object Name -eq 'PSTN Call Spam Filtering'
+            $spam.Result | Should -Be 'NotApplicable'
+            $spam.Error | Should -Match 'SpamFilteringEnabledType'
+            $spam.Finding | Should -Match 'rather than a pass'
+        }
+    }
+
+    Context 'spam filtering is absent on one policy only' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @(
+                    [PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Enabled' },
+                    [PSCustomObject]@{ Identity = 'Tag:Unknown'; ReportCall = 'Enabled' }
+                )
+            }
+        }
+        It 'Returns Warning naming the policy whose property was absent' {
+            $spam = @(& $checkFile) | Where-Object Name -eq 'PSTN Call Spam Filtering'
+            $spam.Result | Should -Be 'Warning'
+            $spam.Finding | Should -Match 'Tag:Unknown'
+        }
+    }
+
+    Context 'ReportCall is absent everywhere but spam filtering is enabled' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy {
+                @([PSCustomObject]@{ Identity = 'Global'; SpamFilteringEnabledType = 'Enabled' })
+            }
+        }
+        It 'Still assesses spam filtering after the call reporting NotApplicable' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 2
+            ($results | Where-Object Name -eq 'Call Reporting').Result | Should -Be 'NotApplicable'
+            ($results | Where-Object Name -eq 'PSTN Call Spam Filtering').Result | Should -Be 'Pass'
+        }
+    }
+
+    Context 'cmdlet throws' {
+        BeforeAll {
+            Mock Get-CsTeamsCallingPolicy { throw 'Teams calling policy unavailable' }
+        }
+        It 'Returns the single retrieval Fail rather than one per setting' {
+            @(& $checkFile).Count | Should -Be 1
+        }
+    }
+}

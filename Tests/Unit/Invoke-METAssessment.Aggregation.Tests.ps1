@@ -27,6 +27,7 @@ BeforeAll {
     function Get-SafeAttachmentPolicy     { [CmdletBinding()] param([string]$Identity) }
     function Get-EmailTenantSettings      { [CmdletBinding()] param() }
     function Get-User                     { [CmdletBinding()] param([switch]$IsVIP,[string]$ResultSize) }
+    function Get-CsTeamsCallingPolicy     { [CmdletBinding()] param() }
 }
 
 Describe 'Invoke-METAssessment default aggregation' {
@@ -225,6 +226,36 @@ Describe 'Invoke-METAssessment mixed-result aggregation' {
             $results[0].Error          | Should -Match 'did not return an EnableATPForSPOTeamsODB value'
             $results[0].Finding        | Should -Match 'Global Safe Attachments Settings'
             $results[0].Finding        | Should -Not -Match 'Built-In Protection Policy'
+        }
+    }
+
+    Context 'A check bundles two differently-named sub-controls and only the second one fails' {
+        BeforeEach {
+            # MET-Teams012 emits "Call Reporting" first, then "PSTN Call Spam Filtering" -
+            # two independently-named results under one CheckId. ReportCall passes here;
+            # SpamFilteringEnabledType fails. The aggregate must take its label, recommendation
+            # and reference URL from the failing PSTN item, not the passing Call Reporting one
+            # that happens to be emitted first (the exact bug both Codex and Copilot's
+            # automated PR reviews flagged independently on PR #40).
+            Mock Get-CsTeamsCallingPolicy {
+                @([PSCustomObject]@{ Identity = 'Global'; ReportCall = 'Enabled'; SpamFilteringEnabledType = 'Disabled' })
+            }
+        }
+
+        It 'Labels the aggregate after the failing sub-control, not the passing one emitted first' {
+            $results = @(Invoke-METAssessment -CheckId 'MET-Teams012' -WarningAction SilentlyContinue)
+
+            $results.Count       | Should -Be 1
+            $results[0].Result   | Should -Be 'Fail'
+            $results[0].Name     | Should -Be 'PSTN Call Spam Filtering'
+            $results[0].ReferenceUrl | Should -Match 'call-spam-filtering'
+        }
+
+        It 'Preserves the failing sub-control''s own remediation instead of an empty/unrelated one' {
+            $results = @(Invoke-METAssessment -CheckId 'MET-Teams012' -WarningAction SilentlyContinue)
+
+            $results[0].Recommendation | Should -Match 'SpamFilteringEnabledType Enabled'
+            $results[0].Finding        | Should -Match 'SpamFilteringEnabledType'
         }
     }
 
