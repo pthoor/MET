@@ -24,6 +24,7 @@ const SCENARIOS = [
   { scenario: 'NullFields', file: 'report-null-fields.html' },
   { scenario: 'CoverageTable', file: 'report-coverage-table.html' },
   { scenario: 'MixedSeverityGroup', file: 'report-mixed-severity-group.html' },
+  { scenario: 'KnownTokens', file: 'report-known-tokens.html' },
 ];
 
 function pwshExecutable() {

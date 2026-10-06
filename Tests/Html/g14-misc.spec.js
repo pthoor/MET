@@ -150,3 +150,19 @@ test.describe('item 9: consistent focus-visible ring', () => {
     expect(outlineWidth).not.toBe('0px');
   });
 });
+
+test.describe('codifyQuotes: unquoted check-derived identifiers and values', () => {
+  test('renders KNOWN_TOKENS identifiers, $true and CIDR values as inline code', async ({ page }) => {
+    await page.goto('/report-known-tokens.html');
+    const card = page.locator('.card[data-check-id="MET-EXO010"]');
+    await card.locator('.card-header').click();
+
+    const codes = card.locator('.inline-code');
+    await expect(codes.filter({ hasText: /^RejectDirectSend$/ })).toHaveCount(1);
+    await expect(codes.filter({ hasText: /^EnableSafeList$/ })).toHaveCount(1);
+    await expect(codes.filter({ hasText: /^\$true$/ })).toHaveCount(1);
+    await expect(codes.filter({ hasText: /^10\.0\.0\.0\/8$/ })).toHaveCount(1);
+    // Surrounding prose stays plain text - only the identifiers themselves are coded.
+    await expect(codes.filter({ hasText: /disabled/ })).toHaveCount(0);
+  });
+});
