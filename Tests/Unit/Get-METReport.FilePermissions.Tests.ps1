@@ -57,8 +57,11 @@ Describe 'Get-METReport writes reports owner-only' {
             Write-Error "The process does not possess the 'SeSecurityPrivilege' privilege which is required for this operation."
         }
 
+        # Called directly, not inside a `{ } | Should -Not -Throw` scriptblock: that scriptblock
+        # runs in a child scope, so -WarningVariable would populate a $warnings the assertion
+        # below never sees. An unexpected throw still fails this It.
         $warnings = $null
-        { $script:sample | Get-METReport -Format JSON -OutputPath $script:outDir -TenantName 'contoso.com' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null } | Should -Not -Throw
+        $script:sample | Get-METReport -Format JSON -OutputPath $script:outDir -TenantName 'contoso.com' -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
 
         $file = Get-ChildItem -Path $script:outDir -Recurse -Filter '*.json' | Select-Object -First 1
         $file | Should -Not -BeNullOrEmpty
