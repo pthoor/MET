@@ -27,6 +27,9 @@ through v0.7.0, see `ROADMAP.md`.
 - MET-Teams006 now flags a populated `BlockedDomains` deny-list when
   `BlockAllSubdomains` is off or not returned, since blocking a domain does
   not block its subdomains by default.
+- MET-Teams010 now flags non-Global external access policies that turn on
+  `EnableTeamsConsumerAccess` or `EnableTeamsConsumerInbound` when the
+  Global policy turns them off.
 
 ## [0.11.1] - Security and scoring correctness
 

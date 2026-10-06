@@ -284,6 +284,7 @@ Closes gaps opened by Teams and Defender for Office 365 features that shipped or
 | MDO015 Intra-Organization Spam Filtering | ✅ | Medium | `Get-HostedContentFilterPolicy` → `IntraOrgFilterState` on the default and enabled custom policies. `Disabled` means not even high confidence phishing between internal users is acted on - the path a compromised account uses to phish colleagues. Presets skipped (Microsoft-managed); the Pass finding notes `Default` behaves as `None` in GCC/GCC High/DoD |
 | Teams012 - PSTN call spam filtering | ✅ | Medium | Second result (`PSTN Call Spam Filtering`) from `SpamFilteringEnabledType` on the same calling policies - "Spam Likely" labelling of inbound phone calls, the channel helpdesk-vishing and callback-phishing often arrive on |
 | Teams006 - blocked-domain subdomain coverage | ✅ | High | `BlockAllSubdomains` is off by default, so blocking `contoso.com` leaves `marketing.contoso.com` reachable. Flagged when `BlockedDomains` is populated and the switch is off or not returned |
+| Teams010 - per-user unmanaged-account drift | ✅ | Medium | Flags non-Global external access policies that turn on `EnableTeamsConsumerAccess`/`EnableTeamsConsumerInbound` when the Global policy turns them off. Both default `$true`, so drift is measured against the Global baseline rather than flagged outright. Inbound is ignored when the same policy has access off |
 
 ---
 
