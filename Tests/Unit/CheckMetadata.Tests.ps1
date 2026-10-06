@@ -174,7 +174,7 @@ BeforeAll {
 Describe 'Check metadata header' {
 
     It 'Covers every check script and no others' {
-        $script:CheckFiles.Count | Should -Be 51
+        $script:CheckFiles.Count | Should -Be 53
     }
 
     Context 'Per check' {

@@ -4,30 +4,51 @@
 
 ## What it checks
 
-Reviews every per-user `CsExternalAccessPolicy` returned by `Get-CsExternalAccessPolicy`, not just the Global/default policy:
+Compares every **non-Global** `CsExternalAccessPolicy` returned by `Get-CsExternalAccessPolicy` with the **Global** policy. It flags a custom policy that turns on something the Global policy turns off:
 
-- Any **non-Global** policy where `EnableFederationAccess` is `$true` or `EnablePublicCloudAccess` is `$true` is flagged. A non-Global external access policy re-opens federation or public-cloud access for whoever it is assigned to - silently undoing a tenant-wide federation restriction that was locked down at the `CsTenantFederationConfiguration` level (evaluated separately by MET-Teams006).
+| Property | What it allows |
+|---|---|
+| `EnableFederationAccess` | Chat, calls and meetings with users in external Microsoft 365 organizations |
+| `EnableTeamsConsumerAccess` | Chat with people using Teams on an account no organization manages (personal Microsoft accounts) |
+| `EnableTeamsConsumerInbound` | Those personal accounts can find the user and start the conversation |
 
-**Property-confirmation caveat:** as of this writing, Microsoft Learn's `Get-CsExternalAccessPolicy` reference page does not publish a full parameter/output-property table (it is an older cmdlet page without one). The only properties confirmed by the docs' own usage examples are `EnableFederationAccess` and `EnablePublicCloudAccess` - e.g. `Get-CsExternalAccessPolicy | Where-Object {$_.EnableFederationAccess -eq $True -and $_.EnablePublicCloudAccess -eq $True}`. This check is deliberately built against only those two confirmed properties. If a live tenant reveals additional relevant properties on newer `MicrosoftTeams` module versions (e.g. finer-grained consumer/Skype controls), this check may need extending once those properties are confirmed against current documentation.
+All three default to `$true`. A custom policy with one of them on is only drift if the Global policy turns it off. A custom policy that matches an open Global policy isn't flagged, because it doesn't widen anything. `EnableTeamsConsumerInbound` is ignored on a policy that has `EnableTeamsConsumerAccess` off, because inbound does nothing without access.
 
-This is a **separate control plane** from MET-Teams006. Teams006 evaluates the tenant-wide `CsTenantFederationConfiguration` (the ceiling for the whole org). This check evaluates per-user/per-group `CsExternalAccessPolicy` assignments, which can carve out an exception underneath that ceiling for a specific set of users - for example, a "Sales-Federation" policy that re-enables federation for the sales team even though the Global policy is locked down.
+Per-user policies sit underneath the tenant-wide settings in `Get-CsTenantFederationConfiguration` (MET-Teams006). A user can only communicate externally when both allow it. A custom policy re-opening personal-account chat therefore only takes effect while the tenant-level `AllowTeamsConsumer` is on.
+
+Earlier versions also read `EnablePublicCloudAccess` and flagged federation regardless of the Global value. `EnablePublicCloudAccess` isn't on the current `Set-CsExternalAccessPolicy` syntax and isn't returned by MicrosoftTeams 7.9.0, so it's no longer read. The old federation logic also warned about "undoing a restriction on the Global policy" when the Global policy was open, so federation is now compared with the Global policy too.
 
 ## Why it matters
 
-Tenant-wide federation restrictions give a false sense of security if per-user policies aren't also reviewed. An administrator can lock `AllowedDomains` down at the tenant level to satisfy an audit, while an older or forgotten per-user policy (assigned to a specific department, pilot group, or a former project) continues to allow that user set to federate freely or reach public-cloud (consumer) accounts. Attackers who identify which users are exempted from the tenant-wide restriction can specifically target them, since Teams-based social engineering already benefits from the implicit trust users place in what looks like an internal collaboration tool.
+Tenant-wide restrictions give a false sense of security if per-user policies aren't also reviewed. An administrator can lock the Global policy down to satisfy an audit while an older or forgotten custom policy, assigned to a department, a pilot group or a finished project, still lets that user set federate freely or chat with personal accounts. Attackers who work out which users are exempt from the restriction can target them specifically. Teams-based social engineering already benefits from the trust users place in what looks like an internal collaboration tool, and personal-account first contact is the opening move of most Teams phishing and vishing lures.
 
 ## Pass / Fail / Warning
 
 | Result | Condition |
 |---|---|
-| Pass | No non-Global external access policy exists, or none of the non-Global policies have `EnableFederationAccess` or `EnablePublicCloudAccess` set to `$true`; also Pass if zero policies are returned at all |
-| Warning | One or more non-Global policies have `EnableFederationAccess` and/or `EnablePublicCloudAccess` set to `$true` - one Warning result is emitted per flagged policy, named by its `Identity` |
-| Fail | `Get-CsExternalAccessPolicy` could not be retrieved (e.g. insufficient permissions, Teams module unavailable) |
+| Pass | No non-Global policy turns on a property the Global policy turns off. Also Pass when no non-Global policy exists, or no policies are returned at all |
+| Warning | A non-Global policy turns on a property the Global policy turns off, or doesn't return a property the Global policy turns off. One Warning per policy, named by its `Identity` |
+| NotApplicable | Non-Global policies exist but the Global policy (or one of the three properties on it) wasn't returned, so there was no baseline to compare against. Emitted alongside the other results, never replaced by a Pass |
+| Fail | `Get-CsExternalAccessPolicy` could not be retrieved (insufficient permissions, Teams module unavailable) |
 
 ## Recommendation
 
-Review non-Global external access policies and disable `EnableFederationAccess`/`EnablePublicCloudAccess` unless there's a specific business need for that user set to bypass tenant-wide federation restrictions. Run `Get-CsOnlineUser -Filter "ExternalAccessPolicy -eq '<policy>'"` to identify affected users before changing scope.
+Close what the Global policy closes, unless the user set has a specific business need:
+
+```powershell
+Set-CsExternalAccessPolicy -Identity '<policy>' -EnableFederationAccess $false
+Set-CsExternalAccessPolicy -Identity '<policy>' -EnableTeamsConsumerAccess $false -EnableTeamsConsumerInbound $false
+```
+
+Where staff genuinely need to chat with personal accounts (recruiters, for example), keep `-EnableTeamsConsumerInbound $false` so personal accounts can't start the conversation.
+
+Before changing scope, identify who is affected:
+
+```powershell
+Get-CsOnlineUser -Filter "ExternalAccessPolicy -eq '<policy>'"
+```
 
 ## Reference
 
 - [Get-CsExternalAccessPolicy](https://learn.microsoft.com/en-us/powershell/module/microsoftteams/get-csexternalaccesspolicy)
+- [Set-CsExternalAccessPolicy](https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-csexternalaccesspolicy)

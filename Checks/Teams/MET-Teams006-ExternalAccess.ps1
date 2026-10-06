@@ -5,12 +5,13 @@ param()
 $METCheckInfo = @{
     Name           = 'External Access / Federation Allow-List'
     Severity       = 'High'
-    Description    = 'Checks Get-CsTenantFederationConfiguration for open federation (AllowAllKnownDomains), Teams consumer access settings, and an empty BlockedDomains deny-list.'
+    Description    = 'Checks Get-CsTenantFederationConfiguration for open federation (AllowAllKnownDomains), Teams consumer access settings, an empty BlockedDomains deny-list, and a deny-list that does not cover subdomains (BlockAllSubdomains).'
     RequiresModule = @('MicrosoftTeams')
 }
 
 $issues = [System.Collections.Generic.List[string]]::new()
 $retrievalErrors = [System.Collections.Generic.List[string]]::new()
+$subdomainCoverageUnassessed = $false
 
 # Check Teams federation (external access) allow-list scope
 try {
@@ -47,6 +48,19 @@ try {
     if ($config.AllowFederatedUsers -eq $true -and -not $config.BlockedDomains) {
         $issues.Add('No explicit BlockedDomains deny-list is configured - there is no domain-level backstop in place as a defense-in-depth measure if the allow-list scope is ever widened')
     }
+
+    # BlockedDomains is only consulted when AllowedDomains is AllowAllKnownDomains - under a
+    # specific-domain allow-list only allow-listed domains can communicate, so subdomain
+    # coverage of a dormant deny-list is not a current exposure.
+    if ($config.AllowFederatedUsers -eq $true -and $isAllowAllKnownDomains -and $config.BlockedDomains) {
+        $blockSubdomainsProperty = $config.PSObject.Properties['BlockAllSubdomains']
+        if (-not $blockSubdomainsProperty -or $null -eq $blockSubdomainsProperty.Value) {
+            $subdomainCoverageUnassessed = $true
+        }
+        elseif ($blockSubdomainsProperty.Value -ne $true) {
+            $issues.Add('BlockAllSubdomains is disabled, so the BlockedDomains deny-list matches exact domains only - blocking contoso.com does not block marketing.contoso.com, and an attacker who controls a blocked domain can keep reaching your users from any subdomain of it')
+        }
+    }
 }
 catch {
     $retrievalErrors.Add("Could not retrieve tenant federation configuration: $($_.Exception.Message)")
@@ -58,7 +72,7 @@ if ($issues.Count -gt 0) {
     New-METCheckResult -CheckId 'MET-Teams006' -Category Teams -Name 'External Access / Federation Allow-List' `
         -Result $result -Severity High -AffectedObject 'Teams External Access Configuration' `
         -Finding ($issues -join '; ') `
-        -Recommendation 'Restrict AllowedDomains to a specific, reviewed allow-list of trusted partner domains instead of AllowAllKnownDomains, and configure a BlockedDomains deny-list as a defense-in-depth backstop. Disable AllowTeamsConsumer unless there is a specific business need for staff to chat with personal Teams/Skype accounts; if it must stay enabled, run Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false so personal/consumer accounts cannot discover or initiate contact with your organization, and consider -RestrictTeamsConsumerToExternalUserProfiles $true to further narrow exposure. Run: Set-CsTenantFederationConfiguration -AllowedDomains <AllowedDomainsObject> to scope federation, or -AllowFederatedUsers $false to disable entirely.' `
+        -Recommendation 'Restrict AllowedDomains to a specific, reviewed allow-list of trusted partner domains instead of AllowAllKnownDomains, and configure a BlockedDomains deny-list as a defense-in-depth backstop, with Set-CsTenantFederationConfiguration -BlockAllSubdomains $true so each blocked domain also covers its subdomains. Disable AllowTeamsConsumer unless there is a specific business need for staff to chat with personal Teams/Skype accounts; if it must stay enabled, run Set-CsTenantFederationConfiguration -AllowTeamsConsumerInbound $false so personal/consumer accounts cannot discover or initiate contact with your organization, and consider -RestrictTeamsConsumerToExternalUserProfiles $true to further narrow exposure. Run: Set-CsTenantFederationConfiguration -AllowedDomains <AllowedDomainsObject> to scope federation, or -AllowFederatedUsers $false to disable entirely.' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration' `
         -ErrorMessage ($retrievalErrors -join "`n")
 }
@@ -75,4 +89,13 @@ else {
         -Result Pass -Severity High -AffectedObject 'Teams External Access Configuration' `
         -Finding 'Teams external access (federation) is appropriately scoped' `
         -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration'
+}
+
+if ($subdomainCoverageUnassessed) {
+    New-METCheckResult -CheckId 'MET-Teams006' -Category Teams -Name 'Blocked Domain Subdomain Coverage' `
+        -Result NotApplicable -Severity High -AffectedObject 'Teams External Access Configuration' `
+        -Finding 'The BlockAllSubdomains property was not returned, so whether subdomains of the BlockedDomains entries are also blocked was not established. By default blocking contoso.com does not block marketing.contoso.com, so an unconfirmed state is reported as unassessed rather than a pass.' `
+        -Recommendation 'Confirm directly: Get-CsTenantFederationConfiguration | Format-List BlockedDomains, BlockAllSubdomains. If the property is absent there too, update the MicrosoftTeams module and re-run this check; to cover subdomains run Set-CsTenantFederationConfiguration -BlockAllSubdomains $true.' `
+        -ReferenceUrl 'https://learn.microsoft.com/en-us/powershell/module/microsoftteams/set-cstenantfederationconfiguration' `
+        -ErrorMessage 'The BlockAllSubdomains property was not returned by Get-CsTenantFederationConfiguration - the installed MicrosoftTeams module version may not expose it.'
 }

@@ -22,6 +22,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $false
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -42,6 +43,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $false
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -63,6 +65,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $true
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -84,6 +87,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $true
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -106,6 +110,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $false
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -128,6 +133,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $true
                     RestrictTeamsConsumerToExternalUserProfiles = $true
                     BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -170,6 +176,7 @@ Describe 'MET-Teams006 External Access' {
                     AllowTeamsConsumerInbound                   = $false
                     RestrictTeamsConsumerToExternalUserProfiles = $false
                     BlockedDomains                              = @('malicious.com', 'evil.example')
+                    BlockAllSubdomains                          = $true
                     AllowPublicUsers                            = $false
                 }
             }
@@ -178,6 +185,98 @@ Describe 'MET-Teams006 External Access' {
             $results = & $checkFile
             $results[0].Result | Should -Be 'Pass'
             $results[0].Finding | Should -Not -Match 'No explicit BlockedDomains deny-list'
+        }
+    }
+
+    Context 'Open federation with BlockedDomains populated but subdomains not blocked' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{
+                    AllowFederatedUsers                        = $true
+                    AllowedDomains                              = 'AllowAllKnownDomains'
+                    AllowTeamsConsumer                          = $false
+                    AllowTeamsConsumerInbound                   = $false
+                    BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $false
+                    AllowPublicUsers                            = $false
+                }
+            }
+        }
+        It 'Explains that subdomains of blocked domains remain reachable' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Match 'BlockAllSubdomains is disabled'
+            $results[0].Finding | Should -Match 'subdomain'
+            $results[0].Recommendation | Should -Match '-BlockAllSubdomains \$true'
+        }
+    }
+
+    Context 'Specific-domain allow-list with BlockedDomains populated and subdomains not blocked' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{
+                    AllowFederatedUsers                        = $true
+                    AllowedDomains                              = 'SomeScopedDomainsObject'
+                    AllowTeamsConsumer                          = $false
+                    AllowTeamsConsumerInbound                   = $false
+                    BlockedDomains                              = @('malicious.com')
+                    BlockAllSubdomains                          = $false
+                    AllowPublicUsers                            = $false
+                }
+            }
+        }
+        It 'Does not flag subdomain coverage of a deny-list the allow-list makes inactive' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'Pass'
+            $results[0].Finding | Should -Not -Match 'BlockAllSubdomains'
+        }
+    }
+
+    Context 'Open federation with BlockedDomains populated and BlockAllSubdomains not returned' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{
+                    AllowFederatedUsers                        = $true
+                    AllowedDomains                              = 'AllowAllKnownDomains'
+                    AllowTeamsConsumer                          = $false
+                    AllowTeamsConsumerInbound                   = $false
+                    BlockedDomains                              = @('malicious.com')
+                    AllowPublicUsers                            = $false
+                }
+            }
+        }
+        It 'Keeps the federation finding and reports subdomain coverage as a separate unassessed result' {
+            $results = @(& $checkFile)
+            $results.Count | Should -Be 2
+            $results[0].Result | Should -Be 'Fail'
+            $results[0].Finding | Should -Not -Match 'BlockAllSubdomains'
+            $results[1].Name | Should -Be 'Blocked Domain Subdomain Coverage'
+            $results[1].Result | Should -Be 'NotApplicable'
+            $results[1].Finding | Should -Match 'not established'
+            $results[1].Finding | Should -Match 'rather than a pass'
+            $results[1].Error | Should -Match 'BlockAllSubdomains'
+        }
+    }
+
+    Context 'BlockedDomains empty' {
+        BeforeAll {
+            Mock Get-CsTenantFederationConfiguration {
+                [PSCustomObject]@{
+                    AllowFederatedUsers                        = $true
+                    AllowedDomains                              = 'SomeScopedDomainsObject'
+                    AllowTeamsConsumer                          = $false
+                    AllowTeamsConsumerInbound                   = $false
+                    BlockedDomains                              = @()
+                    BlockAllSubdomains                          = $false
+                    AllowPublicUsers                            = $false
+                }
+            }
+        }
+        It 'Does not raise subdomain coverage when nothing is blocked' {
+            $results = & $checkFile
+            $results[0].Finding | Should -Not -Match 'BlockAllSubdomains'
         }
     }
 

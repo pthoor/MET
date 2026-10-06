@@ -10,6 +10,39 @@ v0.8.0 through v0.11.1. Release dates were not tracked at the time and are
 not fabricated here. For the fuller version history, including v0.1.0
 through v0.7.0, see `ROADMAP.md`.
 
+## [Unreleased]
+
+### Added
+
+- MET-Teams016 (Teams Messaging Safety) reads `FileTypeCheck`,
+  `UrlReputationCheck` and `ReportIncorrectSecurityDetections` from
+  `Get-CsTeamsMessagingConfiguration`: Teams' built-in weaponizable file
+  blocking and malicious URL warnings, which work without a Defender for
+  Office 365 licence.
+- MET-MDO015 (Intra-Organization Spam Filtering) reads `IntraOrgFilterState`
+  on the default and enabled custom anti-spam policies and fails a policy
+  that acts on no verdict at all for mail between internal users - including
+  `Default` on a GCC High/DoD Exchange Online endpoint, where it behaves as
+  `None`.
+- MET-Teams012 now also emits a `PSTN Call Spam Filtering` result from
+  `SpamFilteringEnabledType` on every Teams calling policy.
+- MET-Teams006 now flags a populated `BlockedDomains` deny-list under open
+  federation when `BlockAllSubdomains` is off (or reports it as unassessed
+  when not returned), since blocking a domain does not block its subdomains
+  by default. Under a specific-domain allow-list the deny-list is inactive
+  and is not assessed.
+- MET-Teams010 now flags non-Global external access policies that turn on
+  `EnableTeamsConsumerAccess` or `EnableTeamsConsumerInbound` when the
+  Global policy turns them off.
+
+### Fixed
+
+- MET-Teams010 warned that custom external access policies with
+  `EnableFederationAccess` on were undoing a restriction on the Global policy
+  even when the Global policy had federation on too. Federation is now
+  compared with the Global policy, and the retired `EnablePublicCloudAccess`
+  property is no longer read.
+
 ## [0.11.1] - Security and scoring correctness
 
 ### Security
