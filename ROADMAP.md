@@ -235,6 +235,8 @@ Seven new checks and three enhancements to existing checks, closing gaps in cont
 
 ## v0.11.1 - Security and scoring correctness ✅
 
+> Never published to PowerShell Gallery - these changes ship in v0.12.0.
+
 Findings from a full pre-1.0 audit across check logic, the module core, the HTML report, the cmdlet surface, documentation, CI/release and the test suite. This release lands the security and correctness tier; the remainder is tracked as GitHub issues.
 
 ### Security
@@ -274,9 +276,9 @@ Findings from a full pre-1.0 audit across check logic, the module core, the HTML
 
 ---
 
-## v0.12.0 - 2026 Teams and MDO protection updates 🔄
+## v0.12.0 - 2026 Teams and MDO protection updates ✅
 
-Closes gaps opened by Teams and Defender for Office 365 features that shipped or became admin-configurable in 2025-2026.
+Closes gaps opened by Teams and Defender for Office 365 features that shipped or became admin-configurable in 2025-2026. Also the first published release of the v0.11.1 fixes and the rest of the pre-1.0 audit remediation - see `CHANGELOG.md`. The release package is now packed once, attested, and that same `.nupkg` is published, so the build-provenance attestation covers what users actually install.
 
 | Item | Status | Severity | Notes |
 |---|---|---|---|

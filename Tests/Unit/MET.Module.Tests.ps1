@@ -315,3 +315,53 @@ Describe 'about_MET conceptual help' {
         }
     }
 }
+
+# publish.yml stages an explicit copy list rather than the repository root, so a file the
+# manifest or loader needs can be left out of the package while every other test stays
+# green against the repository checkout. MET.Format.ps1xml was missing from that list
+# after FormatsToProcess was added, which made Test-ModuleManifest fail in the release job.
+Describe 'Release staging (publish.yml)' {
+
+    BeforeAll {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:ModuleRoot '.github' 'workflows' 'publish.yml') -Raw
+        $script:StagedItems = @(
+            [regex]::Matches($workflow, "Copy-Item -Path @\(([^)]*)\) -Destination \`$stage") |
+                ForEach-Object { [regex]::Matches($_.Groups[1].Value, "'([^']+)'") } |
+                ForEach-Object { $_.Groups[1].Value }
+        )
+    }
+
+    It 'Finds the staging copy list' {
+        $script:StagedItems | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Stages every file the manifest references' {
+        $referenced = @(
+            $script:ManifestData.RootModule
+            $script:ManifestData.FormatsToProcess
+            $script:ManifestData.TypesToProcess
+            $script:ManifestData.ScriptsToProcess
+            $script:ManifestData.NestedModules
+        ) | Where-Object { $_ }
+
+        foreach ($file in $referenced) {
+            $script:StagedItems | Should -Contain $file -Because "MET.psd1 references $file"
+        }
+    }
+
+    It 'Stages every directory the module loads at runtime, and the about topic' {
+        foreach ($dir in @('Public', 'Private', 'Checks', 'en-US')) {
+            $script:StagedItems | Should -Contain $dir
+        }
+    }
+
+    It 'Produces a staged module whose manifest validates' {
+        $stage = Join-Path $TestDrive 'MET'
+        New-Item -ItemType Directory -Path $stage | Out-Null
+        foreach ($item in $script:StagedItems) {
+            Copy-Item -LiteralPath (Join-Path $script:ModuleRoot $item) -Destination $stage -Recurse
+        }
+
+        { Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop } | Should -Not -Throw
+    }
+}
