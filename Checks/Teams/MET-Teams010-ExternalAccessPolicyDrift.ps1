@@ -48,7 +48,18 @@ foreach ($policy in $nonGlobal) {
         elseif ($policyProperty.Value -eq $true) { $reopened.Add($property) }
     }
 
-    if ($reopened.Count -eq 0 -and $unknown.Count -eq 0) { continue }
+    # Global's own value for these properties was never established, so drift cannot be
+    # confirmed against it - but a policy that is itself wide open on one of them is still
+    # worth naming here instead of disappearing entirely into the one generic Global-level
+    # NotApplicable below, which never mentions this policy by identity.
+    $exposedUnestablished = [System.Collections.Generic.List[string]]::new()
+    foreach ($property in $unestablishedAtGlobal) {
+        if ($property -eq 'EnableTeamsConsumerInbound' -and $policy.EnableTeamsConsumerAccess -eq $false) { continue }
+        $policyProperty = $policy.PSObject.Properties[$property]
+        if ($policyProperty -and $policyProperty.Value -eq $true) { $exposedUnestablished.Add($property) }
+    }
+
+    if ($reopened.Count -eq 0 -and $unknown.Count -eq 0 -and $exposedUnestablished.Count -eq 0) { continue }
 
     $federationFlags = @($reopened | Where-Object { $_ -eq 'EnableFederationAccess' })
     $consumerFlags = @($reopened | Where-Object { $_ -ne 'EnableFederationAccess' })
@@ -67,6 +78,10 @@ foreach ($policy in $nonGlobal) {
     if ($unknown.Count -gt 0) {
         $findings.Add("Non-Global external access policy '$($policy.Identity)' did not return $($unknown -join ', '), so whether it re-opens access that the Global policy closes was not established - an unconfirmed state is reported as a gap rather than a pass")
         $recommendations.Add("Confirm directly: Get-CsExternalAccessPolicy -Identity '$($policy.Identity)' | Format-List $($unknown -join ', ').")
+    }
+    if ($exposedUnestablished.Count -gt 0) {
+        $findings.Add("Non-Global external access policy '$($policy.Identity)' has $($exposedUnestablished -join ', ') enabled, but whether this differs from the Global policy was not established because the Global policy did not return $($exposedUnestablished -join ', ') - an unconfirmed baseline is reported as a gap on this policy too, not just at the tenant level")
+        $recommendations.Add("Confirm directly: Get-CsExternalAccessPolicy -Identity '$($policy.Identity)', Global | Format-List Identity, $($exposedUnestablished -join ', ').")
     }
     $recommendations.Add("Run: Get-CsOnlineUser -Filter `"ExternalAccessPolicy -eq '$($policy.Identity)'`" to identify affected users before changing scope.")
 
@@ -87,7 +102,11 @@ if ($unestablishedAtGlobal.Count -gt 0) {
                 -ErrorMessage "$($unestablishedAtGlobal -join ', ') not established for the Global policy from Get-CsExternalAccessPolicy - the policy or the property was not returned by the installed MicrosoftTeams module version."))
 }
 
-if (@($results | Where-Object { $_.Result -eq 'Warning' }).Count -eq 0) {
+# A Pass here asserts "nothing re-opens access that the Global policy closes" - a claim
+# that depends on knowing what the Global policy closes. When $unestablishedAtGlobal added a
+# NotApplicable above, that claim cannot be made for the properties it names, so Pass must
+# not fire alongside it (CLAUDE.md: an absent/unestablished property never yields Pass).
+if ($unestablishedAtGlobal.Count -eq 0 -and @($results | Where-Object { $_.Result -eq 'Warning' }).Count -eq 0) {
     New-METCheckResult -CheckId 'MET-Teams010' -Category Teams -Name 'Per-User External Access Policy Drift' `
         -Result Pass -Severity Medium -AffectedObject 'External Access Policies' `
         -Finding 'No non-Global external access policy re-opens federation, or Teams communication with unmanaged accounts, that the Global policy closes' `

@@ -264,7 +264,7 @@ Describe 'MET-Teams010 Per-User External Access Policy Drift' {
                 )
             }
         }
-        It 'Adds a NotApplicable result for the unestablished baseline alongside the federation Pass' {
+        It 'Flags the exposed policy by name instead of silently passing it alongside the NotApplicable baseline' {
             $results = @(& $checkFile)
             $results.Count | Should -Be 2
             $na = $results | Where-Object Result -eq 'NotApplicable'
@@ -272,7 +272,14 @@ Describe 'MET-Teams010 Per-User External Access Policy Drift' {
             $na.Finding | Should -Match 'not established'
             $na.Finding | Should -Match 'rather than a pass'
             $na.Error | Should -Not -BeNullOrEmpty
-            ($results | Where-Object Result -eq 'Pass').Finding | Should -Match 'federation'
+            # Tag:Any's own EnableTeamsConsumerAccess is $true while Global never returns it -
+            # that must be named here, not folded into a silent Pass (the bug the aggregation
+            # fix in Invoke-METAssessment and this per-policy loop both close).
+            $warn = $results | Where-Object Result -eq 'Warning'
+            $warn.AffectedObject | Should -Be 'Tag:Any'
+            $warn.Finding | Should -Match 'EnableTeamsConsumerAccess'
+            $warn.Finding | Should -Match 'not established'
+            ($results | Where-Object Result -eq 'Pass') | Should -BeNullOrEmpty
         }
     }
 
