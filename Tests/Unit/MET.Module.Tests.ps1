@@ -365,3 +365,35 @@ Describe 'Release staging (publish.yml)' {
         { Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop } | Should -Not -Throw
     }
 }
+
+# publish.yml repeats pester.yml's HTML report job under a harden-runner egress block
+# policy. An endpoint added to only one copy passes CI and then fails the tag-triggered
+# release: v0.12.0's first run could not download Node.js because
+# release-assets.githubusercontent.com was allowed in pester.yml alone.
+Describe 'HTML report job egress parity (pester.yml vs publish.yml)' {
+
+    BeforeAll {
+        function Get-METHtmlJobEndpoint {
+            param([string] $WorkflowFile)
+
+            $text = Get-Content -LiteralPath (Join-Path $script:ModuleRoot '.github' 'workflows' $WorkflowFile) -Raw
+            $job = [regex]::Match($text, '(?ms)^  html-report:\r?\n(.*?)(?=^  [\w-]+:\r?\n|\z)').Groups[1].Value
+            $block = [regex]::Match($job, '(?ms)allowed-endpoints: >\r?\n(.*?)(?=^\s*\r?$|^\s+- name:)').Groups[1].Value
+            @([regex]::Matches($block, '[\w.-]+:\d+') | ForEach-Object Value | Sort-Object -Unique)
+        }
+
+        $script:CiEndpoints = Get-METHtmlJobEndpoint -WorkflowFile 'pester.yml'
+        $script:ReleaseEndpoints = Get-METHtmlJobEndpoint -WorkflowFile 'publish.yml'
+    }
+
+    It 'Finds an allow-list in both workflows' {
+        $script:CiEndpoints | Should -Not -BeNullOrEmpty
+        $script:ReleaseEndpoints | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Allows every endpoint the CI job needs in the release job too' {
+        foreach ($endpoint in $script:CiEndpoints) {
+            $script:ReleaseEndpoints | Should -Contain $endpoint -Because 'the release HTML report job runs the same steps as CI'
+        }
+    }
+}
