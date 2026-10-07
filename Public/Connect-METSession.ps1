@@ -596,7 +596,11 @@ function Connect-METSession {
                         $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
                             Sort-Object Version -Descending | Select-Object -First 1
                         $requiredMsalVersion = $null
-                        if ($graphAuthModule.ModuleBase) {
+                        # Graph 2.41.0+ loads MSAL into its own AssemblyLoadContext
+                        # (msgraph-sdk-powershell#3789), so a different version in the default
+                        # context is no longer a conflict for it.
+                        $graphIsolatesMsal = $graphAuthModule.Version -ge [version]'2.41.0'
+                        if ($graphAuthModule.ModuleBase -and -not $graphIsolatesMsal) {
                             $graphMsalPath = Join-Path $graphAuthModule.ModuleBase 'Dependencies' 'Core' 'Microsoft.Identity.Client.dll'
                             $requiredMsalVersion = Get-METAssemblyFileVersion -Path $graphMsalPath
                         }
@@ -644,8 +648,20 @@ function Connect-METSession {
 
             if (-not $teamsImportFailed) {
                 # Get-CsTenant throws (not returns $null) when not connected, so probe inside try/catch.
+                # 'Access Denied' is different: the session is live, but the account holds no role
+                # that can read Teams settings. Reconnecting cannot fix that, and an interactive
+                # retry only replaces the real cause with an unrelated sign-in error.
                 $teamsConnection = $null
-                try { $teamsConnection = Get-CsTenant -ErrorAction Stop } catch { $teamsConnection = $null }
+                $teamsAccessDenied = $false
+                try { $teamsConnection = Get-CsTenant -ErrorAction Stop }
+                catch {
+                    $teamsConnection = $null
+                    $teamsAccessDenied = $_.Exception.Message -match 'Access Denied'
+                }
+
+                if ($teamsAccessDenied) {
+                    Write-Warning 'Microsoft Teams is connected, but this account was denied access to the Teams tenant settings (Get-CsTenant: Access Denied). Teams checks that use Get-Cs* cmdlets will fail. Assign the account a role that can read Teams settings - Global Reader is the least-privileged option - then run Disconnect-METSession and reconnect, since an existing token does not pick up a newly assigned role.'
+                }
 
                 # Deliberately outside the try/catch below: same reasoning as the Graph leg -
                 # a tenant mismatch is a correctness bug and must hard-stop, not become a warning.
@@ -670,13 +686,17 @@ function Connect-METSession {
                     }
                 }
 
+                if (-not $teamsAccessDenied) {
                 try {
                 if (-not $teamsConnection) {
                     Write-Verbose 'Connecting to Microsoft Teams...'
                     $teamsParams = @{}
                     switch ($PSCmdlet.ParameterSetName) {
                         'Interactive' {
-                            if ($UserPrincipalName) {
+                            # Not with -DelegatedOrganization: the hint makes the broker pick the
+                            # home-tenant account object, which the customer tenant rejects with
+                            # AADSTS90072 for a B2B guest. Without it the user picks the account.
+                            if ($UserPrincipalName -and -not $DelegatedOrganization) {
                                 $teamsParams['AccountId'] = $UserPrincipalName
                             }
                             if ($DelegatedOrganization) {
@@ -742,6 +762,7 @@ function Connect-METSession {
                                 "Retry with: Connect-METSession -DisableWAM -Verbose (already applied automatically off-Windows; if it still fails and no browser is reachable at all, use -UseDeviceAuthentication)"
                 }
                 Write-Warning "Failed to connect to Microsoft Teams: $($_.Exception.Message) $guidance"
+                }
                 }
             }
         }

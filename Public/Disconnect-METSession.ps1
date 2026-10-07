@@ -106,6 +106,12 @@ function Disconnect-METSession {
                 if ($_.Exception.Message -match 'Session is not established') {
                     $teamsConnected = $false
                 }
+                elseif ($_.Exception.Message -match 'Access Denied') {
+                    # Only an authenticated session can be denied - the account just lacks a
+                    # Teams admin role. Leaving it connected would carry this customer's
+                    # Teams session into the next Connect-METSession.
+                    $teamsConnected = $true
+                }
                 else {
                     # Any other probe failure is ambiguous: it could mean "not connected", or a
                     # transient error while a session is genuinely live. Treating it as not
