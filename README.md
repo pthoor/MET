@@ -413,9 +413,9 @@ Settings MET deliberately does not assess as a check. Two different reasons land
 
 **Per-check score**: Pass = 100 · Warning = 50 · Fail = 0
 
-**Overall posture index**: weighted average across all applicable (non-NotApplicable, non-accepted) checks, scaled 0–100.
+**Overall posture index**: weighted average across Pass, Warning and Fail results, scaled 0–100. Info and NotApplicable results are not scored, and in the HTML report risk-accepted results are excluded as well.
 
-**Bands**: 0–39 Critical · 40–59 Poor · 60–79 Fair · 80–94 Good · 95–100 Excellent
+**Bands**: 0–39 Critical · 40–59 Poor · 60–79 Fair · 80–94 Good · 95–100 Excellent · **None** when nothing in the run was scorable
 
 ---
 
@@ -448,7 +448,7 @@ Import-METReport -Path ./assessments/contoso-2026-06-01/MET-report.json |
 ### Running tests
 
 ```powershell
-Install-Module Pester -MinimumVersion 5.0.0 -Scope CurrentUser
+Install-Module Pester -RequiredVersion 5.9.0 -Scope CurrentUser   # the version CI pins
 
 $config = New-PesterConfiguration
 $config.Run.Path = './Tests/Unit'
@@ -482,13 +482,17 @@ so it always tests the current generator rather than a checked-in HTML file. See
 MET/
 ├── MET.psd1                    # Module manifest
 ├── MET.psm1                    # Module root - dot-sources Public/ and Private/
+├── MET.Format.ps1xml           # Default table views for check results and Get-METCheck
+├── en-US/                       # about_MET help topic
 ├── Public/                     # Exported functions
 ├── Private/                     # Internal helpers
 ├── Checks/                      # Check scripts (MDO/ EXO/ Teams/)
 ├── Tests/Unit/                  # Pester 5 unit tests (no live tenant needed)
-├── Tests/Integration/           # Integration tests (require live connection)
+├── Tests/Integration/           # Invoke-METAssessment end to end, cmdlets mocked (no live tenant needed)
+├── Tests/Html/                  # Playwright browser tests for the HTML report
 ├── docs/checks/                 # One .md per check
 ├── docs/schema/                 # JSON Schema for report output
+├── CHANGELOG.md                 # Release history
 ├── ROADMAP.md                   # Feature roadmap and known issues
 └── .github/workflows/           # CI (Pester) + publish (PSGallery)
 ```
