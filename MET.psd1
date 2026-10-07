@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.11.1'
+    ModuleVersion        = '0.12.0'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -35,7 +35,7 @@
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
             IconUri      = 'https://raw.githubusercontent.com/pthoor/MET/main/assets/favicon-180.png'
-            ReleaseNotes = 'v0.11.1 - Security and scoring correctness. Fixes a stored cross-site scripting vulnerability in the HTML report, two defects that made the posture score untrustworthy, false Fail/Pass results in MET-MDO005/006/009 and MET-EXO002, three checks that reported Pass without verifying their conditions, and three HTML-report defects that made a check which failed to run effectively invisible. Hardens Connect-METSession''s session-reuse guard and loads service-principal certificates with ephemeral key storage. See CHANGELOG.md for full release history.'
+            ReleaseNotes = 'v0.12.0 - Pre-1.0 audit remediation, Teams and MDO protection updates. The first release since 0.11.0 (0.11.1 was never published). Fixes checks that reported Pass for settings the service never returned, a stored cross-site scripting vulnerability in the HTML report, reports labelled with the wrong tenant, and posture-score defects. Adds Get-METCheck, Import-METReport, about_MET, MET-Teams016 and MET-MDO015, and a redesigned, keyboard-accessible HTML report. Invoke-METTriage is now Invoke-METAssessment (alias kept); review the Changed section of CHANGELOG.md before upgrading - scoring, risk acceptances and -OutputPath behaviour changed. See https://github.com/pthoor/MET/blob/main/CHANGELOG.md'
         }
     }
 }

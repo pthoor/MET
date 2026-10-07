@@ -32,6 +32,7 @@ $results | Get-METReport -Format HTML -OutputPath ./assessments
 |---|---|
 | **Minimum** | PowerShell **7.4** |
 | **Tested on** | PowerShell **7.4**, **7.6** |
+| **Code signing** | The module is **not Authenticode-signed** yet, so it will not load on Windows hosts whose execution policy is `AllSigned`. Each release instead carries a GitHub build-provenance attestation for the exact `.nupkg` pushed to PowerShell Gallery, attached to its GitHub Release: `gh attestation verify MET.<version>.nupkg --repo pthoor/MET` |
 | **Platform** | All 53 checks run on Windows, Linux, and macOS. EXO001 and EXO003 use `Resolve-DnsName` on Windows, then `dig`, `nslookup`, and configurable DNS-over-HTTPS elsewhere. DNS-over-HTTPS discloses queried domains to its resolver and can be disabled with `MET_DOH_RESOLVER=none`. `Connect-METSession` applies `-DisableWAM` automatically off-Windows, which is sufficient on a normal Linux/macOS desktop or a Codespace with a reachable browser tab - see [Teams sign-in on Linux/macOS](#teams-sign-in-on-linuxmacos). Device-code auth (`-UseDeviceAuthentication`) is only needed on a genuinely headless host with no browser reachable at all, and is a documented phishing vector otherwise - see the troubleshooting section below before using it. |
 
 ### Required modules

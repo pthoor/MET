@@ -217,22 +217,37 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Stage and package module
+      # The .nupkg is packed here, attested, and that exact file is pushed with
+      # -NupkgPath. Publishing from the staging directory instead would make
+      # Publish-PSResource build its own package with a different digest from
+      # the attested one.
+      - name: Stage and pack module
         shell: pwsh
         run: |
-          $version = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
+          Install-Module -Name Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+          Import-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -ErrorAction Stop
+
           $stage = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'LICENSE', 'README.md', 'CHANGELOG.md') -Destination $stage
-          Copy-Item -Path @('Public', 'Private', 'Checks') -Destination $stage -Recurse
+          Copy-Item -Path @('MET.psd1', 'MET.psm1', 'MET.Format.ps1xml', 'LICENSE', 'README.md', 'CHANGELOG.md') -Destination $stage
+          Copy-Item -Path @('Public', 'Private', 'Checks', 'en-US') -Destination $stage -Recurse
           Test-ModuleManifest -Path (Join-Path $stage 'MET.psd1') -ErrorAction Stop
-          Compress-Archive -Path "$stage/*" -DestinationPath "met-$version.zip"
-          Write-Host "Packaged met-$version.zip"
+
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Compress-PSResource -Path $stage -DestinationPath $dist -ErrorAction Stop
+
+          $version = (Import-PowerShellDataFile ./MET.psd1).ModuleVersion
+          $nupkg = @(Get-ChildItem -Path $dist -Filter '*.nupkg')
+          if ($nupkg.Count -ne 1 -or $nupkg[0].Name -cne "MET.$version.nupkg") {
+            throw "Expected exactly dist/MET.$version.nupkg, found: $($nupkg.Name -join ', ')"
+          }
+          Write-Host "Packed $($nupkg[0].Name) (SHA256 $((Get-FileHash $nupkg[0].FullName -Algorithm SHA256).Hash))"
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          subject-path: 'met-*.zip'
+          subject-path: 'dist/MET.*.nupkg'
 
       - name: Publish to PowerShell Gallery
         shell: pwsh
@@ -243,10 +258,9 @@ jobs:
             throw 'PSGALLERY_API_KEY secret is not set.'
           }
 
-          Install-Module -Name Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
           Import-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -ErrorAction Stop
-          $stagingPath = Join-Path $env:RUNNER_TEMP 'stage' 'MET'
-          Publish-PSResource -Path $stagingPath -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
+          $nupkg = Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE 'dist') -Filter 'MET.*.nupkg'
+          Publish-PSResource -NupkgPath $nupkg.FullName -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY
 
       - name: Create GitHub Release
         env:
@@ -256,10 +270,10 @@ jobs:
             echo "GitHub release for tag $RELEASE_TAG already exists; skipping creation."
           else
             shopt -s nullglob
-            artifacts=(met-*.zip)
+            artifacts=(dist/MET.*.nupkg)
             artifact="${artifacts[0]:-}"
             if [[ -z "$artifact" ]]; then
-              echo "No packaged artifact matching met-*.zip was found."
+              echo "No packaged artifact matching dist/MET.*.nupkg was found."
               exit 1
             fi
 
