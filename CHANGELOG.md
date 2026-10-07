@@ -41,8 +41,11 @@ These can change existing scripts or scores - review before upgrading.
   versions are dropped and must be re-entered. Acceptances now also record
   the date they were made.
 - Scoring:
-  - An SPF record ending `?all`, or with no `all` term, is now a Fail rather
-    than a Warning - RFC 7208 treats Neutral exactly like no record.
+  - An SPF record ending `?all`, or with neither an `all` term nor a
+    `redirect=` modifier, is now a Fail rather than a Warning - RFC 7208
+    treats Neutral exactly like no record. A record that defers to
+    `redirect=` without an `all` term stays a Warning, since the target
+    record's enforcement is not evaluated.
   - The forwarding family shares one severity: MET-MDO007 rises from Medium
     to High and MET-EXO012 drops from Critical to High.
   - A check that throws now scores 0 instead of being left out of the
