@@ -40,8 +40,8 @@ if (-not $graphCmdletsAvailable) {
             -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
             -Result NotApplicable -Severity Medium `
             -AffectedObject 'Cross-Tenant Access Policy' `
-            -Finding 'Microsoft Graph is connected, but the Microsoft.Graph.Identity.SignIns module that provides the cross-tenant access and authorization policy cmdlets is not installed, so these policies could not be retrieved. Their settings were not established, so this check is reported as not assessed rather than graded.' `
-            -Recommendation 'Install the module at the same version as Microsoft.Graph.Authentication - Install-Module Microsoft.Graph.Identity.SignIns -Scope CurrentUser - then start a new PowerShell session and re-run.' `
+            -Finding 'Microsoft Graph is connected, but the Microsoft.Graph.Identity.SignIns module that provides the cross-tenant access and authorization policy cmdlets could not be loaded - it is not installed, or is installed at a version that does not match Microsoft.Graph.Authentication - so these policies could not be retrieved. Their settings were not established, so this check is reported as not assessed rather than graded.' `
+            -Recommendation 'Install the module at the same version as Microsoft.Graph.Authentication - Install-Module Microsoft.Graph.Identity.SignIns -RequiredVersion <Authentication version> -Scope CurrentUser -Force - then start a new PowerShell session and re-run. Compare versions with: Get-Module Microsoft.Graph.* -ListAvailable.' `
             -ReferenceUrl 'https://learn.microsoft.com/en-us/graph/api/crosstenantaccesspolicy-get'
         return
     }
