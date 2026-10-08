@@ -47,7 +47,7 @@ Version 3.7.2 is the minimum because it provides the `-DisableWAM` switch that `
 
 ### Optional modules
 
-**Microsoft Graph** - used only by `Expand-METGroupMembership` to resolve group references. A missing module or a failed Graph connection is non-fatal: `Connect-METSession` warns and continues, and group expansion falls back to the Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups). Installing it is still recommended - Graph resolves nested and Azure AD security group membership more accurately.
+**Microsoft Graph** - used in two places: `MET-Teams014` reads the Entra cross-tenant access and authorization policies through the `Microsoft.Graph.Identity.SignIns` cmdlets, and `Expand-METGroupMembership` resolves group references. A missing module or a failed Graph connection is non-fatal: `Connect-METSession` warns and continues, `MET-Teams014` reports `NotApplicable` instead of running, and group expansion falls back to the Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups). Installing it is still recommended - it is the only way MET-Teams014 runs, and Graph resolves nested and Azure AD security group membership more accurately.
 
 ```powershell
 Install-Module Microsoft.Graph.Identity.SignIns -MinimumVersion 2.41.0 -Scope CurrentUser

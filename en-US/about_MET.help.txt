@@ -103,12 +103,14 @@ AUTHENTICATION MODES
     Connect-METSession uses to detect a mismatched reconnect.
 
 MODULE CONFLICTS
-    Microsoft Graph and ExchangeOnlineManagement each bundle their own
-    build of Microsoft.Identity.Client (MSAL), and only one can occupy a
-    PowerShell process's default AssemblyLoadContext. Whichever module
-    loads first "wins" for the whole process; the other then calls a
-    method signature that does not exist in the version actually loaded.
-    This was checked exhaustively, not just observed once: every
+    Microsoft Graph, ExchangeOnlineManagement and MicrosoftTeams each
+    bundle their own build of Microsoft.Identity.Client (MSAL). Before
+    Microsoft.Graph.Authentication 2.41.0, all three loaded it into the
+    PowerShell process's shared default AssemblyLoadContext, where only
+    one version can live: whichever module loaded first "won" for the
+    whole process, and the others then called a method signature that
+    does not exist in the version actually loaded. This was checked
+    exhaustively, not just observed once: every
     published ExchangeOnlineManagement version from 3.7.0 through 3.10.1
     was inspected for its bundled Microsoft.Identity.Client version, and
     the value jumps directly from 4.74.1.0 (3.9.0-3.9.2) to 4.83.1.0
@@ -129,18 +131,18 @@ MODULE CONFLICTS
     connecting services by hand, use the order Graph, Exchange Online,
     Teams.
 
-    On older Graph versions, Connect-METSession treats a failed Graph
+    Whatever the cause - an older Graph, -SkipGraph, a missing module or
+    a failed sign-in - Connect-METSession treats a failed Graph
     connection as non-fatal: it warns and continues without Graph,
-    exactly as it already does for a failed Teams connection.
-    Expand-METGroupMembership - the only Graph call site in MET -
-    degrades gracefully to Exchange
-    Online cmdlets (Get-DistributionGroupMember for distribution and
+    exactly as it already does for a failed Teams connection. MET uses
+    Graph in two places. MET-Teams014 calls the Graph policy cmdlets
+    directly and reports NotApplicable instead of running.
+    Expand-METGroupMembership degrades gracefully to Exchange Online
+    cmdlets (Get-DistributionGroupMember for distribution and
     mail-enabled security groups, Get-UnifiedGroupLinks for Microsoft 365
-    Groups) when Graph is unavailable, which covers every group type an
-    EOP/MDO policy can actually target. The visible effect is limited to
-    slightly reduced accuracy resolving nested or dynamic group
-    membership, and MET-Teams014 (the one check with a direct Graph
-    dependency) reporting NotApplicable instead of running.
+    Groups), which covers every group type an EOP/MDO policy can
+    actually target, at slightly reduced accuracy for nested or dynamic
+    group membership.
 
 THE POSTURE SCORE
     Every check carries a Severity, weighted: Critical = 40, High = 20,
