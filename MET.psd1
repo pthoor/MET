@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.12.0'
+    ModuleVersion        = '0.12.1'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -35,7 +35,7 @@
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
             IconUri      = 'https://raw.githubusercontent.com/pthoor/MET/main/assets/favicon-180.png'
-            ReleaseNotes = 'v0.12.0 - Pre-1.0 audit remediation, Teams and MDO protection updates. The first release since 0.11.0 (0.11.1 was never published). Fixes checks that reported Pass for settings the service never returned, a stored cross-site scripting vulnerability in the HTML report, reports labelled with the wrong tenant, and posture-score defects. Adds Get-METCheck, Import-METReport, about_MET, MET-Teams016 and MET-MDO015, and a redesigned, keyboard-accessible HTML report. Invoke-METTriage is now Invoke-METAssessment (alias kept); review the Changed section of CHANGELOG.md before upgrading - scoring, risk acceptances and -OutputPath behaviour changed. See https://github.com/pthoor/MET/blob/main/CHANGELOG.md'
+            ReleaseNotes = 'v0.12.1 - Connection and DNS grading fixes. Connect-METSession now connects Microsoft Graph 2.41.0+ alongside Exchange Online (an outdated pre-check blocked it), no longer breaks Teams sign-in for B2B guest and delegated admins by passing -AccountId, and reports a Teams session without a Teams admin role instead of reconnecting. On Windows, MET-EXO001 and MET-EXO003 now grade a domain with no DMARC/SPF record as Fail rather than as a failed DNS lookup. MET-Teams014 names a missing or version-mismatched Microsoft.Graph.Identity.SignIns module instead of reporting Graph as not connected. See https://github.com/pthoor/MET/blob/main/CHANGELOG.md'
         }
     }
 }

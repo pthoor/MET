@@ -12,6 +12,48 @@ through v0.7.0, see `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.12.1] - Connection and DNS grading fixes
+
+Found while assessing a customer tenant as a B2B guest administrator with
+`-DelegatedOrganization` on Windows, and confirmed against that tenant
+after the fix: Exchange Online, Microsoft Graph and Teams all connect
+through `Connect-METSession` alone, and all 53 checks run.
+
+### Fixed
+
+- `Connect-METSession` no longer blocks Microsoft Graph 2.41.0 or later.
+  Its MSAL load-conflict pre-check compared Graph's MSAL against the one
+  Exchange Online had already loaded, but Graph 2.41.0+ loads MSAL into its
+  own assembly load context, so the two no longer conflict. Graph was
+  silently skipped whenever Exchange Online connected first.
+- `Connect-METSession` no longer passes `-UserPrincipalName` to
+  `Connect-MicrosoftTeams` as `-AccountId` when `-DelegatedOrganization`
+  is set. The hint made the sign-in pick the home-tenant account, which the
+  customer tenant rejected with `AADSTS90072` for B2B guest administrators.
+- A live Teams session whose account has no role that can read Teams
+  settings (`Get-CsTenant` returns Access Denied) is no longer treated as
+  "not connected". `Connect-METSession` previously reconnected and showed an
+  unrelated sign-in error; it now warns that a role such as Global Reader is
+  needed and that a reconnect is required to pick it up.
+  `Disconnect-METSession` previously refused to disconnect such a session;
+  it now disconnects it.
+- On Windows, MET-EXO001 (DMARC) and MET-EXO003 (SPF) graded a domain with
+  no record as "unable to determine" (Warning, with an Error) instead of
+  Fail. `Resolve-DnsName` throws for an authoritative NXDOMAIN and for a
+  name with no records of the type; both are now treated as "no record",
+  as they already were on Linux and macOS. Genuine lookup failures such as
+  SERVFAIL are still reported as errors.
+- MET-Teams014 reported "Microsoft Graph was not connected" when Graph was
+  connected but `Microsoft.Graph.Identity.SignIns` was missing or installed
+  at a version that does not match `Microsoft.Graph.Authentication`. The
+  finding now names the module and the version requirement.
+
+### Documentation
+
+- The Teams/Exchange Online MSAL conflict is load-order dependent, not
+  version-absolute: MicrosoftTeams 7.9.0 and 8.0.0 both ship MSAL 4.82.0.0,
+  and connecting Exchange Online first, then Teams, works.
+
 ## [0.12.0] - Pre-1.0 audit remediation, Teams and MDO protection updates
 
 0.11.1 was prepared but never published to PowerShell Gallery. Its changes
