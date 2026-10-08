@@ -31,6 +31,21 @@ $graphCmdletsAvailable =
     [bool](Get-Command -Name Get-MgPolicyAuthorizationPolicy -ErrorAction SilentlyContinue)
 
 if (-not $graphCmdletsAvailable) {
+    # Get-MgContext ships in Microsoft.Graph.Authentication, the policy cmdlets in
+    # Microsoft.Graph.Identity.SignIns - a session can be live with only the former installed.
+    $graphConnected = [bool](Get-Command -Name Get-MgContext -ErrorAction SilentlyContinue) -and
+                      [bool](Get-MgContext -ErrorAction SilentlyContinue)
+    if ($graphConnected) {
+        New-METCheckResult -CheckId 'MET-Teams014' -Category Teams `
+            -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
+            -Result NotApplicable -Severity Medium `
+            -AffectedObject 'Cross-Tenant Access Policy' `
+            -Finding 'Microsoft Graph is connected, but the Microsoft.Graph.Identity.SignIns module that provides the cross-tenant access and authorization policy cmdlets is not installed, so these policies could not be retrieved. Their settings were not established, so this check is reported as not assessed rather than graded.' `
+            -Recommendation 'Install the module at the same version as Microsoft.Graph.Authentication - Install-Module Microsoft.Graph.Identity.SignIns -Scope CurrentUser - then start a new PowerShell session and re-run.' `
+            -ReferenceUrl 'https://learn.microsoft.com/en-us/graph/api/crosstenantaccesspolicy-get'
+        return
+    }
+
     New-METCheckResult -CheckId 'MET-Teams014' -Category Teams `
         -Name 'Cross-Tenant Guest & External Collaboration Restrictions' `
         -Result NotApplicable -Severity Medium `

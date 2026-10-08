@@ -7,7 +7,19 @@
 
     # On Windows, delegate to the native Resolve-DnsName cmdlet (DnsClient module).
     if ($IsWindows -ne $false) {
-        return Resolve-DnsName -Name $Name -Type $Type -DnsOnly -ErrorAction Stop
+        try {
+            return Resolve-DnsName -Name $Name -Type $Type -DnsOnly -ErrorAction Stop
+        }
+        catch {
+            # Resolve-DnsName throws for an authoritative NXDOMAIN (9003) and for a name with
+            # no records of the type (9501). Both are answers, not lookup failures - the dig
+            # and DNS-over-HTTPS tiers return no records for them, and so must this one.
+            if ($_.Exception.NativeErrorCode -in 9003, 9501 -or
+                $_.FullyQualifiedErrorId -match '^(DNS_ERROR_RCODE_NAME_ERROR|DNS_INFO_NO_RECORDS),') {
+                return
+            }
+            throw
+        }
     }
 
     # Non-Windows: build compatible result objects using dig (preferred) or nslookup.
