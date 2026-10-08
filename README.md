@@ -47,12 +47,14 @@ Version 3.7.2 is the minimum because it provides the `-DisableWAM` switch that `
 
 ### Optional modules
 
-**Microsoft Graph** - used only by `Expand-METGroupMembership` to resolve group references. A missing module or a failed Graph connection is non-fatal: `Connect-METSession` warns and continues, and group expansion falls back to the Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups). Installing it is still recommended - Graph resolves nested and Azure AD security group membership more accurately.
+**Microsoft Graph** - used in two places: `MET-Teams014` reads the Entra cross-tenant access and authorization policies through the `Microsoft.Graph.Identity.SignIns` cmdlets, and `Expand-METGroupMembership` resolves group references. A missing module or a failed Graph connection is non-fatal: `Connect-METSession` warns and continues, `MET-Teams014` reports `NotApplicable` instead of running, and group expansion falls back to the Exchange Online cmdlets (`Get-DistributionGroupMember` for distribution and mail-enabled security groups, `Get-UnifiedGroupLinks` for Microsoft 365 Groups). Installing it is still recommended - it is the only way MET-Teams014 runs, and Graph resolves nested and Azure AD security group membership more accurately.
 
 ```powershell
-Install-Module Microsoft.Graph.Identity.SignIns -MinimumVersion 2.0.0 -Scope CurrentUser
-Install-Module Microsoft.Graph.Groups           -MinimumVersion 2.0.0 -Scope CurrentUser
+Install-Module Microsoft.Graph.Identity.SignIns -MinimumVersion 2.41.0 -Scope CurrentUser
+Install-Module Microsoft.Graph.Groups           -MinimumVersion 2.41.0 -Scope CurrentUser
 ```
+
+Every `Microsoft.Graph.*` module must be at the **same version** as `Microsoft.Graph.Authentication`: each sub-module requires the exact Authentication version it shipped with, and one that does not match cannot load next to it, so its cmdlets are simply missing. Check with `Get-Module Microsoft.Graph.* -ListAvailable`, and when updating, install the matching version of each with `-RequiredVersion <version> -Force`. 2.41.0 or later is recommended - see [Microsoft Graph and Exchange Online in one session](#known-warning-microsoft-graph-msal-version-conflict).
 
 **MicrosoftTeams** - required by the Teams checks that call the native `Get-Cs*` cmdlets (Teams003, Teams005, Teams006, Teams007, Teams008). Teams001, Teams002, and Teams004 use Exchange-hosted cmdlets and run without it. If it is not installed, `Connect-METSession` logs a warning and the affected checks fail gracefully with an explanatory error in the result object.
 
@@ -210,7 +212,8 @@ If you assess more than one customer tenant, decide how you get in first, then f
 |---|---|---|
 | **GDAP / delegated admin (CSP)** | You have a GDAP relationship with each customer from your partner tenant | Your own partner account, once, with `-DelegatedOrganization <customer>.onmicrosoft.com` per customer |
 | **App-only + certificate** (best for repeatable engagements) | You can get an app registration consented in each customer tenant | Per-customer `-AppId -TenantId <customer>.onmicrosoft.com -CertificatePath -CertificatePassword` - no interactive prompt |
-| **Guest / dedicated account per tenant** | The customer issued you an account with Security Reader plus the Exchange/Teams read roles | Interactive sign-in with that customer-specific account |
+| **B2B guest in the customer tenant** | The customer invited your own work account as a guest and assigned it admin roles there | Your own account with `-UserPrincipalName <you@yourcompany.com> -DelegatedOrganization <customer>.onmicrosoft.com` - see [Connecting as a B2B guest](#connecting-as-a-b2b-guest) |
+| **Dedicated account per tenant** | The customer issued you a member account in their own tenant | Interactive sign-in with that customer-specific account |
 
 For app-only auth **that includes Exchange Online**, `-TenantId` **must be the customer's `.onmicrosoft.com` domain, not the tenant GUID** - `Connect-ExchangeOnline`'s app-only `-Organization` rejects GUIDs, and `Connect-METSession` fails fast if you pass one. A GUID is accepted with `-SkipExchangeOnline` (Graph and Teams take either form).
 
@@ -228,6 +231,19 @@ Invoke-METAssessment | Get-METReport -Format All -OutputPath ./assessments/custo
 Give each customer its own `-OutputPath`. The report header (console/JSON/HTML) records the auth mode, tenant, and services used for the run, from state `Connect-METSession` sets on success - send that to the customer's SOC so they can reconcile your sign-in against a known MET run instead of triaging it as an incident.
 
 > `Invoke-METAssessment -DelegatedOrganization` is a placeholder and does not scope anything yet - the delegation happens entirely at `Connect-METSession` time, and `Invoke-METAssessment` then runs against whatever session is live. Under GDAP, Graph checks degrade non-fatally: group expansion falls back to Exchange Online cmdlets and `MET-Teams014` reports `NotApplicable` unless the delegated Graph roles are present.
+
+#### Connecting as a B2B guest
+
+A guest account is not GDAP, but it connects the same way: `-DelegatedOrganization` is what points every sign-in at the customer's tenant instead of your home tenant. Without it you get a token for your own organisation.
+
+```powershell
+Connect-METSession -UserPrincipalName you@yourcompany.com -DelegatedOrganization customer.onmicrosoft.com -DisableWAM
+```
+
+- Use your **home** sign-in address, not the `#EXT#` guest UPN, and the customer's `.onmicrosoft.com` domain.
+- The guest account needs **Global Reader** in the customer tenant for the Teams `Get-Cs*` checks - Exchange or Security administrator roles do not grant Teams read access. Without it `Connect-METSession` warns that Teams answered *Access Denied* and the Teams checks fail; after the role is assigned (or activated in PIM), run `Disconnect-METSession` and reconnect so the new token carries it.
+- On Windows, pass `-DisableWAM` so the Teams sign-in opens a browser where you choose the account. The Windows broker tends to offer your home-tenant account, which the customer tenant rejects with `AADSTS90072`.
+- The customer's Conditional Access and cross-tenant access settings for guests apply to you. A sign-in blocked there shows in the customer's Entra sign-in logs, not as a MET error.
 
 ### Skip a service
 
@@ -268,9 +284,13 @@ WARNING: Failed to connect to Microsoft Graph: ClientCertificateCredential authe
 '!0 Microsoft.Identity.Client.BaseAbstractApplicationBuilder`1.WithLogging(Microsoft.IdentityModel.Abstractions.IIdentityLogger, Boolean)'.
 ```
 
-This is expected on some machines and is safe to ignore - it is not specific to certificate/CI auth, and every admin running `Connect-METSession` interactively can hit it too. `ExchangeOnlineManagement` and `Microsoft.Graph.*` each bundle their own version of `Microsoft.Identity.Client` (MSAL); whichever one loads into the PowerShell process first "wins" for the whole session, and the other module ends up calling a method signature that doesn't exist in that loaded version. This is release-cadence drift between Microsoft's own modules, not a MET bug or a misconfiguration, and there is no currently-published combination of module versions that reliably avoids it.
+**Fixed by updating Microsoft Graph to 2.41.0 or later** (`Update-Module Microsoft.Graph.Authentication`, plus the matching version of every other `Microsoft.Graph.*` module), then starting a new PowerShell window. `ExchangeOnlineManagement` and `Microsoft.Graph.*` each bundle their own `Microsoft.Identity.Client` (MSAL), and before 2.41.0 both loaded into the same shared context, so whichever loaded first "won" and the other called a method that did not exist in that version. Graph 2.41.0 loads MSAL into its own isolated context, so the two no longer collide. MET 0.12.0 still blocked that combination with an outdated pre-check; 0.12.1 and later do not.
 
-`Connect-METSession` already treats this as non-fatal by design: Exchange Online and Teams connect normally, and `Expand-METGroupMembership` falls back to `Get-DistributionGroupMember`/`Get-UnifiedGroupLinks` for group expansion instead of Graph. The only effect is slightly reduced accuracy resolving nested/dynamic group membership, and `MET-Teams014` reporting `NotApplicable` instead of running. If you need Graph checks to actually run, the only reliable workaround is connecting Graph in its own PowerShell process rather than alongside Exchange Online.
+On an older Graph, `Connect-METSession` treats the failure as non-fatal: Exchange Online and Teams connect normally, `Expand-METGroupMembership` falls back to `Get-DistributionGroupMember`/`Get-UnifiedGroupLinks`, and `MET-Teams014` reports `NotApplicable` instead of running.
+
+#### Teams and Exchange Online in one session
+
+MicrosoftTeams still loads its MSAL into the shared context. Teams 7.9.0 and 8.0.0 ship an older MSAL than ExchangeOnlineManagement 3.10.x, which only works if **Exchange Online loads first**. `Connect-METSession` already connects Exchange Online before Teams. If you connect services yourself before calling it, use the same order - Graph, then Exchange Online, then Teams - or Exchange Online fails with `Could not load file or assembly ... Microsoft.Identity.Client.dll ... (0x80131040)`.
 
 #### Teams sign-in on Linux/macOS
 

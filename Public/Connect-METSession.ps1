@@ -89,6 +89,11 @@ function Connect-METSession {
         Run Disconnect-METSession before switching to a different -DelegatedOrganization in the
         same PowerShell session.
 
+        Also use it as a B2B guest in the customer tenant: it is what points every sign-in at the
+        customer's tenant instead of your home tenant. With -DelegatedOrganization set,
+        -UserPrincipalName is not passed to Connect-MicrosoftTeams, because the account hint makes
+        the sign-in pick the home-tenant account, which the customer tenant rejects (AADSTS90072).
+
     .PARAMETER SkipExchangeOnline
         Skips the Exchange Online leg entirely. Every MDO and EXO check, and MET-Teams001/002/004,
         need Exchange Online, so checks in those areas will fail without it.

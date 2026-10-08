@@ -30,7 +30,8 @@ Cross-tenant access settings are the outermost gate for B2B collaboration. Micro
 | Pass | The default cross-tenant access policy is customized (`IsServiceDefault = $false`) or its inbound settings are explicitly evaluated and not open, and `AllowInvitesFrom` is not `everyone` |
 | Warning | The default policy is unmodified (`IsServiceDefault = $true`), inbound B2B collaboration/direct connect is `Allowed` with no target restriction, and/or `AllowInvitesFrom` is `everyone` |
 | Info | Graph returned data but no recognizable property (`IsServiceDefault`, an inbound `AccessType`, or `AllowInvitesFrom`) could be found to evaluate - manual review needed |
-| NotApplicable (no `Error`) | Microsoft Graph was not connected for the run - `Connect-METSession -SkipGraph`, the `Microsoft.Graph.Identity.SignIns` module not installed, or the Graph connection could not be established. This is an expected, routine outcome, so the `Error` field is left empty and the check does not appear in the report's Error bucket. |
+| NotApplicable (no `Error`) | Microsoft Graph was not connected for the run - `Connect-METSession -SkipGraph`, or the Graph connection could not be established. This is an expected, routine outcome, so the `Error` field is left empty and the check does not appear in the report's Error bucket. |
+| NotApplicable (no `Error`), module named | Graph **is** connected, but `Microsoft.Graph.Identity.SignIns` could not be loaded - not installed, or installed at a version that does not match `Microsoft.Graph.Authentication` (each Graph sub-module requires the exact Authentication version it shipped with). Install the matching version and start a new PowerShell session. |
 | NotApplicable (with `Error`) | Graph **was** connected but retrieving the policy failed - almost always a missing `Policy.Read.All` scope. The `Error` field carries the detail so the gap is visible. |
 
 ## Recommendation

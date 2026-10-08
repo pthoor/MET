@@ -291,6 +291,20 @@ Closes gaps opened by Teams and Defender for Office 365 features that shipped or
 
 ---
 
+## v0.12.1 - Connection and DNS grading fixes ✅
+
+Found during a live assessment as a B2B guest administrator with `-DelegatedOrganization` on Windows - see `CHANGELOG.md`.
+
+| Item | Status |
+|---|---|
+| Skip the MSAL pre-check for Microsoft.Graph.Authentication 2.41.0+ (private `AssemblyLoadContext`) | ✅ |
+| Do not pass `-AccountId` to the Teams leg with `-DelegatedOrganization` (`AADSTS90072` for B2B guests) | ✅ |
+| Treat a Teams Access Denied probe as a live session without a role, in Connect and Disconnect | ✅ |
+| Windows: `Resolve-DnsName` NXDOMAIN / no-records treated as "no record", not a failed lookup (EXO001, EXO003) | ✅ |
+| Teams014: name a missing or version-mismatched `Microsoft.Graph.Identity.SignIns` | ✅ |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |
