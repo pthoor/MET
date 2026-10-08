@@ -115,6 +115,15 @@ Describe 'Connect-METSession Teams leg' {
                 $AccountId -eq 'admin@contoso.com'
             }
         }
+
+        It 'Does not forward the UPN as AccountId when -DelegatedOrganization is set' {
+            Connect-METSession -SkipGraph -SkipExchangeOnline -UserPrincipalName 'analyst@partner.com' `
+                -DelegatedOrganization 'customer.onmicrosoft.com'
+
+            Should -Invoke Connect-MicrosoftTeams -Times 1 -Exactly -ParameterFilter {
+                -not $PesterBoundParameters.ContainsKey('AccountId') -and $TenantId -eq 'customer.onmicrosoft.com'
+            }
+        }
     }
 
     Context 'Already connected' {
@@ -123,6 +132,39 @@ Describe 'Connect-METSession Teams leg' {
 
             Connect-METSession -SkipGraph -SkipExchangeOnline -UseDeviceAuthentication
 
+            Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
+        }
+    }
+
+    Context 'Connected, but the account cannot read the Teams tenant' {
+        It 'Warns about the missing role instead of reconnecting, and does not record Teams as connected' {
+            Mock Get-CsTenant { throw 'Access Denied. Recommendation: Provide different credential or request access.' }
+
+            $warnings = @(Connect-METSession -SkipGraph -SkipExchangeOnline -DelegatedOrganization 'customer.onmicrosoft.com' `
+                -WarningAction Continue 3>&1)
+
+            Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
+            ($warnings -join ' ') | Should -Match 'Access Denied'
+            ($warnings -join ' ') | Should -Match 'Global Reader'
+            $script:METSessionInfo.ServicesConnected | Should -Not -Contain 'Teams'
+        }
+
+        It 'Disconnects the denied session, since its tenant cannot be verified against the requested one' {
+            Mock Get-CsTenant { throw 'Access Denied. Recommendation: Provide different credential or request access.' }
+            Mock Disconnect-MicrosoftTeams {}
+
+            Connect-METSession -SkipGraph -SkipExchangeOnline -DelegatedOrganization 'customerb.onmicrosoft.com' `
+                -WarningAction SilentlyContinue
+
+            Should -Invoke Disconnect-MicrosoftTeams -Times 1 -Exactly
+        }
+
+        It 'Throws rather than continue when the unverifiable session cannot be disconnected' {
+            Mock Get-CsTenant { throw 'Access Denied. Recommendation: Provide different credential or request access.' }
+            Mock Disconnect-MicrosoftTeams { throw 'disconnect failed' }
+
+            { Connect-METSession -SkipGraph -SkipExchangeOnline -DelegatedOrganization 'customerb.onmicrosoft.com' `
+                -WarningAction SilentlyContinue } | Should -Throw '*could not be verified*'
             Should -Invoke Connect-MicrosoftTeams -Times 0 -Exactly
         }
     }
@@ -237,6 +279,7 @@ Describe 'Connect-METSession Graph leg' {
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
 
         Mock Get-MgContext { $null }
         Mock Connect-MgGraph {}
@@ -262,6 +305,7 @@ Describe 'Connect-METSession Graph leg' {
             Mock Get-Module {
                 $null
             } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
 
             $script:graphWarnings = @()
             {
@@ -294,9 +338,82 @@ Describe 'Connect-METSession Graph leg' {
                     ModuleBase = '/fake/Microsoft.Graph.Authentication/2.39.0'
                 }
             } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
 
             # Graph ships MSAL 4.82.1.0; Exchange Online already loaded 4.83.1.0.
             Mock Get-METAssemblyFileVersion { [version]'4.82.1.0' }
+            Mock Test-METAssemblyLoadConflict {
+                $loaded = @(
+                    New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' `
+                        -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
+                )
+                & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+            }
+
+            $script:graphWarnings = @()
+            {
+                $script:graphWarnings = @(
+                    Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly
+            ($script:graphWarnings -join ' ') | Should -Not -Match 'already active in this PowerShell session'
+        }
+    }
+
+    Context 'Graph 2.39.0 already loaded while 2.41.1 is also installed' {
+        It 'Judges the loaded version, so the conflict guard still runs' {
+            Mock Get-Module {
+                [PSCustomObject]@{
+                    Name       = $Name
+                    Version    = [version]'2.41.1'
+                    ModuleBase = '/fake/Microsoft.Graph.Authentication/2.41.1'
+                }
+            } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
+            Mock Get-Module {
+                [PSCustomObject]@{
+                    Name       = 'Microsoft.Graph.Authentication'
+                    Version    = [version]'2.39.0'
+                    ModuleBase = '/fake/Microsoft.Graph.Authentication/2.39.0'
+                }
+            } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
+
+            # The loaded 2.39.0 needs MSAL 4.90.0.0 here; Exchange Online already loaded 4.83.1.0.
+            Mock Get-METAssemblyFileVersion { [version]'4.90.0.0' } -ParameterFilter { $Path -like '*2.39.0*' }
+            Mock Test-METAssemblyLoadConflict {
+                $loaded = @(
+                    New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' `
+                        -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
+                )
+                & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+            }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+            )
+
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+            ($script:graphWarnings -join ' ') | Should -Match 'already active in this PowerShell session'
+        }
+    }
+
+    Context 'Graph 2.41.0+ isolates its MSAL in a private AssemblyLoadContext' {
+        It 'Connects even though an older MSAL is loaded in the default context' {
+            Mock Get-Module {
+                [PSCustomObject]@{
+                    Name       = $Name
+                    Version    = [version]'2.41.1'
+                    ModuleBase = '/fake/Microsoft.Graph.Authentication/2.41.1'
+                }
+            } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
+
+            # Graph 2.41.1 ships MSAL 4.90.0.0; Exchange Online already loaded 4.83.1.0.
+            Mock Get-METAssemblyFileVersion { [version]'4.90.0.0' }
             Mock Test-METAssemblyLoadConflict {
                 $loaded = @(
                     New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' `
@@ -374,6 +491,7 @@ Describe 'Connect-METSession connection ordering' {
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
 
         Mock Get-MgContext { $null }
         Mock Get-ConnectionInformation { $null }
@@ -530,6 +648,7 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Serv
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
         Mock Get-Module {
             [PSCustomObject]@{ Name = 'MicrosoftTeams'; Version = [version]'7.9.0' }
         } -ParameterFilter { $ListAvailable -and $Name -eq 'MicrosoftTeams' }
@@ -630,6 +749,7 @@ Describe 'Connect-METSession tenant-scoped session reuse - Graph and Teams (Inte
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
         Mock Get-Module {
             [PSCustomObject]@{ Name = 'MicrosoftTeams'; Version = [version]'7.9.0' }
         } -ParameterFilter { $ListAvailable -and $Name -eq 'MicrosoftTeams' }
@@ -670,6 +790,7 @@ Describe 'Connect-METSession Graph leg certificate load failure' {
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
         Mock Connect-MgGraph {}
         Mock Get-METCertificateFromFile { throw 'Bad password or corrupt PFX' }
     }
@@ -897,6 +1018,7 @@ Describe 'Connect-METSession threads -DelegatedOrganization to Graph and Teams' 
         Mock Get-Module {
             [PSCustomObject]@{ Name = $Name; Version = [version]'2.39.0' }
         } -ParameterFilter { $ListAvailable -and $Name -like 'Microsoft.Graph*' }
+        Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable -and $Name -eq 'Microsoft.Graph.Authentication' }
         Mock Get-Module {
             [PSCustomObject]@{ Name = 'MicrosoftTeams'; Version = [version]'7.9.0' }
         } -ParameterFilter { $ListAvailable -and $Name -eq 'MicrosoftTeams' }
@@ -1028,6 +1150,22 @@ Describe 'Disconnect-METSession' {
         ($warnings -join ' ') | Should -Match 'Microsoft Teams'
         $script:METConnection | Should -Not -BeNullOrEmpty
         $script:METSessionInfo | Should -Not -BeNullOrEmpty
+    }
+
+    It 'Disconnects Teams when Get-CsTenant is denied, since a denied call proves a live session' {
+        $script:METConnection = @{ Mode = 'Interactive'; Org = 'customera.onmicrosoft.com' }
+        $script:METSessionInfo = [PSCustomObject]@{ AuthMode = 'Interactive'; ServicesConnected = @() }
+
+        Mock Get-ConnectionInformation { $null }
+        Mock Get-MgContext { $null }
+        Mock Get-Module { [PSCustomObject]@{ Name = 'MicrosoftTeams' } } -ParameterFilter { $Name -eq 'MicrosoftTeams' -and -not $ListAvailable }
+        Mock Get-CsTenant { throw 'Access Denied. Recommendation: Provide different credential or request access.' }
+        Mock Disconnect-MicrosoftTeams {}
+
+        Disconnect-METSession
+
+        Should -Invoke Disconnect-MicrosoftTeams -Times 1 -Exactly
+        $script:METConnection | Should -BeNullOrEmpty
     }
 }
 

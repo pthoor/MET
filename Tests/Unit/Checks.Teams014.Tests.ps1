@@ -14,9 +14,31 @@ BeforeAll {
 
 Describe 'MET-Teams014 Cross-Tenant Access' {
 
+    Context 'Graph connected, but Microsoft.Graph.Identity.SignIns not installed' {
+        BeforeAll {
+            function Get-MgContext { [CmdletBinding()] param() }
+        }
+        BeforeEach {
+            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-MgPolicyCrossTenantAccessPolicyDefault' }
+            Mock Get-Command { [PSCustomObject]@{ Name = 'Get-MgContext' } } -ParameterFilter { $Name -eq 'Get-MgContext' }
+            Mock Get-MgContext { [PSCustomObject]@{ Account = 'analyst@partner.com'; TenantId = '00000000-0000-0000-0000-000000000001' } }
+        }
+
+        It 'Names the missing module instead of claiming Graph was not connected' {
+            $results = & $checkFile
+            $results.Count | Should -Be 1
+            $results[0].Result | Should -Be 'NotApplicable'
+            $results[0].Finding | Should -Not -Match 'was not connected'
+            $results[0].Finding | Should -Match 'Microsoft.Graph.Identity.SignIns'
+            $results[0].Recommendation | Should -Match 'Install-Module Microsoft.Graph.Identity.SignIns'
+            $results[0].Error | Should -BeNullOrEmpty
+        }
+    }
+
     Context 'Graph cmdlets not found (module absent / -SkipGraph)' {
         BeforeEach {
             Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-MgPolicyCrossTenantAccessPolicyDefault' }
+            Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Get-MgContext' }
         }
 
         It 'Returns a single NotApplicable result and does NOT populate Error' {
