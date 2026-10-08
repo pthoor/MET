@@ -19,7 +19,9 @@ function Connect-METSession {
 
     .PARAMETER UserPrincipalName
         Pre-selects the account to use for interactive sign-in, so the browser prompt does not
-        ask which account to use. Interactive parameter set only.
+        ask which account to use. Interactive parameter set only. With -DelegatedOrganization it
+        is not passed to the Teams leg, so Teams prompts for the account - see
+        -DelegatedOrganization.
 
     .PARAMETER DisableWAM
         Bypasses the Web Account Manager broker. Valid in every parameter set, not just
@@ -593,8 +595,14 @@ function Connect-METSession {
                         # of this function) cannot be reconciled by .NET at runtime. Detect it
                         # up front so the warning names the real cause instead of surfacing
                         # MSAL's opaque MissingMethodException/manifest-mismatch failure.
-                        $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+                        # The loaded copy is the one Connect-MgGraph will run; the newest installed
+                        # copy is only what an import would pick when none is loaded yet.
+                        $graphAuthModule = Get-Module -Name Microsoft.Graph.Authentication |
                             Sort-Object Version -Descending | Select-Object -First 1
+                        if (-not $graphAuthModule) {
+                            $graphAuthModule = Get-Module -ListAvailable -Name Microsoft.Graph.Authentication |
+                                Sort-Object Version -Descending | Select-Object -First 1
+                        }
                         $requiredMsalVersion = $null
                         # Graph 2.41.0+ loads MSAL into its own AssemblyLoadContext
                         # (msgraph-sdk-powershell#3789), so a different version in the default
@@ -660,7 +668,17 @@ function Connect-METSession {
                 }
 
                 if ($teamsAccessDenied) {
-                    Write-Warning 'Microsoft Teams is connected, but this account was denied access to the Teams tenant settings (Get-CsTenant: Access Denied). Teams checks that use Get-Cs* cmdlets will fail. Assign the account a role that can read Teams settings - Global Reader is the least-privileged option - then run Disconnect-METSession and reconnect, since an existing token does not pick up a newly assigned role.'
+                    # A denied probe returns no TenantId, so the tenant-mismatch guard below cannot
+                    # run. Keeping the session would let Teams checks query whichever tenant it
+                    # belongs to under this run's label - fail closed by removing it.
+                    try { Disconnect-MicrosoftTeams -ErrorAction Stop | Out-Null }
+                    catch {
+                        $PSCmdlet.ThrowTerminatingError((New-METErrorRecord `
+                            -Message "Microsoft Teams is connected, but its tenant could not be verified because Get-CsTenant returned Access Denied, and disconnecting it failed: $($_.Exception.Message). Run Disconnect-MicrosoftTeams, then reconnect." `
+                            -ErrorId 'METTeamsTenantMismatch' `
+                            -Category ([System.Management.Automation.ErrorCategory]::ResourceExists)))
+                    }
+                    Write-Warning 'Microsoft Teams was connected, but this account was denied access to the Teams tenant settings (Get-CsTenant: Access Denied), so the session''s tenant could not be verified and it was disconnected. Teams checks that use Get-Cs* cmdlets will not run. Assign the account a role that can read Teams settings - Global Reader is the least-privileged option - then reconnect, since an existing token does not pick up a newly assigned role.'
                 }
 
                 # Deliberately outside the try/catch below: same reasoning as the Graph leg -
