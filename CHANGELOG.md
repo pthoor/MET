@@ -25,7 +25,8 @@ through `Connect-METSession` alone, and all 53 checks run.
   Its MSAL load-conflict pre-check compared Graph's MSAL against the one
   Exchange Online had already loaded, but Graph 2.41.0+ loads MSAL into its
   own assembly load context, so the two no longer conflict. Graph was
-  silently skipped whenever Exchange Online connected first.
+  silently skipped whenever Exchange Online connected first. The decision
+  uses the loaded Graph module, not just the newest installed one.
 - `Connect-METSession` no longer passes `-UserPrincipalName` to
   `Connect-MicrosoftTeams` as `-AccountId` when `-DelegatedOrganization`
   is set. The hint made the sign-in pick the home-tenant account, which the
@@ -33,8 +34,10 @@ through `Connect-METSession` alone, and all 53 checks run.
 - A live Teams session whose account has no role that can read Teams
   settings (`Get-CsTenant` returns Access Denied) is no longer treated as
   "not connected". `Connect-METSession` previously reconnected and showed an
-  unrelated sign-in error; it now warns that a role such as Global Reader is
-  needed and that a reconnect is required to pick it up.
+  unrelated sign-in error. Because a denied probe cannot confirm which
+  tenant the session belongs to, it now disconnects that session (and
+  throws if the disconnect fails) and warns that a role such as Global
+  Reader is needed, followed by a reconnect to pick it up.
   `Disconnect-METSession` previously refused to disconnect such a session;
   it now disconnects it.
 - On Windows, MET-EXO001 (DMARC) and MET-EXO003 (SPF) graded a domain with
