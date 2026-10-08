@@ -114,25 +114,33 @@ MODULE CONFLICTS
     the value jumps directly from 4.74.1.0 (3.9.0-3.9.2) to 4.83.1.0
     (3.10.0-3.10.1) - skipping the 4.82.x range entirely, which is
     exactly what Microsoft.Graph.Authentication 2.39.0 (4.82.1.0) and
-    MicrosoftTeams 7.9.0 (4.82.0.0) both need. There is currently no
-    version triple of ExchangeOnlineManagement, Microsoft.Graph and
-    MicrosoftTeams that coexists cleanly in one process.
+    MicrosoftTeams 7.9.0 (4.82.0.0) both need.
 
-    This is release-cadence drift between Microsoft's own modules, not a
-    MET defect, and no currently published version combination reliably
-    avoids it. Connect-METSession treats a failed Graph connection as
-    non-fatal: it warns and continues without Graph, exactly as it
-    already does for a failed Teams connection. Expand-METGroupMembership
-    - the only Graph call site in MET - degrades gracefully to Exchange
+    Microsoft.Graph.Authentication 2.41.0 and later load MSAL into a
+    private AssemblyLoadContext, so Graph no longer conflicts with
+    Exchange Online. Update every Microsoft.Graph.* module to the same
+    2.41.0+ version - sub-modules require the exact Authentication
+    version they shipped with and cannot load next to a different one.
+
+    MicrosoftTeams still uses the shared context. Teams 7.9.0 and 8.0.0
+    ship MSAL 4.82.0.0, older than ExchangeOnlineManagement 3.10.x's
+    4.83.1.0, so they coexist only when Exchange Online loads first.
+    Connect-METSession connects Exchange Online before Teams; when
+    connecting services by hand, use the order Graph, Exchange Online,
+    Teams.
+
+    On older Graph versions, Connect-METSession treats a failed Graph
+    connection as non-fatal: it warns and continues without Graph,
+    exactly as it already does for a failed Teams connection.
+    Expand-METGroupMembership - the only Graph call site in MET -
+    degrades gracefully to Exchange
     Online cmdlets (Get-DistributionGroupMember for distribution and
     mail-enabled security groups, Get-UnifiedGroupLinks for Microsoft 365
     Groups) when Graph is unavailable, which covers every group type an
     EOP/MDO policy can actually target. The visible effect is limited to
     slightly reduced accuracy resolving nested or dynamic group
     membership, and MET-Teams014 (the one check with a direct Graph
-    dependency) reporting NotApplicable instead of running. If Graph
-    checks must run, connect Graph in its own PowerShell process rather
-    than alongside Exchange Online.
+    dependency) reporting NotApplicable instead of running.
 
 THE POSTURE SCORE
     Every check carries a Severity, weighted: Critical = 40, High = 20,
@@ -197,8 +205,19 @@ RUNNING AGAINST A CUSTOMER TENANT
             -TenantId <customer>.onmicrosoft.com `
             -CertificatePath <pfx> -CertificatePassword <securestring>
 
-    Guest / dedicated account per tenant
-        Interactive sign-in with an account the customer issued.
+    B2B guest in the customer tenant
+        Connect-METSession -UserPrincipalName <you@yourcompany.com> `
+            -DelegatedOrganization <customer>.onmicrosoft.com -DisableWAM
+        A guest is not GDAP, but -DelegatedOrganization is what points
+        each sign-in at the customer's tenant rather than your home
+        tenant. Use your home sign-in address, not the #EXT# UPN. The
+        Teams Get-Cs* checks need Global Reader on the guest account;
+        Exchange or Security administrator roles do not grant Teams read
+        access. After a role is assigned, Disconnect-METSession and
+        reconnect so the new token carries it.
+
+    Dedicated account per tenant
+        Interactive sign-in with a member account the customer issued.
 
     Connect-METSession reuses a live Exchange Online, Graph or Teams
     connection rather than reconnecting on every call, but only after

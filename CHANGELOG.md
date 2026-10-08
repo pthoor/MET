@@ -53,6 +53,12 @@ through `Connect-METSession` alone, and all 53 checks run.
 - The Teams/Exchange Online MSAL conflict is load-order dependent, not
   version-absolute: MicrosoftTeams 7.9.0 and 8.0.0 both ship MSAL 4.82.0.0,
   and connecting Exchange Online first, then Teams, works.
+- README and `about_MET`: new guidance for connecting as a B2B guest in a
+  customer tenant (`-DelegatedOrganization`, home sign-in address, Global
+  Reader for Teams, `-DisableWAM` on Windows). The Graph MSAL warning is
+  now documented as fixed by Microsoft Graph 2.41.0+, and every
+  `Microsoft.Graph.*` module must be at the same version as
+  `Microsoft.Graph.Authentication`.
 
 ## [0.12.0] - Pre-1.0 audit remediation, Teams and MDO protection updates
 
