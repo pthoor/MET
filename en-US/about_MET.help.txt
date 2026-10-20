@@ -131,6 +131,14 @@ MODULE CONFLICTS
     connecting services by hand, use the order Graph, Exchange Online,
     Teams.
 
+    Test-METPrerequisites checks for these combinations before you
+    connect: it compares the MSAL build each module bundles, flags Graph
+    sub-modules on a different version than Microsoft.Graph.Authentication,
+    and fails when an older MSAL than Exchange Online needs is already
+    loaded in the session. After Connect-METSession, run
+    Test-METPrerequisites -TestConnection to confirm each service can
+    read what MET needs.
+
     Whatever the cause - an older Graph, -SkipGraph, a missing module or
     a failed sign-in - Connect-METSession treats a failed Graph
     connection as non-fatal: it warns and continues without Graph,

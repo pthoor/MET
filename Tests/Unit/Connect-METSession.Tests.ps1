@@ -8,6 +8,7 @@ BeforeAll {
     . "$root/Private/Test-METAssemblyLoadConflict.ps1"
     . "$root/Private/Resolve-METTenantGuid.ps1"
     . "$root/Private/New-METErrorRecord.ps1"
+    . "$root/Private/Get-METGraphScope.ps1"
 
     # Stubs mirror the real cmdlets' parameter names so that splatting a
     # non-existent parameter fails binding instead of silently passing.
@@ -95,6 +96,18 @@ Describe 'Connect-METSession Teams leg' {
         Mock Import-Module {}
         Mock Connect-MicrosoftTeams {}
         Mock Get-CsTenant { throw [System.UnauthorizedAccessException]::new('Session is not established') }
+    }
+
+    Context 'Output' {
+        It 'Does not emit the account object Connect-MicrosoftTeams returns' {
+            Mock Connect-MicrosoftTeams {
+                [PSCustomObject]@{ Account = 'admin@contoso.com'; Environment = 'AzureCloud'; Tenant = 'contoso' }
+            }
+
+            $output = @(Connect-METSession -SkipGraph -SkipExchangeOnline -WarningAction SilentlyContinue)
+
+            $output.Count | Should -Be 0
+        }
     }
 
     Context 'Interactive with -UseDeviceAuthentication' {
@@ -300,6 +313,99 @@ Describe 'Connect-METSession Graph leg' {
         }
     }
 
+    Context 'Requested scopes' {
+        It 'requests only the Graph scopes MET reads' {
+            Connect-METSession -SkipExchangeOnline -SkipTeams
+
+            Should -Invoke Connect-MgGraph -Times 1 -Exactly -ParameterFilter {
+                ($Scopes -join ',') -eq 'Policy.Read.All,Group.Read.All'
+            }
+        }
+    }
+
+    Context 'Sign-in blocked by the Microsoft Graph Command Line Tools enterprise app' {
+        It 'Names the unassigned enterprise app when Entra returns AADSTS50105' {
+            Mock Connect-MgGraph {
+                $inner = [System.Exception]::new("AADSTS50105: Your administrator has configured the application Microsoft Graph Command Line Tools ('14d82eec-204b-4c2f-b7e8-296a70dab67e') to block users unless they are specifically granted ('assigned') access to the application.")
+                throw [System.InvalidOperationException]::new('InteractiveBrowserCredential authentication failed.', $inner)
+            }
+
+            $script:graphWarnings = @()
+            {
+                $script:graphWarnings = @(
+                    Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+                )
+            } | Should -Not -Throw
+
+            $text = $script:graphWarnings -join ' '
+            $text | Should -Match 'not assigned'
+            $text | Should -Match 'Microsoft Graph Command Line Tools'
+            $text | Should -Match '14d82eec-204b-4c2f-b7e8-296a70dab67e'
+            $text | Should -Not -Match '-DisableWAM for interactive use'
+        }
+
+        It 'Names missing consent on the enterprise app when Entra returns AADSTS65001' {
+            Mock Connect-MgGraph {
+                throw "AADSTS65001: The user or administrator has not consented to use the application with ID '14d82eec-204b-4c2f-b7e8-296a70dab67e' named 'Microsoft Graph Command Line Tools'."
+            }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+            )
+
+            $text = $script:graphWarnings -join ' '
+            $text | Should -Match 'consent'
+            $text | Should -Match 'Policy.Read.All'
+        }
+
+        It 'Mentions the enterprise app assignment in the generic failure warning' {
+            Mock Connect-MgGraph { throw 'Authentication timed out.' }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+            )
+
+            ($script:graphWarnings -join ' ') | Should -Match 'AADSTS50105'
+        }
+
+        It 'Does not treat AADSTS501051 (application role assignment) as AADSTS50105' {
+            Mock Connect-MgGraph { throw "AADSTS501051: Application '00000000-0000-0000-0000-000000000000'(MET) is not assigned to a role for the application." }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+            )
+
+            ($script:graphWarnings -join ' ') | Should -Not -Match 'the signed-in account is not assigned'
+            ($script:graphWarnings -join ' ') | Should -Match 'AADSTS501051'
+        }
+
+        It 'Keeps the original diagnostic for an app-only AADSTS50105 or AADSTS65001' -ForEach @(
+            @{ Code = 'AADSTS50105' }
+            @{ Code = 'AADSTS65001' }
+        ) {
+            Mock Connect-MgGraph { throw "${Code}: sign-in failed for the application." }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -WarningAction Continue 3>&1
+            )
+
+            $text = $script:graphWarnings -join ' '
+            $text | Should -Match $Code
+            $text | Should -Not -Match 'Microsoft Graph Command Line Tools'
+        }
+
+        It 'Does not point app-only sign-ins at the Graph Command Line Tools app' {
+            Mock Connect-MgGraph { throw 'Authentication timed out.' }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -WarningAction Continue 3>&1
+            )
+
+            ($script:graphWarnings -join ' ') | Should -Match 'Failed to connect to Microsoft Graph'
+            ($script:graphWarnings -join ' ') | Should -Not -Match 'AADSTS50105'
+        }
+    }
+
     Context 'Required Graph modules are missing' {
         It 'Warns and does not throw, and never calls Connect-MgGraph' {
             Mock Get-Module {
@@ -329,8 +435,11 @@ Describe 'Connect-METSession Graph leg' {
         }
     }
 
-    Context 'A newer MSAL than Graph requires is already loaded' {
-        It 'Still connects - a higher loaded version is not a conflict' {
+    Context 'A newer MSAL than Graph 2.39.0 bundles is already loaded' {
+        # Observed live: Graph 2.39.0 (MSAL 4.82.1) after Exchange Online 3.10.1 (MSAL 4.83.1)
+        # fails with "Method not found: ...WithLogging(IIdentityLogger, Boolean)". Graph before
+        # 2.41.0 needs its own MSAL build exactly, not merely one at least as new.
+        It 'Does not attempt Connect-MgGraph and names the upgrade for every Graph module' {
             Mock Get-Module {
                 [PSCustomObject]@{
                     Name       = $Name
@@ -348,7 +457,7 @@ Describe 'Connect-METSession Graph leg' {
                         -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
                 )
                 & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
-                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded -RequireExactVersion:$RequireExactVersion
             }
 
             $script:graphWarnings = @()
@@ -358,8 +467,12 @@ Describe 'Connect-METSession Graph leg' {
                 )
             } | Should -Not -Throw
 
-            Should -Invoke Connect-MgGraph -Times 1 -Exactly
-            ($script:graphWarnings -join ' ') | Should -Not -Match 'already active in this PowerShell session'
+            Should -Invoke Connect-MgGraph -Times 0 -Exactly
+            $text = $script:graphWarnings -join ' '
+            $text | Should -Match 'already active in this PowerShell session'
+            $text | Should -Match '2\.41\.0'
+            $text | Should -Match '''Microsoft\.Graph\.Authentication'', ''Microsoft\.Graph\.Groups'', ''Microsoft\.Graph\.Identity\.SignIns'' \| ForEach-Object \{ Install-Module -Name \$_ -MinimumVersion 2\.41\.0'
+            $text | Should -Not -Match 'Install-Module [\w.]+, '
         }
     }
 
@@ -389,7 +502,7 @@ Describe 'Connect-METSession Graph leg' {
                         -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
                 )
                 & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
-                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded -RequireExactVersion:$RequireExactVersion
             }
 
             $script:graphWarnings = @(
@@ -420,7 +533,7 @@ Describe 'Connect-METSession Graph leg' {
                         -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
                 )
                 & $script:RealTestAssemblyLoadConflict -AssemblyName $AssemblyName `
-                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded
+                    -RequiredVersion $RequiredVersion -LoadedAssemblies $loaded -RequireExactVersion:$RequireExactVersion
             }
 
             $script:graphWarnings = @()

@@ -305,6 +305,21 @@ Found during a live assessment as a B2B guest administrator with `-DelegatedOrga
 
 ---
 
+## v0.13.0 - Pre-flight access and module compatibility checks ✅
+
+Found while preparing an assessment of a customer tenant that controls access to the Microsoft Graph Command Line Tools enterprise app - see `CHANGELOG.md`.
+
+| Item | Status |
+|---|---|
+| `Test-METPrerequisites -TestConnection`: live read-access probes for Exchange Online, Graph and Teams, plus Graph scope coverage | ✅ |
+| `Test-METPrerequisites`: `Microsoft.Graph.Authentication` row, Graph submodule version alignment, Graph/Teams vs Exchange Online MSAL compatibility, conflicting MSAL already loaded, loaded-version awareness | ✅ |
+| Stop requesting the unused `Organization.Read.All` Graph scope (triggered "Approval needed" in tenants that consented to the rest) | ✅ |
+| Name the Microsoft Graph Command Line Tools cause on AADSTS50105 / AADSTS65001 / AADSTS90094 / AADSTS90095 | ✅ |
+| Graph before 2.41.0: require an exact MSAL match in the `Connect-METSession` pre-check (a newer loaded MSAL fails with `Method not found`) | ✅ |
+| `Connect-METSession`: stop writing the `Connect-MicrosoftTeams` account object to the pipeline | ✅ |
+
+---
+
 ## Under Investigation ❓
 
 | Item | Status | Notes |
