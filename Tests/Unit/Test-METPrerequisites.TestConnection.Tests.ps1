@@ -86,6 +86,33 @@ Describe 'Test-METPrerequisites -TestConnection' {
             Test-METPrerequisites -TestConnection -Quiet | Should -BeFalse
         }
 
+        It 'fails when Exchange Online is connected to more than one organization' {
+            Mock Get-ConnectionInformation {
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'contoso.onmicrosoft.com'; UserPrincipalName = 'admin@contoso.com' }
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'partner.onmicrosoft.com'; DelegatedOrganization = 'fabrikam.onmicrosoft.com'; UserPrincipalName = 'admin@partner.com' }
+            }
+
+            $results = Test-METPrerequisites -TestConnection -PassThru
+
+            $session = & $script:Row $results 'Exchange Online session'
+            $session.Status | Should -Be 'Fail - multiple organizations'
+            $session.Notes | Should -Match 'contoso\.onmicrosoft\.com'
+            $session.Notes | Should -Match 'fabrikam\.onmicrosoft\.com'
+            $session.Notes | Should -Match 'Disconnect-METSession'
+            (& $script:Row $results 'Exchange Online read access').Status | Should -Be 'Skipped - multiple organizations'
+            Should -Invoke Get-HostedContentFilterPolicy -Times 0 -Exactly
+            Test-METPrerequisites -TestConnection -Quiet | Should -BeFalse
+        }
+
+        It 'names the delegated organization a session is connected to' {
+            Mock Get-ConnectionInformation {
+                [PSCustomObject]@{ State = 'Connected'; Organization = 'partner.onmicrosoft.com'; DelegatedOrganization = 'fabrikam.onmicrosoft.com'; UserPrincipalName = 'admin@partner.com' }
+            }
+
+            (& $script:Row (Test-METPrerequisites -TestConnection -PassThru) 'Exchange Online session').Installed |
+                Should -Match 'fabrikam\.onmicrosoft\.com'
+        }
+
         It 'fails the read access row when the account has no Exchange role' {
             Mock Get-HostedContentFilterPolicy { throw "The term 'Get-HostedContentFilterPolicy' is not recognized as a name of a cmdlet" }
 
@@ -124,6 +151,7 @@ Describe 'Test-METPrerequisites -TestConnection' {
             $scopes.Status | Should -Be 'Missing scopes (optional)'
             $scopes.Installed | Should -Match 'Policy.Read.All'
             $scopes.Installed | Should -Not -Match 'Group.Read.All'
+            $scopes.Notes | Should -Match 'Policy\.Read\.All' -Because 'the console table prints Notes, not Installed'
         }
 
         It 'accepts a broader scope that covers a requested one' {

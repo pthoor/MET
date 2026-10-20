@@ -8,8 +8,11 @@ function Test-METAssemblyLoadConflict {
         [Parameter(Mandatory)]
         [version] $RequiredVersion,
 
+        # Only the default AssemblyLoadContext: Microsoft.Graph.Authentication 2.41.0+ loads its
+        # own MSAL into a private context, and AppDomain.GetAssemblies() would return that copy
+        # too - masking, or standing in for, the build Exchange Online and Teams bind to.
         [Parameter()]
-        [object[]] $LoadedAssemblies = [System.AppDomain]::CurrentDomain.GetAssemblies(),
+        [object[]] $LoadedAssemblies = [System.Runtime.Loader.AssemblyLoadContext]::Default.Assemblies,
 
         # .NET resolves a request for an older assembly version against an already-loaded
         # newer one, so by default only a downgrade is a conflict. That is not enough for

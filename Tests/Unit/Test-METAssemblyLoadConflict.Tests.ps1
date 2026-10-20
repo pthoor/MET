@@ -76,6 +76,30 @@ Describe 'Test-METAssemblyLoadConflict' {
         }
     }
 
+    Context 'Default assembly source' {
+        # Microsoft.Graph.Authentication 2.41.0+ loads its own MSAL into a private
+        # AssemblyLoadContext. AppDomain.GetAssemblies() returns assemblies from every context,
+        # so a private copy could mask, or be mistaken for, the default-context build that
+        # Exchange Online and Teams actually bind to.
+        It 'Ignores an assembly loaded only into a private AssemblyLoadContext' {
+            $dll = Join-Path $TestDrive 'MET.AlcProbe.dll'
+            Add-Type -TypeDefinition '[assembly: System.Reflection.AssemblyVersion("1.0.0.0")] namespace METAlcProbe { public class Probe {} }' `
+                -OutputAssembly $dll -OutputType Library
+            $context = [System.Runtime.Loader.AssemblyLoadContext]::new('MET.AlcProbe', $true)
+            try {
+                # Add-Type gives the compiled assembly a generated name, so read it back.
+                $assemblyName = $context.LoadFromAssemblyPath($dll).GetName().Name
+                @([System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $assemblyName }).Count |
+                    Should -Be 1 -Because 'the probe assembly is visible through AppDomain.GetAssemblies()'
+
+                Test-METAssemblyLoadConflict -AssemblyName $assemblyName -RequiredVersion '2.0.0.0' | Should -BeNullOrEmpty
+            }
+            finally {
+                $context.Unload()
+            }
+        }
+    }
+
     Context '-RequireExactVersion' {
         It 'Reports a newer loaded version as a conflict' {
             $loaded = @(

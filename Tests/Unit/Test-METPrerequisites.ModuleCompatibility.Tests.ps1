@@ -79,7 +79,8 @@ Describe 'Test-METPrerequisites module compatibility' {
             $graph.Status | Should -Be 'Incompatible (optional)'
             $graph.Installed | Should -Match '4\.82\.1\.0'
             $graph.Installed | Should -Match '4\.83\.1\.0'
-            $graph.Notes | Should -Match 'Install-Module Microsoft\.Graph\.Authentication, Microsoft\.Graph\.Groups, Microsoft\.Graph\.Identity\.SignIns -MinimumVersion 2\.41\.0'
+            $graph.Notes | Should -Match '''Microsoft\.Graph\.Authentication'', ''Microsoft\.Graph\.Groups'', ''Microsoft\.Graph\.Identity\.SignIns'' \| ForEach-Object \{ Install-Module -Name \$_ -MinimumVersion 2\.41\.0'
+            $graph.Notes | Should -Not -Match 'Install-Module [\w.]+, '
         }
 
         It 'Does not fail the required prerequisites' {
@@ -103,7 +104,8 @@ Describe 'Test-METPrerequisites module compatibility' {
             $groups = & $script:Row $results 'Microsoft.Graph.Groups'
             $groups.Status | Should -Be 'Version mismatch (optional)'
             $groups.Notes | Should -Match '2\.41\.1'
-            $groups.Notes | Should -Match 'Install-Module Microsoft\.Graph\.Authentication, Microsoft\.Graph\.Groups, Microsoft\.Graph\.Identity\.SignIns'
+            $groups.Notes | Should -Match 'ForEach-Object \{ Install-Module -Name \$_'
+            $groups.Notes | Should -Not -Match 'Install-Module [\w.]+, '
             (& $script:Row $results 'Microsoft.Graph.Identity.SignIns').Status | Should -Be 'OK'
         }
     }

@@ -614,7 +614,7 @@ function Connect-METSession {
                                 # Each Graph submodule pins Microsoft.Graph.Authentication to its own
                                 # exact version, so upgrading Authentication alone leaves Groups and
                                 # SignIns unable to load beside it.
-                                $conflict = "$conflict Microsoft.Graph.Authentication $($graphAuthModule.Version) shares MSAL with Exchange Online; 2.41.0 and later load their own copy and avoid this. Update every Graph module MET uses to the same version: Install-Module Microsoft.Graph.Authentication, Microsoft.Graph.Groups, Microsoft.Graph.Identity.SignIns -MinimumVersion 2.41.0 -Scope CurrentUser, then restart PowerShell."
+                                $conflict = "$conflict Microsoft.Graph.Authentication $($graphAuthModule.Version) shares MSAL with Exchange Online; 2.41.0 and later load their own copy and avoid this. Update every Graph module MET uses to the same version: 'Microsoft.Graph.Authentication', 'Microsoft.Graph.Groups', 'Microsoft.Graph.Identity.SignIns' | ForEach-Object { Install-Module -Name `$_ -MinimumVersion 2.41.0 -Scope CurrentUser }, then restart PowerShell."
                                 throw $conflict
                             }
                         }
@@ -645,14 +645,18 @@ function Connect-METSession {
                     $graphFallbackText = 'Group-membership expansion will fall back to Exchange Online cmdlets (reduced accuracy for Microsoft 365 Group references).'
                     $graphCliApp = "the 'Microsoft Graph Command Line Tools' enterprise app (appId 14d82eec-204b-4c2f-b7e8-296a70dab67e)"
 
-                    if ($graphFailureText -match 'AADSTS50105') {
+                    # Only delegated sign-in goes through the Graph Command Line Tools app; an
+                    # app-only failure keeps its own diagnostic. \b keeps AADSTS501051 (an
+                    # application role assignment error) from matching AADSTS50105.
+                    $graphCliSignIn = $PSCmdlet.ParameterSetName -eq 'Interactive'
+                    if ($graphCliSignIn -and $graphFailureText -match 'AADSTS50105\b') {
                         Write-Warning "Failed to connect to Microsoft Graph: the signed-in account is not assigned to $graphCliApp, and the tenant requires assignment before it can be used (AADSTS50105). $graphFallbackText To fix, ask a tenant administrator to add the account, or a group it belongs to, under Entra admin center > Enterprise applications > Microsoft Graph Command Line Tools > Users and groups, or connect with a service principal instead: Connect-METSession -AppId <appId> -TenantId <tenant> -CertificatePath <path> -CertificatePassword <securestring>."
                     }
-                    elseif ($graphFailureText -match 'AADSTS(65001|90094|90095)') {
+                    elseif ($graphCliSignIn -and $graphFailureText -match 'AADSTS(65001|90094|90095)\b') {
                         Write-Warning "Failed to connect to Microsoft Graph: $graphCliApp has not been granted consent for the delegated scopes MET requests ($($graphScopes -join ', ')), and the signed-in account cannot consent to them itself. $graphFallbackText To fix, ask a tenant administrator to grant admin consent for those scopes on that enterprise app, or connect with a service principal instead: Connect-METSession -AppId <appId> -TenantId <tenant> -CertificatePath <path> -CertificatePassword <securestring>."
                     }
                     else {
-                        $graphCliHint = if ($PSCmdlet.ParameterSetName -eq 'Interactive') {
+                        $graphCliHint = if ($graphCliSignIn) {
                             " If the sign-in page showed AADSTS50105, the account is not assigned to $graphCliApp - a tenant administrator must assign it."
                         }
                         Write-Warning "Failed to connect to Microsoft Graph: $graphFailureText $graphFallbackText Retry with: Connect-METSession -CertificatePath <path> -CertificatePassword <securestring> for unattended use, or -DisableWAM for interactive use.$graphCliHint"

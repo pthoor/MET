@@ -61,6 +61,11 @@ Teams sessions, including with Graph 2.39.0 loaded beside Exchange Online
   2.39.0 after Exchange Online 3.10.1 failed with
   `Method not found: ...WithLogging(...)`. It now skips the sign-in and warns
   with the command to update every Graph module MET uses.
+- `Connect-METSession`'s MSAL pre-checks only look at the default assembly
+  load context. They read every loaded assembly, including the private copy
+  Graph 2.41.0+ loads for itself, and took the first match - so depending on
+  load order, that copy could hide an older MSAL that Exchange Online or
+  Teams would actually bind to, or be reported as a conflict itself.
 - `Connect-METSession` no longer writes the account object returned by
   `Connect-MicrosoftTeams` to the pipeline. Its documented output is none,
   but every Teams connection printed an `Account / Environment / Tenant`

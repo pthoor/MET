@@ -176,7 +176,8 @@
             Notes     = $Notes
         })
     }
-    $graphUpgrade = 'Install-Module Microsoft.Graph.Authentication, Microsoft.Graph.Groups, Microsoft.Graph.Identity.SignIns -MinimumVersion 2.41.0 -Scope CurrentUser'
+    # Install-Module accepts -MinimumVersion only with a single -Name, so one call per module.
+    $graphUpgrade = '''Microsoft.Graph.Authentication'', ''Microsoft.Graph.Groups'', ''Microsoft.Graph.Identity.SignIns'' | ForEach-Object { Install-Module -Name $_ -MinimumVersion 2.41.0 -Scope CurrentUser }'
 
     # ── Graph module versions ────────────────────────────────────────────────
     # Each Graph submodule pins Microsoft.Graph.Authentication to its own exact version, and
@@ -286,12 +287,21 @@
         $graphCliApp = "the 'Microsoft Graph Command Line Tools' enterprise app (appId 14d82eec-204b-4c2f-b7e8-296a70dab67e)"
 
         # Exchange Online
-        $exoConnection = if (Get-Command -Name Get-ConnectionInformation -ErrorAction SilentlyContinue) {
-            @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' }) |
-                Select-Object -First 1
+        $exoSessions = if (Get-Command -Name Get-ConnectionInformation -ErrorAction SilentlyContinue) {
+            @(Get-ConnectionInformation -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Connected' })
         }
-        if ($exoConnection) {
-            & $addRow 'Exchange Online session' 'Connected' "$($exoConnection.Organization) ($($exoConnection.UserPrincipalName))" $false 'OK' ''
+        $exoOrgOf = { param($Session) if ($Session.DelegatedOrganization) { $Session.DelegatedOrganization } else { $Session.Organization } }
+        # Same rule as Connect-METSession: sessions for more than one organization make cmdlet
+        # routing ambiguous, so the assessment could read either customer's configuration.
+        $exoOrgs = @($exoSessions | ForEach-Object { & $exoOrgOf $_ } | Where-Object { $_ } | Sort-Object -Unique)
+        $exoConnection = $exoSessions | Select-Object -First 1
+        if ($exoOrgs.Count -gt 1) {
+            & $addRow 'Exchange Online session' 'Connected to one organization' ($exoOrgs -join ', ') $false 'Fail - multiple organizations' `
+                "Exchange Online has live connections for $($exoOrgs -join ', '), so cmdlet routing between them is ambiguous and the assessment could read the wrong organization. Run Disconnect-METSession, then Connect-METSession to the one organization being assessed."
+            & $addRow 'Exchange Online read access' 'Read policy settings' '-' $false 'Skipped - multiple organizations' ''
+        }
+        elseif ($exoConnection) {
+            & $addRow 'Exchange Online session' 'Connected' "$(& $exoOrgOf $exoConnection) ($($exoConnection.UserPrincipalName))" $false 'OK' ''
             try {
                 Get-HostedContentFilterPolicy -ErrorAction Stop | Select-Object -First 1 | Out-Null
                 & $addRow 'Exchange Online read access' 'Read policy settings' 'Get-HostedContentFilterPolicy succeeded' $false 'OK' ''
@@ -328,7 +338,7 @@
             }
             if ($missingScopes) {
                 & $addRow 'Microsoft Graph scopes' ((Get-METGraphScope) -join ', ') "Missing: $($missingScopes -join ', ')" $true 'Missing scopes (optional)' `
-                    "The session's token does not carry these scopes. A tenant administrator must grant consent for them on the app the session signed in through - for interactive sign-in that is $graphCliApp - then reconnect. The read rows below show which Graph data is still reachable."
+                    "The session's token does not carry $($missingScopes -join ', '). A tenant administrator must grant consent for them on the app the session signed in through - for interactive sign-in that is $graphCliApp - then reconnect. The read rows below show which Graph data is still reachable."
             }
             else {
                 & $addRow 'Microsoft Graph scopes' ((Get-METGraphScope) -join ', ') 'All granted' $true 'OK' ''

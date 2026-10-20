@@ -368,6 +368,32 @@ Describe 'Connect-METSession Graph leg' {
             ($script:graphWarnings -join ' ') | Should -Match 'AADSTS50105'
         }
 
+        It 'Does not treat AADSTS501051 (application role assignment) as AADSTS50105' {
+            Mock Connect-MgGraph { throw "AADSTS501051: Application '00000000-0000-0000-0000-000000000000'(MET) is not assigned to a role for the application." }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -WarningAction Continue 3>&1
+            )
+
+            ($script:graphWarnings -join ' ') | Should -Not -Match 'the signed-in account is not assigned'
+            ($script:graphWarnings -join ' ') | Should -Match 'AADSTS501051'
+        }
+
+        It 'Keeps the original diagnostic for an app-only AADSTS50105 or AADSTS65001' -ForEach @(
+            @{ Code = 'AADSTS50105' }
+            @{ Code = 'AADSTS65001' }
+        ) {
+            Mock Connect-MgGraph { throw "${Code}: sign-in failed for the application." }
+
+            $script:graphWarnings = @(
+                Connect-METSession -SkipExchangeOnline -SkipTeams -ManagedIdentity -TenantId 'contoso.onmicrosoft.com' -WarningAction Continue 3>&1
+            )
+
+            $text = $script:graphWarnings -join ' '
+            $text | Should -Match $Code
+            $text | Should -Not -Match 'Microsoft Graph Command Line Tools'
+        }
+
         It 'Does not point app-only sign-ins at the Graph Command Line Tools app' {
             Mock Connect-MgGraph { throw 'Authentication timed out.' }
 
@@ -445,7 +471,8 @@ Describe 'Connect-METSession Graph leg' {
             $text = $script:graphWarnings -join ' '
             $text | Should -Match 'already active in this PowerShell session'
             $text | Should -Match '2\.41\.0'
-            $text | Should -Match 'Microsoft\.Graph\.Authentication, Microsoft\.Graph\.Groups, Microsoft\.Graph\.Identity\.SignIns'
+            $text | Should -Match '''Microsoft\.Graph\.Authentication'', ''Microsoft\.Graph\.Groups'', ''Microsoft\.Graph\.Identity\.SignIns'' \| ForEach-Object \{ Install-Module -Name \$_ -MinimumVersion 2\.41\.0'
+            $text | Should -Not -Match 'Install-Module [\w.]+, '
         }
     }
 
