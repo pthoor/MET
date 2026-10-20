@@ -1,5 +1,5 @@
 ﻿@{
-    ModuleVersion        = '0.12.1'
+    ModuleVersion        = '0.13.0'
     GUID                 = '52cfd4a5-c6d6-4691-a195-ae0b24ac912b'
     Author               = 'Pierre Thoor'
     CompanyName          = 'Community'
@@ -35,7 +35,7 @@
             LicenseUri   = 'https://github.com/pthoor/MET/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/pthoor/MET'
             IconUri      = 'https://raw.githubusercontent.com/pthoor/MET/main/assets/favicon-180.png'
-            ReleaseNotes = 'v0.12.1 - Connection and DNS grading fixes. Connect-METSession now connects Microsoft Graph 2.41.0+ alongside Exchange Online (an outdated pre-check blocked it), no longer breaks Teams sign-in for B2B guest and delegated admins by passing -AccountId, and reports a Teams session without a Teams admin role instead of reconnecting. On Windows, MET-EXO001 and MET-EXO003 now grade a domain with no DMARC/SPF record as Fail rather than as a failed DNS lookup. MET-Teams014 names a missing or version-mismatched Microsoft.Graph.Identity.SignIns module instead of reporting Graph as not connected. See https://github.com/pthoor/MET/blob/main/CHANGELOG.md'
+            ReleaseNotes = 'v0.13.0 - Pre-flight access and module compatibility checks. Test-METPrerequisites -TestConnection checks the live Exchange Online, Microsoft Graph and Teams sessions before an assessment: read access in each service, and every Graph scope MET requests. Test-METPrerequisites now also checks that the installed modules can load together: Graph submodules on the Microsoft.Graph.Authentication version, Graph before 2.41.0 or Teams bundling an MSAL that conflicts with Exchange Online, and an older MSAL already loaded in the session. Connect-METSession no longer requests the unused Organization.Read.All Graph scope, which caused an admin consent prompt in tenants that had consented to the rest; names the cause when the Microsoft Graph Command Line Tools enterprise app blocks sign-in (AADSTS50105, AADSTS65001); no longer starts a Graph sign-in that cannot succeed on Graph before 2.41.0; and no longer prints the Teams account object. See https://github.com/pthoor/MET/blob/main/CHANGELOG.md'
         }
     }
 }

@@ -1,5 +1,9 @@
 BeforeAll {
-    . (Join-Path $PSScriptRoot '..' '..' 'Public' 'Test-METPrerequisites.ps1')
+    $root = Join-Path $PSScriptRoot '..' '..'
+    . (Join-Path $root 'Public' 'Test-METPrerequisites.ps1')
+    . (Join-Path $root 'Private' 'Get-METAssemblyFileVersion.ps1')
+    . (Join-Path $root 'Private' 'Get-METModuleMsalVersion.ps1')
+    . (Join-Path $root 'Private' 'Test-METAssemblyLoadConflict.ps1')
 }
 
 Describe 'Test-METPrerequisites' {
@@ -19,6 +23,7 @@ Describe 'Test-METPrerequisites' {
                     'Pester'                           { [PSCustomObject]@{ Version = [version]'5.0.0' } }
                 }
             } -ParameterFilter { $ListAvailable }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable }
         }
 
         It 'reports the DNS-over-HTTPS fallback as satisfied' {
@@ -42,13 +47,14 @@ Describe 'Test-METPrerequisites' {
                     'Pester'                   { [PSCustomObject]@{ Version = [version]'5.0.0' } }
                 }
             } -ParameterFilter { $ListAvailable }
+            Mock Get-Module { $null } -ParameterFilter { -not $ListAvailable }
         }
 
         It 'marks Graph as optional rather than a required failure' {
             $results = Test-METPrerequisites -PassThru
             $graph = @($results | Where-Object { $_.Component -like 'Microsoft.Graph.*' })
 
-            $graph.Count | Should -Be 2
+            $graph.Count | Should -Be 3
             $graph | ForEach-Object {
                 $_.Optional | Should -BeTrue
                 $_.Status | Should -Be 'Not installed (optional)'

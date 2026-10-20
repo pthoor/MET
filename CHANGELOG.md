@@ -12,6 +12,60 @@ through v0.7.0, see `ROADMAP.md`.
 
 ## [Unreleased]
 
+## [0.13.0] - Pre-flight access and module compatibility checks
+
+Found while preparing an assessment of a customer tenant that controls
+access to the Microsoft Graph Command Line Tools enterprise app, and
+confirmed against the maintainer's own tenant: `-TestConnection` and the
+module compatibility rows were run against live Exchange Online, Graph and
+Teams sessions, including with Graph 2.39.0 loaded beside Exchange Online
+3.10.1.
+
+### Added
+
+- `Test-METPrerequisites -TestConnection` checks the live sessions before an
+  assessment: Exchange Online connected and able to read policy settings,
+  Microsoft Graph connected with every requested scope and able to read
+  groups and policies, and Teams connected and able to read Teams settings.
+  Each row names the checks a failure affects. Only the Exchange Online rows
+  are required.
+- `Test-METPrerequisites` checks that the installed modules work together,
+  not just that each meets a minimum version: a
+  `Microsoft.Graph.Authentication` row; Graph submodules on a different
+  version than Authentication (each pins it exactly, so a mismatched one
+  cannot load); a Graph before 2.41.0 whose bundled MSAL differs from
+  Exchange Online's; a MicrosoftTeams release bundling a newer MSAL than
+  Exchange Online; and an older MSAL already loaded in the session, which
+  stops Exchange Online connecting. A module already loaded in the session
+  is judged at its loaded version.
+
+### Changed
+
+- `Connect-METSession` no longer requests the Microsoft Graph
+  `Organization.Read.All` scope. Nothing in MET reads the organization
+  endpoint, and the unused scope triggered an admin consent prompt
+  ("Approval needed") in tenants that had already consented to
+  `Policy.Read.All` and `Group.Read.All` for the Microsoft Graph Command
+  Line Tools app. Service principals no longer need it either.
+- `Connect-METSession` names the cause when the Microsoft Graph Command Line
+  Tools enterprise app blocks the sign-in: the account is not assigned to it
+  (`AADSTS50105`) or consent for MET's scopes is missing (`AADSTS65001`,
+  `AADSTS90094`, `AADSTS90095`). The Graph warning also now includes the
+  inner exception text, which previously held the AADSTS code and was dropped.
+
+### Fixed
+
+- `Connect-METSession` no longer starts a Graph sign-in that cannot succeed.
+  Its MSAL pre-check treated a newer MSAL already loaded by Exchange Online
+  as compatible, but Graph before 2.41.0 needs its own build exactly: Graph
+  2.39.0 after Exchange Online 3.10.1 failed with
+  `Method not found: ...WithLogging(...)`. It now skips the sign-in and warns
+  with the command to update every Graph module MET uses.
+- `Connect-METSession` no longer writes the account object returned by
+  `Connect-MicrosoftTeams` to the pipeline. Its documented output is none,
+  but every Teams connection printed an `Account / Environment / Tenant`
+  table.
+
 ## [0.12.1] - Connection and DNS grading fixes
 
 Found while assessing a customer tenant as a B2B guest administrator with

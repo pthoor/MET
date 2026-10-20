@@ -18,6 +18,7 @@ MET runs 53 read-only security posture checks across Microsoft Defender for Offi
 Install-Module MET -Repository PSGallery -Scope CurrentUser
 Test-METPrerequisites
 Connect-METSession
+Test-METPrerequisites -TestConnection
 $results = Invoke-METAssessment
 $results | Get-METReport -Format HTML -OutputPath ./assessments
 ```
@@ -54,7 +55,7 @@ Install-Module Microsoft.Graph.Identity.SignIns -MinimumVersion 2.41.0 -Scope Cu
 Install-Module Microsoft.Graph.Groups           -MinimumVersion 2.41.0 -Scope CurrentUser
 ```
 
-Every `Microsoft.Graph.*` module must be at the **same version** as `Microsoft.Graph.Authentication`: each sub-module requires the exact Authentication version it shipped with, and one that does not match cannot load next to it, so its cmdlets are simply missing. Check with `Get-Module Microsoft.Graph.* -ListAvailable`, and when updating, install the matching version of each with `-RequiredVersion <version> -Force`. 2.41.0 or later is recommended - see [Microsoft Graph and Exchange Online in one session](#known-warning-microsoft-graph-msal-version-conflict).
+Every `Microsoft.Graph.*` module must be at the **same version** as `Microsoft.Graph.Authentication`: each sub-module requires the exact Authentication version it shipped with, and one that does not match cannot load next to it, so its cmdlets are simply missing. Check with `Get-Module Microsoft.Graph.* -ListAvailable`, and when updating, install the matching version of each with `-RequiredVersion <version> -Force`. `Test-METPrerequisites` checks this for you, using the version already loaded in the session when there is one. 2.41.0 or later is recommended - see [Microsoft Graph and Exchange Online in one session](#known-warning-microsoft-graph-msal-version-conflict).
 
 **MicrosoftTeams** - required by the Teams checks that call the native `Get-Cs*` cmdlets (Teams003, Teams005, Teams006, Teams007, Teams008). Teams001, Teams002, and Teams004 use Exchange-hosted cmdlets and run without it. If it is not installed, `Connect-METSession` logs a warning and the affected checks fail gracefully with an explanatory error in the result object.
 
@@ -81,7 +82,6 @@ These are requested by `Connect-METSession`. All are **read-only**.
 
 | Permission | Why it is needed |
 |---|---|
-| `Organization.Read.All` | Read tenant name and domain list |
 | `Group.Read.All` | Resolve group membership for preset policy coverage (MDO008) |
 | `Policy.Read.All` | Read the cross-tenant access default policy and authorization policy (MET-Teams014) |
 
@@ -120,7 +120,7 @@ New-ServicePrincipal -AppId $appId -ServiceId $spObjectId -DisplayName 'MET CI'
 New-ManagementRoleAssignment -Role 'View-Only Recipients' -App $appId
 
 # 3. Grant Graph Application permissions in Entra (portal or CLI)
-#    Organization.Read.All, Group.Read.All, Policy.Read.All
+#    Group.Read.All, Policy.Read.All
 
 # 4. Assign Global Reader in Entra for Teams access
 #    Microsoft Entra admin center → Roles → Global Reader → Add assignment → select the service principal
@@ -159,6 +159,29 @@ Get-METCheck -CheckId MET-EXO001, MET-MDO009
 ```
 
 `Get-METCheck` reads each check's declared name, severity, description, and required module straight off the script file, so it works before you have run `Connect-METSession` at all - useful for deciding what a check does, or which `-Category`/`-CheckId`/`-Severity` scope you want, before connecting to a tenant. `Invoke-METAssessment -ListChecks` uses the same data.
+
+### Check access before assessing
+
+```powershell
+Connect-METSession -DelegatedOrganization customer.onmicrosoft.com
+Test-METPrerequisites -TestConnection
+```
+
+`-TestConnection` reads the sessions `Connect-METSession` opened and never signs in itself. For each service it reports whether the session is connected and whether the account can actually read what MET needs: Exchange Online policy settings, Microsoft Graph groups and policies (plus whether the token carries every scope MET requests), and Teams settings. Each failing row names the checks it affects. Only the Exchange Online rows are required, so `Test-METPrerequisites -TestConnection -Quiet` returns `$false` only when the assessment cannot run at all.
+
+A tenant can require assignment on the **Microsoft Graph Command Line Tools** enterprise app (appId `14d82eec-204b-4c2f-b7e8-296a70dab67e`), which every interactive `Connect-MgGraph` signs in through, or withhold consent for its scopes. `Connect-METSession` then warns with `AADSTS50105` (not assigned) or `AADSTS65001` (no consent), and `-TestConnection` shows Graph as not connected or missing scopes. A tenant administrator can confirm the configuration before the engagement:
+
+```powershell
+Connect-MgGraph -Scopes 'Application.Read.All', 'Directory.Read.All'
+$sp = Get-MgServicePrincipal -Filter "appId eq '14d82eec-204b-4c2f-b7e8-296a70dab67e'"
+$sp.AppRoleAssignmentRequired    # True = only assigned users and groups can sign in
+Get-MgServicePrincipalAppRoleAssignedTo -ServicePrincipalId $sp.Id -All |
+    Select-Object PrincipalDisplayName, PrincipalType
+Get-MgOauth2PermissionGrant -Filter "clientId eq '$($sp.Id)'" -All |
+    Select-Object ConsentType, PrincipalId, Scope
+```
+
+The assessing account, or a group it belongs to, must be assigned, and `Policy.Read.All Group.Read.All` must appear in an `AllPrincipals` grant or in a grant for that account. A service principal connection (below) signs in through its own app registration and is not affected by either setting.
 
 ### Service Principal (unattended / CI)
 
@@ -285,6 +308,8 @@ WARNING: Failed to connect to Microsoft Graph: ClientCertificateCredential authe
 ```
 
 **Fixed by updating Microsoft Graph to 2.41.0 or later** (`Update-Module Microsoft.Graph.Authentication`, plus the matching version of every other `Microsoft.Graph.*` module), then starting a new PowerShell window. `ExchangeOnlineManagement` and `Microsoft.Graph.*` each bundle their own `Microsoft.Identity.Client` (MSAL), and before 2.41.0 both loaded into the same shared context, so whichever loaded first "won" and the other called a method that did not exist in that version. Graph 2.41.0 loads MSAL into its own isolated context, so the two no longer collide. MET 0.12.0 still blocked that combination with an outdated pre-check; 0.12.1 and later do not.
+
+`Test-METPrerequisites` flags this combination before you connect: its "Graph and Exchange Online (MSAL)" row compares the MSAL build each module bundles and reports `Incompatible` for a Graph before 2.41.0 whose build differs from Exchange Online's. `Connect-METSession` makes the same comparison, so on an affected Graph it skips the sign-in and warns with the upgrade command instead of this error. A "Teams and Exchange Online (MSAL)" row likewise flags a MicrosoftTeams release that bundles a newer MSAL than Exchange Online.
 
 On an older Graph, `Connect-METSession` treats the failure as non-fatal: Exchange Online and Teams connect normally, `Expand-METGroupMembership` falls back to `Get-DistributionGroupMember`/`Get-UnifiedGroupLinks`, and `MET-Teams014` reports `NotApplicable` instead of running.
 

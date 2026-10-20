@@ -75,4 +75,37 @@ Describe 'Test-METAssemblyLoadConflict' {
             $result | Should -Match '4\.80\.0\.0'
         }
     }
+
+    Context '-RequireExactVersion' {
+        It 'Reports a newer loaded version as a conflict' {
+            $loaded = @(
+                New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' -Version '4.83.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
+            )
+
+            $result = Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion '4.82.1.0' -LoadedAssemblies $loaded -RequireExactVersion
+
+            $result | Should -Match 'newer version'
+            $result | Should -Match '4\.83\.1\.0'
+            $result | Should -Match '4\.82\.1\.0'
+            $result | Should -Match '/exo/Microsoft\.Identity\.Client\.dll'
+        }
+
+        It 'Still reports an older loaded version as a conflict' {
+            $loaded = @(
+                New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' -Version '4.74.1.0' -Location '/exo/Microsoft.Identity.Client.dll'
+            )
+
+            Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion '4.82.1.0' -LoadedAssemblies $loaded -RequireExactVersion |
+                Should -Match 'older version'
+        }
+
+        It 'Returns $null when the loaded version is exactly the required one' {
+            $loaded = @(
+                New-FakeLoadedAssembly -Name 'Microsoft.Identity.Client' -Version '4.82.1.0' -Location '/graph/Microsoft.Identity.Client.dll'
+            )
+
+            Test-METAssemblyLoadConflict -AssemblyName 'Microsoft.Identity.Client' -RequiredVersion '4.82.1.0' -LoadedAssemblies $loaded -RequireExactVersion |
+                Should -BeNullOrEmpty
+        }
+    }
 }
