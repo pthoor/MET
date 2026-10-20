@@ -87,8 +87,13 @@ Describe 'Test-METAssemblyLoadConflict' {
                 -OutputAssembly $dll -OutputType Library
             $context = [System.Runtime.Loader.AssemblyLoadContext]::new('MET.AlcProbe', $true)
             try {
-                # Add-Type gives the compiled assembly a generated name, so read it back.
-                $assemblyName = $context.LoadFromAssemblyPath($dll).GetName().Name
+                # Loaded from bytes, not the path: Windows keeps a file loaded by path locked
+                # until the collectible context finishes unloading, which happens after this test,
+                # and TestDrive cleanup then fails. Add-Type gives the compiled assembly a
+                # generated name, so read it back.
+                $stream = [System.IO.MemoryStream]::new([System.IO.File]::ReadAllBytes($dll))
+                try { $assemblyName = $context.LoadFromStream($stream).GetName().Name }
+                finally { $stream.Dispose() }
                 @([System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $assemblyName }).Count |
                     Should -Be 1 -Because 'the probe assembly is visible through AppDomain.GetAssemblies()'
 
